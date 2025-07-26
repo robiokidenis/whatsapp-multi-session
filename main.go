@@ -185,10 +185,14 @@ type SessionMetadata struct {
 
 // User represents a user account
 type User struct {
-	ID        int    `json:"id"`
-	Username  string `json:"username"`
-	Password  string `json:"-"` // Don't include in JSON responses
-	CreatedAt int64  `json:"created_at"`
+	ID           int    `json:"id"`
+	Username     string `json:"username"`
+	Password     string `json:"-"` // Don't include in JSON responses
+	Role         string `json:"role"`
+	SessionLimit int    `json:"session_limit"`
+	IsActive     bool   `json:"is_active"`
+	CreatedAt    int64  `json:"created_at"`
+	UpdatedAt    *int64 `json:"updated_at,omitempty"`
 }
 
 // Config holds database and application configuration
@@ -201,6 +205,7 @@ type Config struct {
 type Claims struct {
 	Username string `json:"username"`
 	UserID   int    `json:"user_id"`
+	Role     string `json:"role"`
 	jwt.RegisteredClaims
 }
 
@@ -317,7 +322,11 @@ func initUsersTable(db *sql.DB) error {
 			id INTEGER PRIMARY KEY AUTOINCREMENT,
 			username TEXT UNIQUE NOT NULL,
 			password_hash TEXT NOT NULL,
-			created_at INTEGER NOT NULL
+			role TEXT NOT NULL DEFAULT 'user',
+			session_limit INTEGER NOT NULL DEFAULT 5,
+			is_active BOOLEAN NOT NULL DEFAULT 1,
+			created_at INTEGER NOT NULL,
+			updated_at INTEGER
 		)
 	`
 	
@@ -326,6 +335,21 @@ func initUsersTable(db *sql.DB) error {
 		log.Printf("Failed to create users table: %v", err)
 		log.Printf("Query was: %s", query)
 		return err
+	}
+
+	// Migration: Add new columns if they don't exist
+	migrations := []string{
+		"ALTER TABLE users ADD COLUMN role TEXT NOT NULL DEFAULT 'user'",
+		"ALTER TABLE users ADD COLUMN session_limit INTEGER NOT NULL DEFAULT 5",
+		"ALTER TABLE users ADD COLUMN is_active BOOLEAN NOT NULL DEFAULT 1",
+		"ALTER TABLE users ADD COLUMN updated_at INTEGER",
+	}
+
+	for _, migration := range migrations {
+		_, err := db.Exec(migration)
+		if err != nil && !strings.Contains(err.Error(), "duplicate column name") {
+			log.Printf("Migration failed (non-critical): %v", err)
+		}
 	}
 
 	// Create default admin user if no users exist
@@ -343,9 +367,9 @@ func initUsersTable(db *sql.DB) error {
 		}
 
 		_, err = db.Exec(`
-			INSERT INTO users (username, password_hash, created_at) 
-			VALUES (?, ?, ?)
-		`, "admin", string(hashedPassword), time.Now().Unix())
+			INSERT INTO users (username, password_hash, role, session_limit, is_active, created_at) 
+			VALUES (?, ?, ?, ?, ?, ?)
+		`, "admin", string(hashedPassword), "admin", -1, 1, time.Now().Unix())
 		
 		if err != nil {
 			log.Printf("Failed to insert admin user: %v", err)
@@ -422,10 +446,11 @@ func (sm *SessionManager) deleteSessionMetadata(sessionID string) error {
 }
 
 // generateJWT generates a JWT token for the user
-func generateJWT(userID int, username string) (string, error) {
+func generateJWT(userID int, username string, role string) (string, error) {
 	claims := &Claims{
 		Username: username,
 		UserID:   userID,
+		Role:     role,
 		RegisteredClaims: jwt.RegisteredClaims{
 			ExpiresAt: jwt.NewNumericDate(time.Now().Add(24 * time.Hour)),
 			IssuedAt:  jwt.NewNumericDate(time.Now()),
@@ -470,9 +495,19 @@ func authMiddleware(next http.HandlerFunc) http.HandlerFunc {
 			return
 		}
 
+		// Check admin privileges for admin endpoints
+		if strings.HasPrefix(r.URL.Path, "/api/admin/") {
+			// Role-based access control: only admin role can access admin endpoints
+			if claims.Role != "admin" {
+				http.Error(w, "Admin privileges required", http.StatusForbidden)
+				return
+			}
+		}
+
 		// Add user info to request context
 		ctx := context.WithValue(r.Context(), "user_id", claims.UserID)
 		ctx = context.WithValue(ctx, "username", claims.Username)
+		ctx = context.WithValue(ctx, "role", claims.Role)
 		r = r.WithContext(ctx)
 
 		next.ServeHTTP(w, r)
@@ -486,10 +521,10 @@ func authenticateUser(username, password string) (*User, error) {
 	var createdAtInterface interface{}
 
 	err := sessionManager.metadataDB.QueryRow(`
-		SELECT id, username, password_hash, created_at 
+		SELECT id, username, password_hash, role, session_limit, is_active, created_at 
 		FROM users 
-		WHERE username = ?
-	`, username).Scan(&user.ID, &user.Username, &hashedPassword, &createdAtInterface)
+		WHERE username = ? AND is_active = 1
+	`, username).Scan(&user.ID, &user.Username, &hashedPassword, &user.Role, &user.SessionLimit, &user.IsActive, &createdAtInterface)
 	
 	if err != nil {
 		if err == sql.ErrNoRows {
@@ -638,6 +673,494 @@ func restoreSession(metadata SessionMetadata, container *sqlstore.Container) *Se
 	return session
 }
 
+// Admin User Management Handlers
+
+// listUsers returns all users (admin only)
+func listUsers(w http.ResponseWriter, r *http.Request) {
+	rows, err := sessionManager.metadataDB.Query(`
+		SELECT id, username, role, session_limit, is_active, created_at 
+		FROM users 
+		ORDER BY created_at DESC
+	`)
+	if err != nil {
+		log.Printf("Failed to fetch users: %v", err)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"success": false,
+			"error":   "Failed to fetch users",
+		})
+		return
+	}
+	defer rows.Close()
+
+	var users []map[string]interface{}
+	for rows.Next() {
+		var id int
+		var username string
+		var role string
+		var sessionLimit int
+		var isActive bool
+		var createdAtInterface interface{}
+		
+		err := rows.Scan(&id, &username, &role, &sessionLimit, &isActive, &createdAtInterface)
+		if err != nil {
+			continue
+		}
+
+		// Handle created_at timestamp
+		var createdAt time.Time
+		switch v := createdAtInterface.(type) {
+		case int64:
+			createdAt = time.Unix(v, 0)
+		case string:
+			if parsed, err := time.Parse(time.RFC3339, v); err == nil {
+				createdAt = parsed
+			} else {
+				createdAt = time.Now()
+			}
+		default:
+			createdAt = time.Now()
+		}
+
+		users = append(users, map[string]interface{}{
+			"id":            id,
+			"username":      username,
+			"role":          role,
+			"session_limit": sessionLimit,
+			"is_active":     isActive,
+			"created_at":    createdAt.Format(time.RFC3339),
+		})
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"success": true,
+		"data":    users,
+	})
+}
+
+// createUser creates a new user (admin only)
+func createUser(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Username     string `json:"username"`
+		Password     string `json:"password"`
+		Role         string `json:"role"`
+		SessionLimit int    `json:"session_limit"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"success": false,
+			"error":   "Invalid request body",
+		})
+		return
+	}
+
+	// Validate input
+	if strings.TrimSpace(req.Username) == "" {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"success": false,
+			"error":   "Username is required",
+		})
+		return
+	}
+
+	if len(req.Username) < 3 {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"success": false,
+			"error":   "Username must be at least 3 characters",
+		})
+		return
+	}
+
+	if len(req.Password) < 6 {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"success": false,
+			"error":   "Password must be at least 6 characters",
+		})
+		return
+	}
+
+	// Set default values if not provided
+	if req.Role == "" {
+		req.Role = "user"
+	}
+
+	// Validate role
+	if req.Role != "admin" && req.Role != "user" {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"success": false,
+			"error":   "Role must be either 'admin' or 'user'",
+		})
+		return
+	}
+
+	// Set default session limit if not provided
+	if req.SessionLimit == 0 {
+		req.SessionLimit = 5 // Default limit for regular users
+	}
+
+	// Admin users can have unlimited sessions (-1)
+	if req.Role == "admin" && req.SessionLimit > 0 {
+		req.SessionLimit = -1 // Unlimited for admin
+	}
+
+	// Hash password
+	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
+	if err != nil {
+		log.Printf("Failed to hash password: %v", err)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"success": false,
+			"error":   "Failed to hash password",
+		})
+		return
+	}
+
+	// Check if user already exists
+	var existingID int
+	err = sessionManager.metadataDB.QueryRow("SELECT id FROM users WHERE username = ?", req.Username).Scan(&existingID)
+	if err != sql.ErrNoRows {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusConflict)
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"success": false,
+			"error":   "Username already exists",
+		})
+		return
+	}
+
+	// Create user
+	result, err := sessionManager.metadataDB.Exec(`
+		INSERT INTO users (username, password_hash, role, session_limit, is_active, created_at) 
+		VALUES (?, ?, ?, ?, ?, ?)
+	`, req.Username, string(hashedPassword), req.Role, req.SessionLimit, 1, time.Now().Unix())
+	
+	if err != nil {
+		log.Printf("Failed to create user %s: %v", req.Username, err)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"success": false,
+			"error":   "Failed to create user",
+		})
+		return
+	}
+
+	userID, _ := result.LastInsertId()
+	adminUsername := r.Context().Value("username").(string)
+	log.Printf("User %s created successfully by admin %s with ID %d", req.Username, adminUsername, userID)
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"success": true,
+		"message": "User created successfully",
+		"data": map[string]interface{}{
+			"id":         userID,
+			"username":   req.Username,
+			"created_at": time.Now().Format(time.RFC3339),
+		},
+	})
+}
+
+// getUserById gets a user by ID (admin only)
+func getUserById(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	userID := vars["id"]
+
+	var id int
+	var username string
+	var createdAtInterface interface{}
+
+	err := sessionManager.metadataDB.QueryRow(`
+		SELECT id, username, created_at 
+		FROM users 
+		WHERE id = ?
+	`, userID).Scan(&id, &username, &createdAtInterface)
+
+	if err == sql.ErrNoRows {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusNotFound)
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"success": false,
+			"error":   "User not found",
+		})
+		return
+	}
+
+	if err != nil {
+		log.Printf("Failed to fetch user %s: %v", userID, err)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"success": false,
+			"error":   "Failed to fetch user",
+		})
+		return
+	}
+
+	// Handle created_at timestamp
+	var createdAt time.Time
+	switch v := createdAtInterface.(type) {
+	case int64:
+		createdAt = time.Unix(v, 0)
+	case string:
+		if parsed, err := time.Parse(time.RFC3339, v); err == nil {
+			createdAt = parsed
+		} else {
+			createdAt = time.Now()
+		}
+	default:
+		createdAt = time.Now()
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"success": true,
+		"data": map[string]interface{}{
+			"id":         id,
+			"username":   username,
+			"created_at": createdAt.Format(time.RFC3339),
+		},
+	})
+}
+
+// updateUser updates a user (admin only)
+func updateUser(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	userID := vars["id"]
+
+	var req struct {
+		Username     string `json:"username,omitempty"`
+		Password     string `json:"password,omitempty"`
+		Role         string `json:"role,omitempty"`
+		SessionLimit *int   `json:"session_limit,omitempty"`
+		IsActive     *bool  `json:"is_active,omitempty"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"success": false,
+			"error":   "Invalid request body",
+		})
+		return
+	}
+
+	// Check if user exists
+	var existingUsername string
+	err := sessionManager.metadataDB.QueryRow("SELECT username FROM users WHERE id = ?", userID).Scan(&existingUsername)
+	if err == sql.ErrNoRows {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusNotFound)
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"success": false,
+			"error":   "User not found",
+		})
+		return
+	}
+
+	// Prepare update fields
+	updates := []string{}
+	args := []interface{}{}
+
+	if req.Username != "" && req.Username != existingUsername {
+		if len(req.Username) < 3 {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(map[string]interface{}{
+				"success": false,
+				"error":   "Username must be at least 3 characters",
+			})
+			return
+		}
+
+		// Check if new username already exists
+		var duplicateID int
+		err = sessionManager.metadataDB.QueryRow("SELECT id FROM users WHERE username = ? AND id != ?", req.Username, userID).Scan(&duplicateID)
+		if err != sql.ErrNoRows {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusConflict)
+			json.NewEncoder(w).Encode(map[string]interface{}{
+				"success": false,
+				"error":   "Username already exists",
+			})
+			return
+		}
+
+		updates = append(updates, "username = ?")
+		args = append(args, req.Username)
+	}
+
+	if req.Password != "" {
+		if len(req.Password) < 6 {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(map[string]interface{}{
+				"success": false,
+				"error":   "Password must be at least 6 characters",
+			})
+			return
+		}
+
+		hashedPassword, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
+		if err != nil {
+			log.Printf("Failed to hash password: %v", err)
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusInternalServerError)
+			json.NewEncoder(w).Encode(map[string]interface{}{
+				"success": false,
+				"error":   "Failed to hash password",
+			})
+			return
+		}
+
+		updates = append(updates, "password_hash = ?")
+		args = append(args, string(hashedPassword))
+	}
+
+	if req.Role != "" {
+		// Validate role
+		if req.Role != "admin" && req.Role != "user" {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(map[string]interface{}{
+				"success": false,
+				"error":   "Role must be either 'admin' or 'user'",
+			})
+			return
+		}
+		
+		updates = append(updates, "role = ?")
+		args = append(args, req.Role)
+	}
+
+	if req.SessionLimit != nil {
+		// Validate session limit
+		if *req.SessionLimit < -1 {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(map[string]interface{}{
+				"success": false,
+				"error":   "Session limit must be -1 (unlimited) or greater than 0",
+			})
+			return
+		}
+		
+		updates = append(updates, "session_limit = ?")
+		args = append(args, *req.SessionLimit)
+	}
+
+	if req.IsActive != nil {
+		updates = append(updates, "is_active = ?")
+		args = append(args, *req.IsActive)
+	}
+
+	// Always update the updated_at timestamp
+	updates = append(updates, "updated_at = ?")
+	args = append(args, time.Now().Unix())
+
+	if len(updates) == 1 { // Only updated_at was added
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"success": false,
+			"error":   "No fields to update",
+		})
+		return
+	}
+
+	// Perform update
+	args = append(args, userID)
+	query := fmt.Sprintf("UPDATE users SET %s WHERE id = ?", strings.Join(updates, ", "))
+	
+	_, err = sessionManager.metadataDB.Exec(query, args...)
+	if err != nil {
+		log.Printf("Failed to update user %s: %v", userID, err)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"success": false,
+			"error":   "Failed to update user",
+		})
+		return
+	}
+
+	adminUsername := r.Context().Value("username").(string)
+	log.Printf("User %s updated successfully by admin %s", userID, adminUsername)
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"success": true,
+		"message": "User updated successfully",
+	})
+}
+
+// deleteUser deletes a user (admin only)
+func deleteUser(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	userID := vars["id"]
+
+	// Check if user exists and get username
+	var username string
+	err := sessionManager.metadataDB.QueryRow("SELECT username FROM users WHERE id = ?", userID).Scan(&username)
+	if err == sql.ErrNoRows {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusNotFound)
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"success": false,
+			"error":   "User not found",
+		})
+		return
+	}
+
+	// Prevent deleting the admin user
+	if username == "admin" {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusForbidden)
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"success": false,
+			"error":   "Cannot delete admin user",
+		})
+		return
+	}
+
+	// Delete user
+	_, err = sessionManager.metadataDB.Exec("DELETE FROM users WHERE id = ?", userID)
+	if err != nil {
+		log.Printf("Failed to delete user %s: %v", userID, err)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"success": false,
+			"error":   "Failed to delete user",
+		})
+		return
+	}
+
+	adminUsername := r.Context().Value("username").(string)
+	log.Printf("User %s (%s) deleted successfully by admin %s", userID, username, adminUsername)
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"success": true,
+		"message": "User deleted successfully",
+	})
+}
+
 func main() {
 	// Load configuration
 	config = loadConfig()
@@ -722,6 +1245,13 @@ func main() {
 	api.HandleFunc("/sessions/{id}/webhook", authMiddleware(updateSessionWebhook)).Methods("PUT")
 	api.HandleFunc("/sessions/{id}/name", authMiddleware(updateSessionName)).Methods("PUT")
 	api.HandleFunc("/sessions/{id}/check-number", authMiddleware(checkNumberOnWhatsApp)).Methods("POST")
+	
+	// Admin-only endpoints (requires admin privileges)
+	api.HandleFunc("/admin/users", authMiddleware(listUsers)).Methods("GET")
+	api.HandleFunc("/admin/users", authMiddleware(createUser)).Methods("POST")
+	api.HandleFunc("/admin/users/{id}", authMiddleware(getUserById)).Methods("GET")
+	api.HandleFunc("/admin/users/{id}", authMiddleware(updateUser)).Methods("PUT")
+	api.HandleFunc("/admin/users/{id}", authMiddleware(deleteUser)).Methods("DELETE")
 	api.HandleFunc("/sessions/{id}/groups", authMiddleware(listGroups)).Methods("GET")
 	
 	// Message attachments and interactions
@@ -850,7 +1380,7 @@ func loginHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	token, err := generateJWT(user.ID, user.Username)
+	token, err := generateJWT(user.ID, user.Username, user.Role)
 	if err != nil {
 		log.Printf("Failed to generate JWT for user %s from IP %s: %v", req.Username, clientIP, err)
 		http.Error(w, "Failed to generate token", http.StatusInternalServerError)
@@ -871,8 +1401,11 @@ func loginHandler(w http.ResponseWriter, r *http.Request) {
 		"success": true,
 		"token":   token,
 		"user": map[string]interface{}{
-			"id":       user.ID,
-			"username": user.Username,
+			"id":            user.ID,
+			"username":      user.Username,
+			"role":          user.Role,
+			"session_limit": user.SessionLimit,
+			"is_active":     user.IsActive,
 		},
 	})
 }
@@ -966,6 +1499,67 @@ func createSession(w http.ResponseWriter, r *http.Request) {
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
+	}
+
+	// Get user info from context
+	userID, ok := r.Context().Value("user_id").(int)
+	if !ok {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusUnauthorized)
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"success": false,
+			"error":   "User authentication required",
+		})
+		return
+	}
+
+	role, ok := r.Context().Value("role").(string)
+	if !ok {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusUnauthorized)
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"success": false,
+			"error":   "User role required",
+		})
+		return
+	}
+
+	// Check session limit (only for non-admin users)
+	if role != "admin" {
+		// Get user's session limit
+		var sessionLimit int
+		err := sessionManager.metadataDB.QueryRow(`
+			SELECT session_limit FROM users WHERE id = ? AND is_active = 1
+		`, userID).Scan(&sessionLimit)
+		
+		if err != nil {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusInternalServerError)
+			json.NewEncoder(w).Encode(map[string]interface{}{
+				"success": false,
+				"error":   "Failed to get user session limit",
+			})
+			return
+		}
+
+		// Count current sessions (session limit of -1 means unlimited)
+		if sessionLimit != -1 {
+			sessionManager.mu.RLock()
+			currentSessionCount := len(sessionManager.sessions)
+			sessionManager.mu.RUnlock()
+
+			if currentSessionCount >= sessionLimit {
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusForbidden)
+				json.NewEncoder(w).Encode(map[string]interface{}{
+					"success": false,
+					"error":   fmt.Sprintf("Session limit reached. You can create maximum %d sessions.", sessionLimit),
+					"current_sessions": currentSessionCount,
+					"session_limit": sessionLimit,
+				})
+				return
+			}
+		}
 	}
 
 	sessionManager.mu.Lock()

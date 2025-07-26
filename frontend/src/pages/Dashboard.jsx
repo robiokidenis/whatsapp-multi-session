@@ -5,8 +5,11 @@ import SessionCard from '../components/SessionCard';
 import QRModal from '../components/QRModal';
 import SendMessageModal from '../components/SendMessageModal';
 import EditSessionModal from '../components/EditSessionModal';
+import UserManagement from '../components/UserManagement';
+import { useAuth } from '../contexts/AuthContext';
 
 const Dashboard = () => {
+  const { user } = useAuth();
   const [sessions, setSessions] = useState([]);
   const [newSession, setNewSession] = useState({ phone: '', name: '' });
   const [message, setMessage] = useState('');
@@ -14,6 +17,7 @@ const Dashboard = () => {
   const [qrModal, setQrModal] = useState({ show: false, session: null });
   const [sendModal, setSendModal] = useState({ show: false, session: null });
   const [editModal, setEditModal] = useState({ show: false, session: null });
+  const [activeTab, setActiveTab] = useState('sessions');
 
   useEffect(() => {
     loadSessions();
@@ -120,8 +124,43 @@ const Dashboard = () => {
 
   return (
     <Layout>
-      {/* Add Session Form */}
-      <div className="bg-white rounded-lg shadow-md p-6 mb-8">
+      {/* Tab Navigation */}
+      <div className="mb-6">
+        <div className="border-b border-gray-200">
+          <nav className="-mb-px flex space-x-8">
+            <button
+              onClick={() => setActiveTab('sessions')}
+              className={`py-2 px-1 border-b-2 font-medium text-sm ${
+                activeTab === 'sessions'
+                  ? 'border-green-500 text-green-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+              }`}
+            >
+              <i className="fas fa-mobile-alt mr-2"></i>
+              WhatsApp Sessions
+            </button>
+            {user?.role === 'admin' && (
+              <button
+                onClick={() => setActiveTab('users')}
+                className={`py-2 px-1 border-b-2 font-medium text-sm ${
+                  activeTab === 'users'
+                    ? 'border-blue-500 text-blue-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                }`}
+              >
+                <i className="fas fa-users mr-2"></i>
+                User Management
+              </button>
+            )}
+          </nav>
+        </div>
+      </div>
+
+      {/* Tab Content */}
+      {activeTab === 'sessions' && (
+        <>
+          {/* Add Session Form */}
+          <div className="bg-white rounded-lg shadow-md p-6 mb-8">
         <h2 className="text-xl font-semibold mb-4 flex items-center">
           <i className="fas fa-plus-circle mr-2 text-green-600"></i>
           Add New WhatsApp Session
@@ -220,6 +259,13 @@ const Dashboard = () => {
           onClose={closeEditModal}
           onUpdate={updateSession}
         />
+      )}
+        </>
+      )}
+
+      {/* User Management Tab */}
+      {activeTab === 'users' && user?.role === 'admin' && (
+        <UserManagement />
       )}
     </Layout>
   );
