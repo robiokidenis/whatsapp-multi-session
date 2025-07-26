@@ -1,0 +1,84 @@
+# Binaries
+main
+whatsapp-multi
+whatsapp-multi-session
+
+# Logs
+*.log
+server.log
+frontend.log
+
+# Database files
+*.db
+*.sqlite
+*.sqlite3
+session_metadata.db
+sessions.db
+
+# Environment files
+.env
+.env.local
+.env.production
+.env.staging
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Go specific
+vendor/
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+
+# Node.js (for frontend)
+frontend/node_modules/
+frontend/dist/
+frontend/.next/
+frontend/out/
+frontend/build/
+frontend/*.log
+frontend/.env*
+
+# Backup files
+*.bak
+*.backup
+*.tmp
+
+# Test files (keeping for reference but not tracking)
+test-*.html
+debug-*.html
+qr-test.html
+test_*.js
+
+# Temporary development files
+*.orig
+*.rej
+.temp/
+temp/
+
+# WhatsApp session data (sensitive)
+*.session
+sessions/
+session_data/
+
+# Development utilities
+drop_recreate_tables.go.bak
+fix_db.go.bak
+update_admin.go.bak
