@@ -372,6 +372,133 @@ paths:
         '401':
           $ref: '#/components/responses/Unauthorized'
 
+  /sessions/{sessionId}/check-number:
+    post:
+      tags:
+        - Messages
+      summary: Check if number is on WhatsApp
+      description: Check if a phone number is registered on WhatsApp
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/SessionId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - number
+              properties:
+                number:
+                  type: string
+                  description: Phone number to check (without country code prefix)
+                  example: "6281381393739"
+      responses:
+        '200':
+          description: Number check result
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  number:
+                    type: string
+                    example: "6281381393739"
+                  on_whatsapp:
+                    type: boolean
+                    description: Whether the number is registered on WhatsApp
+                    example: true
+                  verified:
+                    type: boolean
+                    description: Whether the number has a verified badge
+                    example: false
+                  verified_name:
+                    type: string
+                    description: Verified business name (if available)
+                    example: "Business Name"
+                  business_name:
+                    type: string
+                    description: Business name (if available)
+                    example: "Company Ltd"
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /sessions/{sessionId}/groups:
+    get:
+      tags:
+        - Sessions
+      summary: List all groups
+      description: Get all WhatsApp groups that the session is part of
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/SessionId'
+      responses:
+        '200':
+          description: List of groups
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  count:
+                    type: integer
+                    description: Number of groups
+                    example: 2
+                  groups:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        jid:
+                          type: string
+                          description: Group JID (WhatsApp ID)
+                          example: "120363302171476233@g.us"
+                        name:
+                          type: string
+                          description: Group name
+                          example: "Family Group"
+                        topic:
+                          type: string
+                          description: Group description/topic
+                          example: "Family chat group"
+                        description:
+                          type: string
+                          description: Group description (alias for topic)
+                          example: "Family chat group"
+                        owner:
+                          type: string
+                          description: Group owner JID
+                          example: "6281381393739@s.whatsapp.net"
+                        participant_count:
+                          type: integer
+                          description: Number of participants in the group
+                          example: 8
+                        is_admin:
+                          type: boolean
+                          description: Whether the current user is an admin
+                          example: false
+                        is_super_admin:
+                          type: boolean
+                          description: Whether the current user is a super admin
+                          example: false
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
 components:
   securitySchemes:
     BearerAuth:

@@ -435,6 +435,95 @@
           }
         }
       ]
+    },
+    {
+      "name": "🔍 Number & Group Management",
+      "item": [
+        {
+          "name": "Check Number on WhatsApp",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"number\": \"6281381393739\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/sessions/{{session_id}}/check-number",
+              "host": ["{{base_url}}"],
+              "path": ["sessions", "{{session_id}}", "check-number"]
+            }
+          }
+        },
+        {
+          "name": "List All Groups",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/sessions/{{session_id}}/groups",
+              "host": ["{{base_url}}"],
+              "path": ["sessions", "{{session_id}}", "groups"]
+            }
+          }
+        },
+        {
+          "name": "Check Business Number",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"number\": \"6282260790996\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/sessions/{{business_session_id}}/check-number",
+              "host": ["{{base_url}}"],
+              "path": ["sessions", "{{business_session_id}}", "check-number"]
+            }
+          }
+        },
+        {
+          "name": "List Business Groups",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/sessions/{{business_session_id}}/groups",
+              "host": ["{{base_url}}"],
+              "path": ["sessions", "{{business_session_id}}", "groups"]
+            }
+          }
+        }
+      ]
     }
   ],
   "auth": {

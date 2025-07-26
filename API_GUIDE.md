@@ -31,6 +31,8 @@ Complete guide for using the WhatsApp Multi-Session API with multiple users, pho
 | `/api/sessions/{id}/connect` | POST | Start QR authentication |
 | `/api/sessions/{id}/disconnect` | POST | Disconnect session |
 | `/api/sessions/{id}/send` | POST | Send message from session |
+| `/api/sessions/{id}/check-number` | POST | Check if number is on WhatsApp |
+| `/api/sessions/{id}/groups` | GET | List all groups for session |
 | `/api/send` | POST | Send message via token + phone |
 | `/api/ws/{id}?token={token}` | WebSocket | QR code authentication |
 
@@ -205,6 +207,134 @@ curl -X POST http://localhost:8080/api/send \
     "recipient": "6281381393739",
     "message": "Hello from selected phone!"
   }'
+```
+
+## 🔍 Number & Group Management
+
+### Check if Number is on WhatsApp
+Verify if a phone number is registered on WhatsApp before sending messages:
+
+```bash
+curl -X POST http://localhost:8080/api/sessions/1234567890/check-number \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "number": "6281381393739"
+  }'
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "number": "6281381393739",
+  "on_whatsapp": true,
+  "verified": false,
+  "verified_name": "Business Name"
+}
+```
+
+**Use Cases:**
+- **Validate recipients** before sending bulk messages
+- **Check business accounts** with verified badges
+- **Filter contact lists** to only WhatsApp users
+- **Verify phone numbers** in registration flows
+
+### List All Groups
+Get all WhatsApp groups that the session is part of:
+
+```bash
+curl -X GET http://localhost:8080/api/sessions/1234567890/groups \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "count": 2,
+  "groups": [
+    {
+      "jid": "120363302171476233@g.us",
+      "name": "Family Group",
+      "topic": "Family chat group",
+      "description": "Family chat group",
+      "owner": "6281381393739@s.whatsapp.net",
+      "participant_count": 8,
+      "is_admin": false,
+      "is_super_admin": false
+    },
+    {
+      "jid": "6281381393739-1624931511@g.us",
+      "name": "Work Team",
+      "topic": "",
+      "description": "",
+      "owner": "6282260790996@s.whatsapp.net",
+      "participant_count": 15,
+      "is_admin": true,
+      "is_super_admin": false
+    }
+  ]
+}
+```
+
+**Use Cases:**
+- **Group management** for bot applications
+- **Broadcast targeting** specific groups
+- **Admin verification** before group operations
+- **Group analytics** and reporting
+
+### Integration Examples
+
+**1. Bulk Message with Number Validation:**
+```javascript
+async function sendBulkMessages(sessionId, recipients, message) {
+  const validNumbers = [];
+  
+  // Check all numbers first
+  for (const number of recipients) {
+    const response = await fetch(`/api/sessions/${sessionId}/check-number`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ number })
+    });
+    
+    const result = await response.json();
+    if (result.on_whatsapp) {
+      validNumbers.push(number);
+    }
+  }
+  
+  // Send messages to valid numbers only
+  for (const number of validNumbers) {
+    await sendMessage(sessionId, number, message);
+  }
+}
+```
+
+**2. Group-Based Broadcasting:**
+```javascript
+async function broadcastToGroups(sessionId, message, adminOnly = false) {
+  // Get all groups
+  const response = await fetch(`/api/sessions/${sessionId}/groups`, {
+    headers: { 'Authorization': `Bearer ${token}` }
+  });
+  
+  const { groups } = await response.json();
+  
+  // Filter groups if admin-only broadcasting
+  const targetGroups = adminOnly 
+    ? groups.filter(g => g.is_admin || g.is_super_admin)
+    : groups;
+  
+  // Send messages to groups
+  for (const group of targetGroups) {
+    await sendMessage(sessionId, group.jid, message);
+  }
+}
 ```
 
 ## 🎣 Webhook Integration

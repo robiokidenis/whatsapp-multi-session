@@ -483,9 +483,18 @@ func restoreSession(metadata SessionMetadata, container *sqlstore.Container) *Se
 		case *events.Message:
 			log.Printf("Received message in session %s: %s", metadata.ID, v.Message.GetConversation())
 			// Send webhook if configured
-			if metadata.WebhookURL != "" {
-				go sendWebhook(metadata.WebhookURL, metadata.ID, v)
+			sessionManager.mu.RLock()
+			if s, ok := sessionManager.sessions[metadata.ID]; ok {
+				log.Printf("Session %s webhook URL: '%s'", metadata.ID, s.WebhookURL)
+				if s.WebhookURL != "" {
+					go sendWebhook(s.WebhookURL, metadata.ID, v)
+				} else {
+					log.Printf("No webhook URL configured for session %s", metadata.ID)
+				}
+			} else {
+				log.Printf("Session %s not found in sessionManager.sessions", metadata.ID)
 			}
+			sessionManager.mu.RUnlock()
 		}
 	})
 	
@@ -582,6 +591,8 @@ func main() {
 	api.HandleFunc("/send", authMiddleware(sendMessageViaAPI)).Methods("POST")
 	api.HandleFunc("/sessions/{id}/webhook", authMiddleware(updateSessionWebhook)).Methods("PUT")
 	api.HandleFunc("/sessions/{id}/name", authMiddleware(updateSessionName)).Methods("PUT")
+	api.HandleFunc("/sessions/{id}/check-number", authMiddleware(checkNumberOnWhatsApp)).Methods("POST")
+	api.HandleFunc("/sessions/{id}/groups", authMiddleware(listGroups)).Methods("GET")
 	
 	// Serve React frontend
 	router.PathPrefix("/").Handler(http.StripPrefix("/", SPAHandler("./frontend/dist/")))
@@ -1426,6 +1437,7 @@ func sendMessageViaAPI(w http.ResponseWriter, r *http.Request) {
 
 // sendWebhook sends incoming message data to configured webhook URL
 func sendWebhook(webhookURL, sessionID string, message *events.Message) {
+	log.Printf("Sending webhook for session %s to URL: %s", sessionID, webhookURL)
 	// Prepare webhook payload
 	webhookData := map[string]interface{}{
 		"session_id": sessionID,
@@ -1562,4 +1574,164 @@ func updateSessionName(w http.ResponseWriter, r *http.Request) {
 		"message": "Session name updated successfully",
 		"name": req.Name,
 	})
+}
+
+// checkNumberOnWhatsApp checks if a phone number is registered on WhatsApp
+func checkNumberOnWhatsApp(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	id := vars["id"]
+
+	log.Printf("Check number request for session %s", id)
+
+	var req struct {
+		Number string `json:"number"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		log.Printf("Failed to decode request body: %v", err)
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	if req.Number == "" {
+		http.Error(w, "Number is required", http.StatusBadRequest)
+		return
+	}
+
+	log.Printf("Checking if number %s is on WhatsApp", req.Number)
+
+	sessionManager.mu.RLock()
+	session, exists := sessionManager.sessions[id]
+	sessionManager.mu.RUnlock()
+
+	if !exists {
+		log.Printf("Session %s not found", id)
+		http.Error(w, "Session not found", http.StatusNotFound)
+		return
+	}
+
+	if !session.LoggedIn {
+		log.Printf("Session %s is not logged in", id)
+		http.Error(w, "Session is not logged in", http.StatusUnauthorized)
+		return
+	}
+
+	// Check if the number is on WhatsApp
+	isOnWhatsApp, err := session.Client.IsOnWhatsApp([]string{req.Number})
+	if err != nil {
+		log.Printf("Failed to check if number %s is on WhatsApp: %v", req.Number, err)
+		http.Error(w, "Failed to check number: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	var result bool
+	var verifiedName string
+	if len(isOnWhatsApp) > 0 {
+		result = isOnWhatsApp[0].IsIn
+		if isOnWhatsApp[0].VerifiedName != nil {
+			verifiedName = isOnWhatsApp[0].VerifiedName.Details.GetVerifiedName()
+		}
+	}
+
+	log.Printf("Number %s is on WhatsApp: %v", req.Number, result)
+
+	response := map[string]interface{}{
+		"success":      true,
+		"number":       req.Number,
+		"on_whatsapp":  result,
+		"verified":     verifiedName != "",
+	}
+
+	if verifiedName != "" {
+		response["verified_name"] = verifiedName
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(response)
+}
+
+// listGroups retrieves all groups for a session
+func listGroups(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	id := vars["id"]
+
+	log.Printf("List groups request for session %s", id)
+
+	sessionManager.mu.RLock()
+	session, exists := sessionManager.sessions[id]
+	sessionManager.mu.RUnlock()
+
+	if !exists {
+		log.Printf("Session %s not found", id)
+		http.Error(w, "Session not found", http.StatusNotFound)
+		return
+	}
+
+	if !session.LoggedIn {
+		log.Printf("Session %s is not logged in", id)
+		http.Error(w, "Session is not logged in", http.StatusUnauthorized)
+		return
+	}
+
+	// Get all groups
+	groups, err := session.Client.GetJoinedGroups()
+	if err != nil {
+		log.Printf("Failed to get groups for session %s: %v", id, err)
+		http.Error(w, "Failed to retrieve groups: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	log.Printf("Found %d groups for session %s", len(groups), id)
+
+	// Format groups data
+	var groupList []map[string]interface{}
+	for _, group := range groups {
+		groupData := map[string]interface{}{
+			"jid":         group.JID.String(),
+			"name":        group.Name,
+			"topic":       group.Topic,
+			"owner":       group.OwnerJID.String(),
+			"participant_count": len(group.Participants),
+			"is_admin":    false,
+			"is_super_admin": false,
+		}
+
+		// Check if current user is admin or super admin
+		userJID := session.Client.Store.ID
+		if userJID != nil {
+			for _, participant := range group.Participants {
+				if participant.JID.User == userJID.User {
+					if participant.IsAdmin {
+						groupData["is_admin"] = true
+					}
+					if participant.IsSuperAdmin {
+						groupData["is_super_admin"] = true
+					}
+					break
+				}
+			}
+		}
+
+		// Add group description if available
+		if group.Topic != "" {
+			groupData["description"] = group.Topic
+		}
+
+		// Add invite link if user is admin (optional, might require additional permission)
+		if groupData["is_admin"].(bool) || groupData["is_super_admin"].(bool) {
+			// Note: Getting invite link requires additional API call and permissions
+			// groupData["invite_link"] = "..." // Can be implemented if needed
+		}
+
+		groupList = append(groupList, groupData)
+	}
+
+	response := map[string]interface{}{
+		"success": true,
+		"count":   len(groupList),
+		"groups":  groupList,
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(response)
 }
