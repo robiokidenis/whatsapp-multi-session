@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"math/big"
 	"net/http"
@@ -593,6 +594,11 @@ func main() {
 	api.HandleFunc("/sessions/{id}/name", authMiddleware(updateSessionName)).Methods("PUT")
 	api.HandleFunc("/sessions/{id}/check-number", authMiddleware(checkNumberOnWhatsApp)).Methods("POST")
 	api.HandleFunc("/sessions/{id}/groups", authMiddleware(listGroups)).Methods("GET")
+	
+	// Message attachments and interactions
+	api.HandleFunc("/sessions/{id}/send-attachment", authMiddleware(sendAttachment)).Methods("POST")
+	api.HandleFunc("/sessions/{id}/typing", authMiddleware(sendTyping)).Methods("POST")
+	api.HandleFunc("/sessions/{id}/stop-typing", authMiddleware(stopTyping)).Methods("POST")
 	
 	// Serve React frontend
 	router.PathPrefix("/").Handler(http.StripPrefix("/", SPAHandler("./frontend/dist/")))
@@ -1438,20 +1444,109 @@ func sendMessageViaAPI(w http.ResponseWriter, r *http.Request) {
 // sendWebhook sends incoming message data to configured webhook URL
 func sendWebhook(webhookURL, sessionID string, message *events.Message) {
 	log.Printf("Sending webhook for session %s to URL: %s", sessionID, webhookURL)
+	
+	// Detect message type and content
+	var messageType string
+	var content interface{}
+	var mediaInfo map[string]interface{}
+
+	// Check for different message types
+	if message.Message.GetConversation() != "" {
+		messageType = "text"
+		content = message.Message.GetConversation()
+	} else if imageMessage := message.Message.GetImageMessage(); imageMessage != nil {
+		messageType = "image"
+		content = imageMessage.GetCaption()
+		mediaInfo = map[string]interface{}{
+			"url":         imageMessage.GetURL(),
+			"mime_type":   imageMessage.GetMimetype(),
+			"file_length": imageMessage.GetFileLength(),
+			"width":       imageMessage.GetWidth(),
+			"height":      imageMessage.GetHeight(),
+			"caption":     imageMessage.GetCaption(),
+		}
+	} else if videoMessage := message.Message.GetVideoMessage(); videoMessage != nil {
+		messageType = "video"
+		content = videoMessage.GetCaption()
+		mediaInfo = map[string]interface{}{
+			"url":         videoMessage.GetURL(),
+			"mime_type":   videoMessage.GetMimetype(),
+			"file_length": videoMessage.GetFileLength(),
+			"duration":    videoMessage.GetSeconds(),
+			"width":       videoMessage.GetWidth(),
+			"height":      videoMessage.GetHeight(),
+			"caption":     videoMessage.GetCaption(),
+		}
+	} else if audioMessage := message.Message.GetAudioMessage(); audioMessage != nil {
+		messageType = "audio"
+		content = ""
+		mediaInfo = map[string]interface{}{
+			"url":         audioMessage.GetURL(),
+			"mime_type":   audioMessage.GetMimetype(),
+			"file_length": audioMessage.GetFileLength(),
+			"duration":    audioMessage.GetSeconds(),
+			"voice_note":  audioMessage.GetPTT(), // Push-to-talk (voice note)
+		}
+	} else if documentMessage := message.Message.GetDocumentMessage(); documentMessage != nil {
+		messageType = "document"
+		content = documentMessage.GetTitle()
+		mediaInfo = map[string]interface{}{
+			"url":         documentMessage.GetURL(),
+			"mime_type":   documentMessage.GetMimetype(),
+			"file_length": documentMessage.GetFileLength(),
+			"filename":    documentMessage.GetFileName(),
+			"title":       documentMessage.GetTitle(),
+		}
+	} else if stickerMessage := message.Message.GetStickerMessage(); stickerMessage != nil {
+		messageType = "sticker"
+		content = ""
+		mediaInfo = map[string]interface{}{
+			"url":         stickerMessage.GetURL(),
+			"mime_type":   stickerMessage.GetMimetype(),
+			"file_length": stickerMessage.GetFileLength(),
+			"width":       stickerMessage.GetWidth(),
+			"height":      stickerMessage.GetHeight(),
+		}
+	} else if locationMessage := message.Message.GetLocationMessage(); locationMessage != nil {
+		messageType = "location"
+		content = locationMessage.GetName()
+		mediaInfo = map[string]interface{}{
+			"latitude":  locationMessage.GetDegreesLatitude(),
+			"longitude": locationMessage.GetDegreesLongitude(),
+			"name":      locationMessage.GetName(),
+			"address":   locationMessage.GetAddress(),
+		}
+	} else if contactMessage := message.Message.GetContactMessage(); contactMessage != nil {
+		messageType = "contact"
+		content = contactMessage.GetDisplayName()
+		mediaInfo = map[string]interface{}{
+			"display_name": contactMessage.GetDisplayName(),
+			"vcard":        contactMessage.GetVcard(),
+		}
+	} else {
+		messageType = "unknown"
+		content = "Unsupported message type"
+	}
+
 	// Prepare webhook payload
 	webhookData := map[string]interface{}{
-		"session_id": sessionID,
-		"timestamp":  message.Info.Timestamp.Unix(),
-		"message_id": message.Info.ID,
+		"session_id":   sessionID,
+		"timestamp":    message.Info.Timestamp.Unix(),
+		"message_id":   message.Info.ID,
 		"from": map[string]interface{}{
-			"jid":          message.Info.Sender.String(),
-			"phone":        strings.Replace(message.Info.Sender.User, "", "", 1),
-			"push_name":    message.Info.PushName,
+			"jid":       message.Info.Sender.String(),
+			"phone":     message.Info.Sender.User,
+			"push_name": message.Info.PushName,
 		},
-		"message_type": "text", // Can be extended for other types
-		"content":      message.Message.GetConversation(),
+		"message_type": messageType,
+		"content":      content,
 		"is_from_me":   message.Info.IsFromMe,
 		"is_group":     message.Info.Sender.Server == "g.us",
+	}
+
+	// Add media info if present
+	if mediaInfo != nil {
+		webhookData["media"] = mediaInfo
 	}
 
 	// Add group info if it's a group message
@@ -1734,4 +1829,322 @@ func listGroups(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(response)
+}
+
+// sendAttachment sends a message with file attachment
+func sendAttachment(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	id := vars["id"]
+
+	log.Printf("Send attachment request for session %s", id)
+
+	// Parse multipart form with size limit (16MB)
+	err := r.ParseMultipartForm(16 << 20)
+	if err != nil {
+		log.Printf("Failed to parse multipart form: %v", err)
+		http.Error(w, "Failed to parse form data", http.StatusBadRequest)
+		return
+	}
+
+	recipient := r.FormValue("recipient")
+	caption := r.FormValue("caption")
+
+	if recipient == "" {
+		http.Error(w, "Recipient is required", http.StatusBadRequest)
+		return
+	}
+
+	// Get file from form
+	file, fileHeader, err := r.FormFile("file")
+	if err != nil {
+		log.Printf("Failed to get file from form: %v", err)
+		http.Error(w, "File is required", http.StatusBadRequest)
+		return
+	}
+	defer file.Close()
+
+	sessionManager.mu.RLock()
+	session, exists := sessionManager.sessions[id]
+	sessionManager.mu.RUnlock()
+
+	if !exists {
+		log.Printf("Session %s not found", id)
+		http.Error(w, "Session not found", http.StatusNotFound)
+		return
+	}
+
+	if !session.LoggedIn {
+		log.Printf("Session %s is not logged in", id)
+		http.Error(w, "Session is not logged in", http.StatusUnauthorized)
+		return
+	}
+
+	// Ensure the recipient is in proper WhatsApp JID format
+	var recipientJID string
+	if strings.Contains(recipient, "@s.whatsapp.net") || strings.Contains(recipient, "@g.us") {
+		recipientJID = recipient
+	} else {
+		recipientJID = recipient + "@s.whatsapp.net"
+	}
+
+	log.Printf("Formatted recipient JID: %s", recipientJID)
+
+	// Parse JID
+	jid, err := types.ParseJID(recipientJID)
+	if err != nil {
+		log.Printf("Failed to parse JID %s: %v", recipientJID, err)
+		http.Error(w, "Invalid recipient format", http.StatusBadRequest)
+		return
+	}
+
+	// Read file content
+	fileData, err := io.ReadAll(file)
+	if err != nil {
+		log.Printf("Failed to read file: %v", err)
+		http.Error(w, "Failed to read file", http.StatusInternalServerError)
+		return
+	}
+
+	// Detect MIME type
+	mimeType := http.DetectContentType(fileData)
+	log.Printf("Detected MIME type: %s for file: %s", mimeType, fileHeader.Filename)
+
+	// Upload media
+	log.Printf("Attempting to upload file: %s, size: %d bytes, MIME: %s", fileHeader.Filename, len(fileData), mimeType)
+	uploaded, err := session.Client.Upload(context.Background(), fileData, whatsmeow.MediaType(mimeType))
+	if err != nil {
+		log.Printf("Failed to upload media - File: %s, Size: %d, MIME: %s, Error: %v", fileHeader.Filename, len(fileData), mimeType, err)
+		http.Error(w, fmt.Sprintf("Failed to upload file: %v", err), http.StatusInternalServerError)
+		return
+	}
+	log.Printf("Media uploaded successfully: URL=%s, DirectPath=%s", uploaded.URL, uploaded.DirectPath)
+
+	// Create message based on file type
+	var message *waProto.Message
+
+	if strings.HasPrefix(mimeType, "image/") {
+		message = &waProto.Message{
+			ImageMessage: &waProto.ImageMessage{
+				URL:           &uploaded.URL,
+				DirectPath:    &uploaded.DirectPath,
+				MediaKey:      uploaded.MediaKey,
+				Mimetype:      &mimeType,
+				FileEncSHA256: uploaded.FileEncSHA256,
+				FileSHA256:    uploaded.FileSHA256,
+				FileLength:    &uploaded.FileLength,
+				Caption:       &caption,
+			},
+		}
+	} else if strings.HasPrefix(mimeType, "video/") {
+		message = &waProto.Message{
+			VideoMessage: &waProto.VideoMessage{
+				URL:           &uploaded.URL,
+				DirectPath:    &uploaded.DirectPath,
+				MediaKey:      uploaded.MediaKey,
+				Mimetype:      &mimeType,
+				FileEncSHA256: uploaded.FileEncSHA256,
+				FileSHA256:    uploaded.FileSHA256,
+				FileLength:    &uploaded.FileLength,
+				Caption:       &caption,
+			},
+		}
+	} else if strings.HasPrefix(mimeType, "audio/") {
+		duration := uint32(0) // Would need audio processing to get actual duration
+		message = &waProto.Message{
+			AudioMessage: &waProto.AudioMessage{
+				URL:           &uploaded.URL,
+				DirectPath:    &uploaded.DirectPath,
+				MediaKey:      uploaded.MediaKey,
+				Mimetype:      &mimeType,
+				FileEncSHA256: uploaded.FileEncSHA256,
+				FileSHA256:    uploaded.FileSHA256,
+				FileLength:    &uploaded.FileLength,
+				Seconds:       &duration,
+			},
+		}
+	} else {
+		// Generic document
+		filename := fileHeader.Filename
+		message = &waProto.Message{
+			DocumentMessage: &waProto.DocumentMessage{
+				URL:           &uploaded.URL,
+				DirectPath:    &uploaded.DirectPath,
+				MediaKey:      uploaded.MediaKey,
+				Mimetype:      &mimeType,
+				FileEncSHA256: uploaded.FileEncSHA256,
+				FileSHA256:    uploaded.FileSHA256,
+				FileLength:    &uploaded.FileLength,
+				FileName:      &filename,
+				Title:         &filename,
+			},
+		}
+	}
+
+	// Send the message
+	resp, err := session.Client.SendMessage(context.Background(), jid, message)
+	if err != nil {
+		log.Printf("Failed to send attachment message: %v", err)
+		http.Error(w, "Failed to send attachment", http.StatusInternalServerError)
+		return
+	}
+
+	log.Printf("Attachment sent successfully to %s with message ID: %s", recipient, resp.ID)
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"success":    true,
+		"message":    "Attachment sent successfully",
+		"message_id": resp.ID,
+		"recipient":  recipient,
+		"session":    session.ID,
+		"filename":   fileHeader.Filename,
+		"mime_type":  mimeType,
+		"file_size":  len(fileData),
+	})
+}
+
+// sendTyping sends typing indicator
+func sendTyping(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	id := vars["id"]
+
+	log.Printf("Send typing request for session %s", id)
+
+	var req struct {
+		Recipient string `json:"recipient"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		log.Printf("Failed to decode request body: %v", err)
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	if req.Recipient == "" {
+		http.Error(w, "Recipient is required", http.StatusBadRequest)
+		return
+	}
+
+	sessionManager.mu.RLock()
+	session, exists := sessionManager.sessions[id]
+	sessionManager.mu.RUnlock()
+
+	if !exists {
+		log.Printf("Session %s not found", id)
+		http.Error(w, "Session not found", http.StatusNotFound)
+		return
+	}
+
+	if !session.LoggedIn {
+		log.Printf("Session %s is not logged in", id)
+		http.Error(w, "Session is not logged in", http.StatusUnauthorized)
+		return
+	}
+
+	// Ensure the recipient is in proper WhatsApp JID format
+	var recipientJID string
+	if strings.Contains(req.Recipient, "@s.whatsapp.net") || strings.Contains(req.Recipient, "@g.us") {
+		recipientJID = req.Recipient
+	} else {
+		recipientJID = req.Recipient + "@s.whatsapp.net"
+	}
+
+	// Parse JID
+	jid, err := types.ParseJID(recipientJID)
+	if err != nil {
+		log.Printf("Failed to parse JID %s: %v", recipientJID, err)
+		http.Error(w, "Invalid recipient format", http.StatusBadRequest)
+		return
+	}
+
+	// Send typing indicator
+	err = session.Client.SendChatPresence(jid, types.ChatPresenceComposing, types.ChatPresenceMediaText)
+	if err != nil {
+		log.Printf("Failed to send typing indicator: %v", err)
+		http.Error(w, "Failed to send typing indicator", http.StatusInternalServerError)
+		return
+	}
+
+	log.Printf("Typing indicator sent successfully to %s", req.Recipient)
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"success":   true,
+		"message":   "Typing indicator sent",
+		"recipient": req.Recipient,
+		"session":   session.ID,
+	})
+}
+
+// stopTyping stops typing indicator  
+func stopTyping(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	id := vars["id"]
+
+	log.Printf("Stop typing request for session %s", id)
+
+	var req struct {
+		Recipient string `json:"recipient"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		log.Printf("Failed to decode request body: %v", err)
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	if req.Recipient == "" {
+		http.Error(w, "Recipient is required", http.StatusBadRequest)
+		return
+	}
+
+	sessionManager.mu.RLock()
+	session, exists := sessionManager.sessions[id]
+	sessionManager.mu.RUnlock()
+
+	if !exists {
+		log.Printf("Session %s not found", id)
+		http.Error(w, "Session not found", http.StatusNotFound)
+		return
+	}
+
+	if !session.LoggedIn {
+		log.Printf("Session %s is not logged in", id)
+		http.Error(w, "Session is not logged in", http.StatusUnauthorized)
+		return
+	}
+
+	// Ensure the recipient is in proper WhatsApp JID format
+	var recipientJID string
+	if strings.Contains(req.Recipient, "@s.whatsapp.net") || strings.Contains(req.Recipient, "@g.us") {
+		recipientJID = req.Recipient
+	} else {
+		recipientJID = req.Recipient + "@s.whatsapp.net"
+	}
+
+	// Parse JID
+	jid, err := types.ParseJID(recipientJID)
+	if err != nil {
+		log.Printf("Failed to parse JID %s: %v", recipientJID, err)
+		http.Error(w, "Invalid recipient format", http.StatusBadRequest)
+		return
+	}
+
+	// Stop typing indicator (send paused state)
+	err = session.Client.SendChatPresence(jid, types.ChatPresencePaused, types.ChatPresenceMediaText)
+	if err != nil {
+		log.Printf("Failed to stop typing indicator: %v", err)
+		http.Error(w, "Failed to stop typing indicator", http.StatusInternalServerError)
+		return
+	}
+
+	log.Printf("Stopped typing indicator for %s", req.Recipient)
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"success":   true,
+		"message":   "Typing indicator stopped",
+		"recipient": req.Recipient,
+		"session":   session.ID,
+	})
 }
