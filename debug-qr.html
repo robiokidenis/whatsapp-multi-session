@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Debug QR Code</title>
+    <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
+</head>
+<body>
+    <h1>Debug QR Code Connection</h1>
+    <button id="testBtn">Test QR Code via WebSocket</button>
+    <div id="status"></div>
+    <div id="qrcode"></div>
+    <div id="logs" style="background: #f0f0f0; padding: 10px; margin-top: 20px; height: 300px; overflow-y: scroll;"></div>
+
+    <script>
+        const logs = document.getElementById('logs');
+        
+        function log(message) {
+            console.log(message);
+            logs.innerHTML += new Date().toLocaleTimeString() + ': ' + message + '<br>';
+            logs.scrollTop = logs.scrollHeight;
+        }
+        
+        document.getElementById('testBtn').addEventListener('click', function() {
+            const status = document.getElementById('status');
+            const qrDiv = document.getElementById('qrcode');
+            
+            status.innerHTML = 'Connecting to WebSocket...';
+            qrDiv.innerHTML = '';
+            logs.innerHTML = '';
+            
+            log('Starting WebSocket connection...');
+            
+            // First, create a session
+            fetch('/api/sessions', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    phone: '6281234567890@s.whatsapp.net',
+                    name: 'Debug Session'
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                log('Session creation response: ' + JSON.stringify(data));
+                
+                if (data.success || data.error === 'Session already exists') {
+                    // Connect WebSocket
+                    const ws = new WebSocket('ws://localhost:8080/api/ws/6281234567890@s.whatsapp.net');
+                    
+                    ws.onopen = function() {
+                        status.innerHTML = 'WebSocket connected! Waiting for QR code...';
+                        log('WebSocket opened successfully');
+                    };
+                    
+                    ws.onmessage = function(event) {
+                        const data = JSON.parse(event.data);
+                        log('WebSocket message received: ' + JSON.stringify(data));
+                        
+                        if (data.type === 'qr') {
+                            status.innerHTML = 'QR Code received! Generating image...';
+                            log('QR code data length: ' + data.data.qr.length);
+                            
+                            // Generate QR code
+                            QRCode.toCanvas(qrDiv, data.data.qr, {
+                                width: 256,
+                                margin: 2
+                            }, function(error) {
+                                if (error) {
+                                    status.innerHTML = 'Error generating QR: ' + error;
+                                    log('QR generation error: ' + error);
+                                } else {
+                                    status.innerHTML = 'QR Code ready! Scan with WhatsApp';
+                                    log('QR code generated successfully');
+                                }
+                            });
+                        } else if (data.type === 'error') {
+                            status.innerHTML = 'Error: ' + data.error;
+                            log('Error received: ' + data.error);
+                        } else if (data.type === 'success') {
+                            status.innerHTML = 'Login successful!';
+                            log('Login successful');
+                        } else {
+                            status.innerHTML = 'Event: ' + data.type;
+                            log('Other event: ' + data.type);
+                        }
+                    };
+                    
+                    ws.onerror = function(error) {
+                        status.innerHTML = 'WebSocket error';
+                        log('WebSocket error: ' + JSON.stringify(error));
+                    };
+                    
+                    ws.onclose = function(event) {
+                        status.innerHTML = 'Connection closed. Code: ' + event.code;
+                        log('WebSocket closed: code=' + event.code + ', reason=' + event.reason);
+                    };
+                } else {
+                    log('Failed to create session: ' + JSON.stringify(data));
+                }
+            })
+            .catch(error => {
+                log('Session creation error: ' + error);
+            });
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,12 @@
+2025/07/26 10:51:50 Initialized with latest whatsmeow version
+2025/07/26 10:51:50 Starting WhatsApp Multi-Session Manager with mysql database
+2025/07/26 10:51:50 Connected to MySQL database root@127.0.0.1:3306/whatsapGo
+2025/07/26 10:51:50 Initializing database tables...
+2025/07/26 10:51:50 Sessions table initialized successfully
+2025/07/26 10:51:50 Found 2 existing users, skipping admin user creation
+2025/07/26 10:51:50 Users table initialized successfully
+2025/07/26 10:51:50 Loading existing sessions...
+2025/07/26 10:51:50 Restored 0 sessions
+Server starting on http://localhost:8080
+API available at http://localhost:8080/api
+Frontend available at http://localhost:8080
