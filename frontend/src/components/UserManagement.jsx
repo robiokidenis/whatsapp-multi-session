@@ -23,12 +23,23 @@ const UserManagement = () => {
   const loadUsers = async () => {
     try {
       setLoading(true);
+      console.log('Loading users... Token exists:', !!axios.defaults.headers.common['Authorization']);
+      console.log('Authorization header:', axios.defaults.headers.common['Authorization']);
+      
       const response = await axios.get('/api/admin/users');
+      console.log('Users API response:', response.data);
+      
       if (response.data.success) {
         setUsers(response.data.data || []);
+        console.log('Users loaded successfully:', response.data.data.length, 'users');
+      } else {
+        console.error('Users API returned success=false:', response.data);
+        showMessage('Failed to load users: ' + (response.data.error || 'Unknown error'), 'error');
       }
     } catch (error) {
       console.error('Error loading users:', error);
+      console.error('Error response:', error.response?.data);
+      console.error('Error status:', error.response?.status);
       showMessage('Error loading users: ' + (error.response?.data?.error || error.message), 'error');
     } finally {
       setLoading(false);
