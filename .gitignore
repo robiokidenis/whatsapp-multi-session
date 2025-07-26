@@ -8,7 +8,8 @@ whatsapp-multi-session
 server.log
 frontend.log
 
-# Database files
+# Database files and directory
+database/
 *.db
 *.sqlite
 *.sqlite3

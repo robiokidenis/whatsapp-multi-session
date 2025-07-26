@@ -112,7 +112,9 @@ func (l *LoginRateLimiter) RecordAttempt(ip string, success bool) {
 	// Block if max attempts reached
 	if attempt.Count >= l.MaxAttempts {
 		attempt.BlockedUntil = now.Add(l.BlockDuration)
-		log.Printf("IP %s blocked for %v after %d failed attempts", ip, l.BlockDuration, attempt.Count)
+		if logger != nil {
+			logger.Warn("IP %s blocked for %v after %d failed attempts", ip, l.BlockDuration, attempt.Count)
+		}
 	}
 }
 
@@ -199,6 +201,8 @@ type User struct {
 type Config struct {
 	DatabasePath string // Path to SQLite database file
 	JWTSecret    string
+	EnableLogging bool  // Whether to enable logging
+	LogLevel     string // Log level: "debug", "info", "warn", "error"
 }
 
 // Claims represents JWT claims
@@ -221,6 +225,7 @@ type SessionManager struct {
 var (
 	sessionManager *SessionManager
 	config         *Config
+	logger         *Logger
 	upgrader       = websocket.Upgrader{
 		CheckOrigin: func(r *http.Request) bool {
 			// Allow connections from localhost and development origins
@@ -241,6 +246,100 @@ var (
 		},
 	}
 )
+
+// Logger provides configurable logging
+type Logger struct {
+	enabled bool
+	level   string
+	logger  *log.Logger
+}
+
+// NewLogger creates a new logger instance
+func NewLogger(enabled bool, level string) *Logger {
+	return &Logger{
+		enabled: enabled,
+		level:   level,
+		logger:  log.New(os.Stdout, "", log.LstdFlags),
+	}
+}
+
+// shouldLog checks if a message should be logged based on level
+func (l *Logger) shouldLog(level string) bool {
+	if !l.enabled {
+		return false
+	}
+	
+	levels := map[string]int{
+		"debug": 0,
+		"info":  1,
+		"warn":  2,
+		"error": 3,
+	}
+	
+	currentLevel, ok := levels[l.level]
+	if !ok {
+		currentLevel = 1 // default to info
+	}
+	
+	msgLevel, ok := levels[level]
+	if !ok {
+		msgLevel = 1 // default to info
+	}
+	
+	return msgLevel >= currentLevel
+}
+
+// Debug logs debug messages
+func (l *Logger) Debug(format string, v ...interface{}) {
+	if l.shouldLog("debug") {
+		l.logger.Printf("[DEBUG] "+format, v...)
+	}
+}
+
+// Info logs info messages
+func (l *Logger) Info(format string, v ...interface{}) {
+	if l.shouldLog("info") {
+		l.logger.Printf("[INFO] "+format, v...)
+	}
+}
+
+// Warn logs warning messages
+func (l *Logger) Warn(format string, v ...interface{}) {
+	if l.shouldLog("warn") {
+		l.logger.Printf("[WARN] "+format, v...)
+	}
+}
+
+// Error logs error messages
+func (l *Logger) Error(format string, v ...interface{}) {
+	if l.shouldLog("error") {
+		l.logger.Printf("[ERROR] "+format, v...)
+	}
+}
+
+// Printf logs formatted messages (for compatibility)
+func (l *Logger) Printf(format string, v ...interface{}) {
+	l.Info(format, v...)
+}
+
+// Println logs messages (for compatibility)
+func (l *Logger) Println(v ...interface{}) {
+	if l.shouldLog("info") {
+		l.logger.Println("[INFO]", fmt.Sprint(v...))
+	}
+}
+
+// Print logs messages without newline (for compatibility)
+func (l *Logger) Print(v ...interface{}) {
+	if l.shouldLog("info") {
+		l.logger.Print("[INFO] ", fmt.Sprint(v...))
+	}
+}
+
+// Fatal logs fatal messages and exits
+func (l *Logger) Fatal(v ...interface{}) {
+	l.logger.Fatal(v...)
+}
 
 // generateSessionID generates a unique session identifier
 func generateSessionID() string {
@@ -265,8 +364,10 @@ func generatePhoneJID(sessionID string) string {
 // loadConfig loads configuration from environment variables or uses defaults
 func loadConfig() *Config {
 	return &Config{
-		DatabasePath: getEnv("DATABASE_PATH", "./session_metadata.db"),
+		DatabasePath: getEnv("DATABASE_PATH", "./database/session_metadata.db"),
 		JWTSecret:    getEnv("JWT_SECRET", "your-super-secret-jwt-key-change-this-in-production"),
+		EnableLogging: getEnv("ENABLE_LOGGING", "true") == "true",
+		LogLevel:     getEnv("LOG_LEVEL", "info"),
 	}
 }
 
@@ -291,7 +392,9 @@ func setupDatabase(cfg *Config) (*sql.DB, error) {
 		return nil, fmt.Errorf("failed to ping SQLite: %v", err)
 	}
 	
-	log.Printf("Using SQLite database: %s", cfg.DatabasePath)
+	if logger != nil {
+		logger.Info("Using SQLite database: %s", cfg.DatabasePath)
+	}
 	return db, nil
 }
 
@@ -332,8 +435,10 @@ func initUsersTable(db *sql.DB) error {
 	
 	_, err := db.Exec(query)
 	if err != nil {
-		log.Printf("Failed to create users table: %v", err)
-		log.Printf("Query was: %s", query)
+		if logger != nil {
+			logger.Error("Failed to create users table: %v", err)
+			logger.Debug("Query was: %s", query)
+		}
 		return err
 	}
 
@@ -348,7 +453,9 @@ func initUsersTable(db *sql.DB) error {
 	for _, migration := range migrations {
 		_, err := db.Exec(migration)
 		if err != nil && !strings.Contains(err.Error(), "duplicate column name") {
-			log.Printf("Migration failed (non-critical): %v", err)
+			if logger != nil {
+				logger.Debug("Migration failed (non-critical): %v", err)
+			}
 		}
 	}
 
@@ -362,7 +469,9 @@ func initUsersTable(db *sql.DB) error {
 	if count == 0 {
 		hashedPassword, err := bcrypt.GenerateFromPassword([]byte("admin123"), bcrypt.DefaultCost)
 		if err != nil {
-			log.Printf("Failed to hash password: %v", err)
+			if logger != nil {
+				logger.Error("Failed to hash password: %v", err)
+			}
 			return err
 		}
 
@@ -372,13 +481,19 @@ func initUsersTable(db *sql.DB) error {
 		`, "admin", string(hashedPassword), "admin", -1, 1, time.Now().Unix())
 		
 		if err != nil {
-			log.Printf("Failed to insert admin user: %v", err)
+			if logger != nil {
+				logger.Error("Failed to insert admin user: %v", err)
+			}
 			return err
 		}
 		
-		log.Println("Created default admin user (username: admin, password: admin123)")
+		if logger != nil {
+			logger.Info("Created default admin user (username: admin, password: admin123)")
+		}
 	} else {
-		log.Printf("Found %d existing users, skipping admin user creation", count)
+		if logger != nil {
+			logger.Info("Found %d existing users, skipping admin user creation", count)
+		}
 	}
 
 	return nil
@@ -566,18 +681,24 @@ func init() {
 	store.DeviceProps.Os = proto.String("Windows")
 	store.DeviceProps.RequireFullSync = proto.Bool(false)
 	
-	log.Printf("Initialized with latest whatsmeow version")
+	if logger != nil {
+		logger.Info("Initialized with latest whatsmeow version")
+	}
 }
 
 // restoreSession recreates a session from stored metadata
 func restoreSession(metadata SessionMetadata, container *sqlstore.Container) *Session {
-	log.Printf("Restoring session %s (%s)", metadata.ID, metadata.Name)
+	if logger != nil {
+		logger.Info("Restoring session %s (%s)", metadata.ID, metadata.Name)
+	}
 	
 	// Find existing device in store
 	var device *store.Device
 	devices, err := container.GetAllDevices(context.Background())
 	if err != nil {
-		log.Printf("Error getting devices: %v", err)
+		if logger != nil {
+			logger.Error("Error getting devices: %v", err)
+		}
 		return nil
 	}
 	
@@ -585,7 +706,9 @@ func restoreSession(metadata SessionMetadata, container *sqlstore.Container) *Se
 	for _, d := range devices {
 		if d != nil && d.ID != nil && d.ID.User == strings.Replace(metadata.ActualPhone, "@s.whatsapp.net", "", 1) {
 			device = d
-			log.Printf("Found existing device for session %s", metadata.ID)
+			if logger != nil {
+				logger.Debug("Found existing device for session %s", metadata.ID)
+			}
 			break
 		}
 	}
@@ -593,7 +716,9 @@ func restoreSession(metadata SessionMetadata, container *sqlstore.Container) *Se
 	// If no existing device found, create new one (will need re-authentication)
 	if device == nil {
 		device = container.NewDevice()
-		log.Printf("Created new device for session %s (will need re-authentication)", metadata.ID)
+		if logger != nil {
+			logger.Info("Created new device for session %s (will need re-authentication)", metadata.ID)
+		}
 	}
 	
 	// Create client
@@ -619,7 +744,9 @@ func restoreSession(metadata SessionMetadata, container *sqlstore.Container) *Se
 	client.AddEventHandler(func(evt interface{}) {
 		switch v := evt.(type) {
 		case *events.Connected:
-			log.Printf("Session %s connected", metadata.ID)
+			if logger != nil {
+				logger.Info("Session %s connected", metadata.ID)
+			}
 			sessionManager.mu.Lock()
 			if s, ok := sessionManager.sessions[metadata.ID]; ok {
 				s.Connected = true
@@ -628,32 +755,44 @@ func restoreSession(metadata SessionMetadata, container *sqlstore.Container) *Se
 				// Update actual phone number if logged in
 				if client.IsLoggedIn() && client.Store.ID != nil {
 					s.ActualPhone = client.Store.ID.User + "@s.whatsapp.net"
-					log.Printf("Session %s actual phone: %s", metadata.ID, s.ActualPhone)
+					if logger != nil {
+						logger.Info("Session %s actual phone: %s", metadata.ID, s.ActualPhone)
+					}
 					// Save updated metadata
 					sessionManager.saveSessionMetadata(s)
 				}
 			}
 			sessionManager.mu.Unlock()
 		case *events.Disconnected:
-			log.Printf("Session %s disconnected", metadata.ID)
+			if logger != nil {
+				logger.Info("Session %s disconnected", metadata.ID)
+			}
 			sessionManager.mu.Lock()
 			if s, ok := sessionManager.sessions[metadata.ID]; ok {
 				s.Connected = false
 			}
 			sessionManager.mu.Unlock()
 		case *events.Message:
-			log.Printf("Received message in session %s: %s", metadata.ID, v.Message.GetConversation())
+			if logger != nil {
+				logger.Info("Received message in session %s: %s", metadata.ID, v.Message.GetConversation())
+			}
 			// Send webhook if configured
 			sessionManager.mu.RLock()
 			if s, ok := sessionManager.sessions[metadata.ID]; ok {
-				log.Printf("Session %s webhook URL: '%s'", metadata.ID, s.WebhookURL)
+				if logger != nil {
+					logger.Info("Session %s webhook URL: '%s'", metadata.ID, s.WebhookURL)
+				}
 				if s.WebhookURL != "" {
 					go sendWebhook(s.WebhookURL, metadata.ID, v)
 				} else {
-					log.Printf("No webhook URL configured for session %s", metadata.ID)
+					if logger != nil {
+						logger.Info("No webhook URL configured for session %s", metadata.ID)
+					}
 				}
 			} else {
-				log.Printf("Session %s not found in sessionManager.sessions", metadata.ID)
+				if logger != nil {
+					logger.Warn("Session %s not found in sessionManager.sessions", metadata.ID)
+				}
 			}
 			sessionManager.mu.RUnlock()
 		}
@@ -662,10 +801,14 @@ func restoreSession(metadata SessionMetadata, container *sqlstore.Container) *Se
 	// Try to connect if device has stored credentials
 	if client.Store.ID != nil {
 		go func() {
-			log.Printf("Auto-connecting restored session %s", metadata.ID)
+			if logger != nil {
+				logger.Info("Auto-connecting restored session %s", metadata.ID)
+			}
 			err := client.Connect()
 			if err != nil {
-				log.Printf("Failed to auto-connect session %s: %v", metadata.ID, err)
+				if logger != nil {
+					logger.Error("Failed to auto-connect session %s: %v", metadata.ID, err)
+				}
 			}
 		}()
 	}
@@ -683,7 +826,9 @@ func listUsers(w http.ResponseWriter, r *http.Request) {
 		ORDER BY created_at DESC
 	`)
 	if err != nil {
-		log.Printf("Failed to fetch users: %v", err)
+		if logger != nil {
+			logger.Error("Failed to fetch users: %v", err)
+		}
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusInternalServerError)
 		json.NewEncoder(w).Encode(map[string]interface{}{
@@ -819,7 +964,9 @@ func createUser(w http.ResponseWriter, r *http.Request) {
 	// Hash password
 	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
 	if err != nil {
-		log.Printf("Failed to hash password: %v", err)
+		if logger != nil {
+			logger.Error("Failed to hash password: %v", err)
+		}
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusInternalServerError)
 		json.NewEncoder(w).Encode(map[string]interface{}{
@@ -849,7 +996,9 @@ func createUser(w http.ResponseWriter, r *http.Request) {
 	`, req.Username, string(hashedPassword), req.Role, req.SessionLimit, 1, time.Now().Unix())
 	
 	if err != nil {
-		log.Printf("Failed to create user %s: %v", req.Username, err)
+		if logger != nil {
+			logger.Error("Failed to create user %s: %v", req.Username, err)
+		}
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusInternalServerError)
 		json.NewEncoder(w).Encode(map[string]interface{}{
@@ -861,7 +1010,9 @@ func createUser(w http.ResponseWriter, r *http.Request) {
 
 	userID, _ := result.LastInsertId()
 	adminUsername := r.Context().Value("username").(string)
-	log.Printf("User %s created successfully by admin %s with ID %d", req.Username, adminUsername, userID)
+	if logger != nil {
+		logger.Info("User %s created successfully by admin %s with ID %d", req.Username, adminUsername, userID)
+	}
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]interface{}{
@@ -901,7 +1052,9 @@ func getUserById(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err != nil {
-		log.Printf("Failed to fetch user %s: %v", userID, err)
+		if logger != nil {
+			logger.Error("Failed to fetch user %s: %v", userID, err)
+		}
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusInternalServerError)
 		json.NewEncoder(w).Encode(map[string]interface{}{
@@ -1018,7 +1171,9 @@ func updateUser(w http.ResponseWriter, r *http.Request) {
 
 		hashedPassword, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
 		if err != nil {
-			log.Printf("Failed to hash password: %v", err)
+			if logger != nil {
+				logger.Error("Failed to hash password: %v", err)
+			}
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusInternalServerError)
 			json.NewEncoder(w).Encode(map[string]interface{}{
@@ -1089,7 +1244,9 @@ func updateUser(w http.ResponseWriter, r *http.Request) {
 	
 	_, err = sessionManager.metadataDB.Exec(query, args...)
 	if err != nil {
-		log.Printf("Failed to update user %s: %v", userID, err)
+		if logger != nil {
+			logger.Error("Failed to update user %s: %v", userID, err)
+		}
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusInternalServerError)
 		json.NewEncoder(w).Encode(map[string]interface{}{
@@ -1100,7 +1257,9 @@ func updateUser(w http.ResponseWriter, r *http.Request) {
 	}
 
 	adminUsername := r.Context().Value("username").(string)
-	log.Printf("User %s updated successfully by admin %s", userID, adminUsername)
+	if logger != nil {
+		logger.Info("User %s updated successfully by admin %s", userID, adminUsername)
+	}
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]interface{}{
@@ -1141,7 +1300,9 @@ func deleteUser(w http.ResponseWriter, r *http.Request) {
 	// Delete user
 	_, err = sessionManager.metadataDB.Exec("DELETE FROM users WHERE id = ?", userID)
 	if err != nil {
-		log.Printf("Failed to delete user %s: %v", userID, err)
+		if logger != nil {
+			logger.Error("Failed to delete user %s: %v", userID, err)
+		}
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusInternalServerError)
 		json.NewEncoder(w).Encode(map[string]interface{}{
@@ -1152,7 +1313,9 @@ func deleteUser(w http.ResponseWriter, r *http.Request) {
 	}
 
 	adminUsername := r.Context().Value("username").(string)
-	log.Printf("User %s (%s) deleted successfully by admin %s", userID, username, adminUsername)
+	if logger != nil {
+		logger.Info("User %s (%s) deleted successfully by admin %s", userID, username, adminUsername)
+	}
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]interface{}{
@@ -1164,37 +1327,63 @@ func deleteUser(w http.ResponseWriter, r *http.Request) {
 func main() {
 	// Load configuration
 	config = loadConfig()
-	log.Println("Starting WhatsApp Multi-Session Manager with sqlite database")
+	
+	// Initialize logger
+	logger = NewLogger(config.EnableLogging, config.LogLevel)
+	logger.Info("Starting WhatsApp Multi-Session Manager with sqlite database")
 
 	// Initialize login rate limiter
 	loginLimiter = NewLoginRateLimiter()
-	log.Println("Login rate limiter initialized")
+	logger.Info("Login rate limiter initialized")
 
 	// Initialize WhatsApp database (always SQLite for whatsmeow)
 	dbLog := waLog.Stdout("Database", "INFO", true)
 	ctx := context.Background()
-	container, err := sqlstore.New(ctx, "sqlite3", "file:sessions.db?_foreign_keys=on", dbLog)
+	// Ensure database directory exists
+	if err := os.MkdirAll("database", 0755); err != nil {
+		logger.Fatal("Failed to create database directory:", err)
+	}
+	
+	container, err := sqlstore.New(ctx, "sqlite3", "file:database/sessions.db?_foreign_keys=on", dbLog)
 	if err != nil {
-		log.Fatal("Failed to initialize WhatsApp database:", err)
+		logger.Fatal("Failed to initialize WhatsApp database:", err)
 	}
 
 	// Initialize metadata database (SQLite)
 	metadataDB, err := setupDatabase(config)
 	if err != nil {
-		log.Fatal("Failed to setup metadata database:", err)
+		if logger != nil {
+			logger.Fatal("Failed to setup metadata database:", err)
+		} else {
+			log.Fatal("Failed to setup metadata database:", err)
+		}
 	}
 
 	// Initialize database tables
-	log.Println("Initializing database tables...")
-	if err := initSessionsTable(metadataDB); err != nil {
-		log.Fatal("Failed to initialize sessions table:", err)
+	if logger != nil {
+		logger.Info("Initializing database tables...")
 	}
-	log.Println("Sessions table initialized successfully")
+	if err := initSessionsTable(metadataDB); err != nil {
+		if logger != nil {
+			logger.Fatal("Failed to initialize sessions table:", err)
+		} else {
+			log.Fatal("Failed to initialize sessions table:", err)
+		}
+	}
+	if logger != nil {
+		logger.Info("Sessions table initialized successfully")
+	}
 
 	if err := initUsersTable(metadataDB); err != nil {
-		log.Fatal("Failed to initialize users table:", err)
+		if logger != nil {
+			logger.Fatal("Failed to initialize users table:", err)
+		} else {
+			log.Fatal("Failed to initialize users table:", err)
+		}
 	}
-	log.Println("Users table initialized successfully")
+	if logger != nil {
+		logger.Info("Users table initialized successfully")
+	}
 
 	// Initialize session manager
 	sessionManager = &SessionManager{
@@ -1204,19 +1393,27 @@ func main() {
 	}
 
 	// Restore existing sessions
-	log.Println("Loading existing sessions...")
+	if logger != nil {
+		logger.Info("Loading existing sessions...")
+	}
 	sessionMetadata, err := sessionManager.loadSessionMetadata()
 	if err != nil {
-		log.Printf("Error loading session metadata: %v", err)
+		if logger != nil {
+			logger.Error("Error loading session metadata: %v", err)
+		}
 	} else {
 		for _, metadata := range sessionMetadata {
 			session := restoreSession(metadata, container)
 			if session != nil {
 				sessionManager.sessions[session.ID] = session
-				log.Printf("Restored session %s (%s)", session.ID, session.Name)
+				if logger != nil {
+					logger.Info("Restored session %s (%s)", session.ID, session.Name)
+				}
 			}
 		}
-		log.Printf("Restored %d sessions", len(sessionManager.sessions))
+		if logger != nil {
+			logger.Info("Restored %d sessions", len(sessionManager.sessions))
+		}
 	}
 
 	// Set up routes
@@ -1287,7 +1484,11 @@ func main() {
 	fmt.Println("API available at http://localhost:8080/api")
 	fmt.Println("Frontend available at http://localhost:8080")
 	
-	log.Fatal(http.ListenAndServe(":8080", handler))
+	if logger != nil {
+		logger.Fatal(http.ListenAndServe(":8080", handler))
+	} else {
+		log.Fatal(http.ListenAndServe(":8080", handler))
+	}
 }
 
 // API Handlers
@@ -1324,7 +1525,9 @@ func loginHandler(w http.ResponseWriter, r *http.Request) {
 	// Check if IP is currently blocked
 	if loginLimiter.IsBlocked(clientIP) {
 		remaining := loginLimiter.GetRemainingTime(clientIP)
-		log.Printf("Login attempt from blocked IP %s, %v remaining", clientIP, remaining)
+		if logger != nil {
+			logger.Warn("Login attempt from blocked IP %s, %v remaining", clientIP, remaining)
+		}
 		
 		w.Header().Set("Content-Type", "application/json")
 		w.Header().Set("Retry-After", fmt.Sprintf("%.0f", remaining.Seconds()))
@@ -1344,14 +1547,18 @@ func loginHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		log.Printf("Invalid request body from IP %s: %v", clientIP, err)
+		if logger != nil {
+			logger.Warn("Invalid request body from IP %s: %v", clientIP, err)
+		}
 		http.Error(w, "Invalid request body", http.StatusBadRequest)
 		return
 	}
 
 	// Validate input
 	if strings.TrimSpace(req.Username) == "" || strings.TrimSpace(req.Password) == "" {
-		log.Printf("Empty credentials from IP %s", clientIP)
+		if logger != nil {
+			logger.Warn("Empty credentials from IP %s", clientIP)
+		}
 		loginLimiter.RecordAttempt(clientIP, false)
 		
 		w.Header().Set("Content-Type", "application/json")
@@ -1368,7 +1575,9 @@ func loginHandler(w http.ResponseWriter, r *http.Request) {
 
 	user, err := authenticateUser(req.Username, req.Password)
 	if err != nil {
-		log.Printf("Authentication failed for user %s from IP %s: %v", req.Username, clientIP, err)
+		if logger != nil {
+			logger.Warn("Authentication failed for user %s from IP %s: %v", req.Username, clientIP, err)
+		}
 		loginLimiter.RecordAttempt(clientIP, false)
 		
 		w.Header().Set("Content-Type", "application/json")
@@ -1382,14 +1591,18 @@ func loginHandler(w http.ResponseWriter, r *http.Request) {
 
 	token, err := generateJWT(user.ID, user.Username, user.Role)
 	if err != nil {
-		log.Printf("Failed to generate JWT for user %s from IP %s: %v", req.Username, clientIP, err)
+		if logger != nil {
+			logger.Error("Failed to generate JWT for user %s from IP %s: %v", req.Username, clientIP, err)
+		}
 		http.Error(w, "Failed to generate token", http.StatusInternalServerError)
 		return
 	}
 
 	// Record successful login (this resets the attempt counter)
 	loginLimiter.RecordAttempt(clientIP, true)
-	log.Printf("User %s logged in successfully from IP %s", req.Username, clientIP)
+	if logger != nil {
+		logger.Info("User %s logged in successfully from IP %s", req.Username, clientIP)
+	}
 
 	// Add security headers
 	w.Header().Set("Content-Type", "application/json")
@@ -1453,13 +1666,17 @@ func registerHandler(w http.ResponseWriter, r *http.Request) {
 	`, req.Username, string(hashedPassword), time.Now().Unix())
 	
 	if err != nil {
-		log.Printf("Failed to create user %s: %v", req.Username, err)
+		if logger != nil {
+			logger.Error("Failed to create user %s: %v", req.Username, err)
+		}
 		http.Error(w, "Failed to create user", http.StatusInternalServerError)
 		return
 	}
 
 	userID, _ := result.LastInsertId()
-	log.Printf("User %s registered successfully with ID %d", req.Username, userID)
+	if logger != nil {
+		logger.Info("User %s registered successfully with ID %d", req.Username, userID)
+	}
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]interface{}{
@@ -1573,7 +1790,9 @@ func createSession(w http.ResponseWriter, r *http.Request) {
 		// Auto-generate session ID
 		sessionID = generateSessionID()
 		phoneForDisplay = generatePhoneJID(sessionID)
-		log.Printf("Auto-generated session ID: %s", sessionID)
+		if logger != nil {
+			logger.Info("Auto-generated session ID: %s", sessionID)
+		}
 	} else {
 		// Use provided phone number as session ID
 		sessionID = req.Phone
@@ -1618,7 +1837,9 @@ func createSession(w http.ResponseWriter, r *http.Request) {
 	client.AddEventHandler(func(evt interface{}) {
 		switch v := evt.(type) {
 		case *events.Connected:
-			log.Printf("Session %s connected", sessionID)
+			if logger != nil {
+				logger.Info("Session %s connected", sessionID)
+			}
 			sessionManager.mu.Lock()
 			if s, ok := sessionManager.sessions[sessionID]; ok {
 				s.Connected = true
@@ -1627,21 +1848,27 @@ func createSession(w http.ResponseWriter, r *http.Request) {
 				// Update actual phone number if logged in
 				if client.IsLoggedIn() && client.Store.ID != nil {
 					s.ActualPhone = client.Store.ID.User + "@s.whatsapp.net"
-					log.Printf("Session %s actual phone: %s", sessionID, s.ActualPhone)
+					if logger != nil {
+						logger.Info("Session %s actual phone: %s", sessionID, s.ActualPhone)
+					}
 					// Save updated metadata
 					sessionManager.saveSessionMetadata(s)
 				}
 			}
 			sessionManager.mu.Unlock()
 		case *events.Disconnected:
-			log.Printf("Session %s disconnected", sessionID)
+			if logger != nil {
+				logger.Info("Session %s disconnected", sessionID)
+			}
 			sessionManager.mu.Lock()
 			if s, ok := sessionManager.sessions[sessionID]; ok {
 				s.Connected = false
 			}
 			sessionManager.mu.Unlock()
 		case *events.Message:
-			log.Printf("Received message in session %s: %s", sessionID, v.Message.GetConversation())
+			if logger != nil {
+				logger.Info("Received message in session %s: %s", sessionID, v.Message.GetConversation())
+			}
 			// Send webhook if configured
 			sessionManager.mu.RLock()
 			if s, ok := sessionManager.sessions[sessionID]; ok && s.WebhookURL != "" {
@@ -1655,7 +1882,9 @@ func createSession(w http.ResponseWriter, r *http.Request) {
 
 	// Save session metadata to database
 	if err := sessionManager.saveSessionMetadata(session); err != nil {
-		log.Printf("Failed to save session metadata for %s: %v", sessionID, err)
+		if logger != nil {
+			logger.Error("Failed to save session metadata for %s: %v", sessionID, err)
+		}
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -1709,7 +1938,9 @@ func deleteSession(w http.ResponseWriter, r *http.Request) {
 
 	// Delete session metadata from database
 	if err := sessionManager.deleteSessionMetadata(id); err != nil {
-		log.Printf("Failed to delete session metadata for %s: %v", id, err)
+		if logger != nil {
+			logger.Error("Failed to delete session metadata for %s: %v", id, err)
+		}
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -1790,7 +2021,9 @@ func sendMessage(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	id := vars["id"]
 
-	log.Printf("Send message request for session %s", id)
+	if logger != nil {
+		logger.Info("Send message request for session %s", id)
+	}
 
 	var req struct {
 		To      string `json:"to"`
@@ -1798,14 +2031,18 @@ func sendMessage(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		log.Printf("Failed to decode request body: %v", err)
+		if logger != nil {
+			logger.Error("Failed to decode request body: %v", err)
+		}
 		http.Error(w, "Invalid request body: "+err.Error(), http.StatusBadRequest)
 		return
 	}
 
 	// Validate required fields
 	if strings.TrimSpace(req.To) == "" {
-		log.Printf("Empty recipient field for session %s", id)
+		if logger != nil {
+			logger.Warn("Empty recipient field for session %s", id)
+		}
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(map[string]interface{}{
@@ -1816,7 +2053,9 @@ func sendMessage(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if strings.TrimSpace(req.Message) == "" {
-		log.Printf("Empty message field for session %s", id)
+		if logger != nil {
+			logger.Warn("Empty message field for session %s", id)
+		}
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(map[string]interface{}{
@@ -1826,25 +2065,33 @@ func sendMessage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	log.Printf("Sending message to %s: %s", req.To, req.Message)
+	if logger != nil {
+		logger.Info("Sending message to %s: %s", req.To, req.Message)
+	}
 
 	sessionManager.mu.RLock()
 	session, exists := sessionManager.sessions[id]
 	sessionManager.mu.RUnlock()
 
 	if !exists {
-		log.Printf("Session %s not found", id)
+		if logger != nil {
+		logger.Error("Session %s not found", id)
+	}
 		http.Error(w, "Session not found", http.StatusNotFound)
 		return
 	}
 
 	if !session.Client.IsLoggedIn() {
-		log.Printf("Session %s not logged in", id)
+		if logger != nil {
+			logger.Error("Session %s not logged in", id)
+		}
 		http.Error(w, "Not logged in", http.StatusUnauthorized)
 		return
 	}
 
-	log.Printf("Session %s is logged in, parsing JID: %s", id, req.To)
+	if logger != nil {
+		logger.Debug("Session %s is logged in, parsing JID: %s", id, req.To)
+	}
 
 	// Clean and format the recipient
 	recipient := strings.TrimSpace(req.To)
@@ -1874,7 +2121,9 @@ func sendMessage(w http.ResponseWriter, r *http.Request) {
 		// Validate phone number format (should be digits only after cleaning)
 		for _, char := range phoneNumber {
 			if char < '0' || char > '9' {
-				log.Printf("Invalid phone number format: %s (cleaned: %s)", recipient, phoneNumber)
+				if logger != nil {
+					logger.Warn("Invalid phone number format: %s (cleaned: %s)", recipient, phoneNumber)
+				}
 				w.Header().Set("Content-Type", "application/json")
 				w.WriteHeader(http.StatusBadRequest)
 				json.NewEncoder(w).Encode(map[string]interface{}{
@@ -1886,7 +2135,9 @@ func sendMessage(w http.ResponseWriter, r *http.Request) {
 		}
 		
 		if len(phoneNumber) < 8 || len(phoneNumber) > 15 {
-			log.Printf("Invalid phone number length: %s (length: %d)", phoneNumber, len(phoneNumber))
+			if logger != nil {
+				logger.Warn("Invalid phone number length: %s (length: %d)", phoneNumber, len(phoneNumber))
+			}
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusBadRequest)
 			json.NewEncoder(w).Encode(map[string]interface{}{
@@ -1900,12 +2151,16 @@ func sendMessage(w http.ResponseWriter, r *http.Request) {
 		recipientJID = phoneNumber + "@s.whatsapp.net"
 	}
 	
-	log.Printf("Formatted recipient JID: %s", recipientJID)
+	if logger != nil {
+		logger.Debug("Formatted recipient JID: %s", recipientJID)
+	}
 
 	// Parse JID
 	jid, err := types.ParseJID(recipientJID)
 	if err != nil {
-		log.Printf("Failed to parse JID %s: %v", recipientJID, err)
+		if logger != nil {
+			logger.Error("Failed to parse JID %s: %v", recipientJID, err)
+		}
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(map[string]interface{}{
@@ -1915,17 +2170,23 @@ func sendMessage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	log.Printf("Parsed JID: %s", jid)
+	if logger != nil {
+		logger.Debug("Parsed JID: %s", jid)
+	}
 
 	// Send message
 	msg := &waProto.Message{
 		Conversation: proto.String(req.Message),
 	}
 
-	log.Printf("Sending message via WhatsApp...")
+	if logger != nil {
+		logger.Info("Sending message via WhatsApp...")
+	}
 	resp, err := session.Client.SendMessage(context.Background(), jid, msg)
 	if err != nil {
-		log.Printf("Failed to send message: %v", err)
+		if logger != nil {
+			logger.Error("Failed to send message: %v", err)
+		}
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusInternalServerError)
 		json.NewEncoder(w).Encode(map[string]interface{}{
@@ -1935,7 +2196,9 @@ func sendMessage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	log.Printf("Message sent successfully with ID: %s", resp.ID)
+	if logger != nil {
+		logger.Info("Message sent successfully with ID: %s", resp.ID)
+	}
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]interface{}{
@@ -2072,7 +2335,9 @@ func handleWebSocket(w http.ResponseWriter, r *http.Request) {
 
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
-		log.Printf("WebSocket upgrade error: %v", err)
+		if logger != nil {
+			logger.Error("WebSocket upgrade error: %v", err)
+		}
 		return
 	}
 	defer conn.Close()
@@ -2086,11 +2351,15 @@ func handleWebSocket(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	log.Printf("WebSocket connected for session %s", id)
+	if logger != nil {
+		logger.Info("WebSocket connected for session %s", id)
+	}
 
 	// Only disconnect if we're connected but not logged in (stale connection)
 	if session.Client.IsConnected() && !session.Client.IsLoggedIn() {
-		log.Printf("Disconnecting stale connection for %s", id)
+		if logger != nil {
+			logger.Info("Disconnecting stale connection for %s", id)
+		}
 		session.Client.Disconnect()
 		// Give it a moment to disconnect cleanly
 		time.Sleep(1 * time.Second)
@@ -2100,7 +2369,9 @@ func handleWebSocket(w http.ResponseWriter, r *http.Request) {
 	ctx := context.Background()
 	qrChan, err := session.Client.GetQRChannel(ctx)
 	if err != nil {
-		log.Printf("Failed to get QR channel for %s: %v", id, err)
+		if logger != nil {
+			logger.Error("Failed to get QR channel for %s: %v", id, err)
+		}
 		conn.WriteJSON(map[string]interface{}{
 			"type":  "error",  
 			"error": "Failed to get QR channel: " + err.Error(),
@@ -2109,10 +2380,14 @@ func handleWebSocket(w http.ResponseWriter, r *http.Request) {
 	}
 	
 	// Now connect after getting QR channel
-	log.Printf("Connecting session %s...", id)
+	if logger != nil {
+		logger.Info("Connecting session %s...", id)
+	}
 	err = session.Client.Connect()
 	if err != nil {
-		log.Printf("Connection error for %s: %v", id, err)
+		if logger != nil {
+			logger.Error("Connection error for %s: %v", id, err)
+		}
 		conn.WriteJSON(map[string]interface{}{
 			"type":  "error",
 			"error": err.Error(),
@@ -2133,11 +2408,15 @@ func handleWebSocket(w http.ResponseWriter, r *http.Request) {
 			select {
 			case evt, ok := <-qrChan:
 				if !ok {
-					log.Printf("QR channel closed for %s", id)
+					if logger != nil {
+						logger.Info("QR channel closed for %s", id)
+					}
 					return
 				}
 				
-				log.Printf("QR event for %s: %s", id, evt.Event)
+				if logger != nil {
+					logger.Debug("QR event for %s: %s", id, evt.Event)
+				}
 				
 				if evt.Event == "code" {
 					err := conn.WriteJSON(map[string]interface{}{
@@ -2148,10 +2427,14 @@ func handleWebSocket(w http.ResponseWriter, r *http.Request) {
 						},
 					})
 					if err != nil {
-						log.Printf("WebSocket write error: %v", err)
+						if logger != nil {
+							logger.Error("WebSocket write error: %v", err)
+						}
 						return
 					}
-					log.Printf("QR code sent successfully for %s", id)
+					if logger != nil {
+						logger.Info("QR code sent successfully for %s", id)
+					}
 				} else if evt.Event == "success" {
 					conn.WriteJSON(map[string]interface{}{
 						"type":    "success",
@@ -2161,7 +2444,9 @@ func handleWebSocket(w http.ResponseWriter, r *http.Request) {
 					session.LoggedIn = true
 					session.Connected = true
 					sessionManager.mu.Unlock()
-					log.Printf("Login successful for %s", id)
+					if logger != nil {
+						logger.Info("Login successful for %s", id)
+					}
 					return
 				} else {
 					// Handle other events like timeout
@@ -2181,7 +2466,9 @@ func handleWebSocket(w http.ResponseWriter, r *http.Request) {
 	for {
 		_, _, err := conn.ReadMessage()
 		if err != nil {
-			log.Printf("WebSocket read error for %s: %v", id, err)
+			if logger != nil {
+				logger.Error("WebSocket read error for %s: %v", id, err)
+			}
 			break
 		}
 	}
@@ -2272,7 +2559,9 @@ func sendMessageViaAPI(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	log.Printf("API send message request for session %s to %s", selectedSession.ID, req.To)
+	if logger != nil {
+		logger.Info("API send message request for session %s to %s", selectedSession.ID, req.To)
+	}
 
 	// Format recipient JID
 	recipientJID := req.To
@@ -2282,7 +2571,9 @@ func sendMessageViaAPI(w http.ResponseWriter, r *http.Request) {
 
 	jid, err := types.ParseJID(recipientJID)
 	if err != nil {
-		log.Printf("Failed to parse JID %s: %v", recipientJID, err)
+		if logger != nil {
+			logger.Error("Failed to parse JID %s: %v", recipientJID, err)
+		}
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]interface{}{
 			"success": false,
@@ -2298,7 +2589,9 @@ func sendMessageViaAPI(w http.ResponseWriter, r *http.Request) {
 
 	resp, err := selectedSession.Client.SendMessage(context.Background(), jid, msg)
 	if err != nil {
-		log.Printf("Failed to send message: %v", err)
+		if logger != nil {
+			logger.Error("Failed to send message: %v", err)
+		}
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]interface{}{
 			"success": false,
@@ -2307,7 +2600,9 @@ func sendMessageViaAPI(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	log.Printf("API message sent successfully with ID: %s", resp.ID)
+	if logger != nil {
+		logger.Info("API message sent successfully with ID: %s", resp.ID)
+	}
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]interface{}{
@@ -2320,7 +2615,9 @@ func sendMessageViaAPI(w http.ResponseWriter, r *http.Request) {
 
 // sendWebhook sends incoming message data to configured webhook URL
 func sendWebhook(webhookURL, sessionID string, message *events.Message) {
-	log.Printf("Sending webhook for session %s to URL: %s", sessionID, webhookURL)
+	if logger != nil {
+		logger.Info("Sending webhook for session %s to URL: %s", sessionID, webhookURL)
+	}
 	
 	// Detect message type and content
 	var messageType string
@@ -2437,7 +2734,9 @@ func sendWebhook(webhookURL, sessionID string, message *events.Message) {
 	// Convert to JSON
 	jsonData, err := json.Marshal(webhookData)
 	if err != nil {
-		log.Printf("Failed to marshal webhook data for session %s: %v", sessionID, err)
+		if logger != nil {
+			logger.Error("Failed to marshal webhook data for session %s: %v", sessionID, err)
+		}
 		return
 	}
 
@@ -2448,15 +2747,21 @@ func sendWebhook(webhookURL, sessionID string, message *events.Message) {
 
 	resp, err := client.Post(webhookURL, "application/json", strings.NewReader(string(jsonData)))
 	if err != nil {
-		log.Printf("Failed to send webhook for session %s to %s: %v", sessionID, webhookURL, err)
+		if logger != nil {
+			logger.Error("Failed to send webhook for session %s to %s: %v", sessionID, webhookURL, err)
+		}
 		return
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode >= 200 && resp.StatusCode < 300 {
-		log.Printf("Webhook sent successfully for session %s to %s", sessionID, webhookURL)
+		if logger != nil {
+			logger.Info("Webhook sent successfully for session %s to %s", sessionID, webhookURL)
+		}
 	} else {
-		log.Printf("Webhook failed for session %s to %s: HTTP %d", sessionID, webhookURL, resp.StatusCode)
+		if logger != nil {
+			logger.Warn("Webhook failed for session %s to %s: HTTP %d", sessionID, webhookURL, resp.StatusCode)
+		}
 	}
 }
 
@@ -2489,12 +2794,16 @@ func updateSessionWebhook(w http.ResponseWriter, r *http.Request) {
 	// Update in database
 	err := sessionManager.saveSessionMetadata(session)
 	if err != nil {
-		log.Printf("Failed to save session metadata for %s: %v", id, err)
+		if logger != nil {
+			logger.Error("Failed to save session metadata for %s: %v", id, err)
+		}
 		http.Error(w, "Failed to update webhook URL", http.StatusInternalServerError)
 		return
 	}
 
-	log.Printf("Updated webhook URL for session %s: %s", id, req.WebhookURL)
+	if logger != nil {
+		logger.Info("Updated webhook URL for session %s: %s", id, req.WebhookURL)
+	}
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]interface{}{
@@ -2533,12 +2842,16 @@ func updateSessionName(w http.ResponseWriter, r *http.Request) {
 	// Update in database
 	err := sessionManager.saveSessionMetadata(session)
 	if err != nil {
-		log.Printf("Failed to save session metadata for %s: %v", id, err)
+		if logger != nil {
+			logger.Error("Failed to save session metadata for %s: %v", id, err)
+		}
 		http.Error(w, "Failed to update session name", http.StatusInternalServerError)
 		return
 	}
 
-	log.Printf("Updated name for session %s: %s", id, req.Name)
+	if logger != nil {
+		logger.Info("Updated name for session %s: %s", id, req.Name)
+	}
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]interface{}{
@@ -2553,14 +2866,18 @@ func checkNumberOnWhatsApp(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	id := vars["id"]
 
-	log.Printf("Check number request for session %s", id)
+	if logger != nil {
+		logger.Info("Check number request for session %s", id)
+	}
 
 	var req struct {
 		Number string `json:"number"`
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		log.Printf("Failed to decode request body: %v", err)
+		if logger != nil {
+			logger.Error("Failed to decode request body: %v", err)
+		}
 		http.Error(w, "Invalid request body", http.StatusBadRequest)
 		return
 	}
@@ -2570,20 +2887,26 @@ func checkNumberOnWhatsApp(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	log.Printf("Checking if number %s is on WhatsApp", req.Number)
+	if logger != nil {
+		logger.Info("Checking if number %s is on WhatsApp", req.Number)
+	}
 
 	sessionManager.mu.RLock()
 	session, exists := sessionManager.sessions[id]
 	sessionManager.mu.RUnlock()
 
 	if !exists {
-		log.Printf("Session %s not found", id)
+		if logger != nil {
+		logger.Error("Session %s not found", id)
+	}
 		http.Error(w, "Session not found", http.StatusNotFound)
 		return
 	}
 
 	if !session.LoggedIn {
-		log.Printf("Session %s is not logged in", id)
+		if logger != nil {
+			logger.Error("Session %s is not logged in", id)
+		}
 		http.Error(w, "Session is not logged in", http.StatusUnauthorized)
 		return
 	}
@@ -2591,7 +2914,9 @@ func checkNumberOnWhatsApp(w http.ResponseWriter, r *http.Request) {
 	// Check if the number is on WhatsApp
 	isOnWhatsApp, err := session.Client.IsOnWhatsApp([]string{req.Number})
 	if err != nil {
-		log.Printf("Failed to check if number %s is on WhatsApp: %v", req.Number, err)
+		if logger != nil {
+			logger.Error("Failed to check if number %s is on WhatsApp: %v", req.Number, err)
+		}
 		http.Error(w, "Failed to check number: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -2605,7 +2930,9 @@ func checkNumberOnWhatsApp(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	log.Printf("Number %s is on WhatsApp: %v", req.Number, result)
+	if logger != nil {
+		logger.Info("Number %s is on WhatsApp: %v", req.Number, result)
+	}
 
 	response := map[string]interface{}{
 		"success":      true,
@@ -2627,20 +2954,26 @@ func listGroups(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	id := vars["id"]
 
-	log.Printf("List groups request for session %s", id)
+	if logger != nil {
+		logger.Info("List groups request for session %s", id)
+	}
 
 	sessionManager.mu.RLock()
 	session, exists := sessionManager.sessions[id]
 	sessionManager.mu.RUnlock()
 
 	if !exists {
-		log.Printf("Session %s not found", id)
+		if logger != nil {
+		logger.Error("Session %s not found", id)
+	}
 		http.Error(w, "Session not found", http.StatusNotFound)
 		return
 	}
 
 	if !session.LoggedIn {
-		log.Printf("Session %s is not logged in", id)
+		if logger != nil {
+			logger.Error("Session %s is not logged in", id)
+		}
 		http.Error(w, "Session is not logged in", http.StatusUnauthorized)
 		return
 	}
@@ -2648,12 +2981,16 @@ func listGroups(w http.ResponseWriter, r *http.Request) {
 	// Get all groups
 	groups, err := session.Client.GetJoinedGroups()
 	if err != nil {
-		log.Printf("Failed to get groups for session %s: %v", id, err)
+		if logger != nil {
+			logger.Error("Failed to get groups for session %s: %v", id, err)
+		}
 		http.Error(w, "Failed to retrieve groups: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
 
-	log.Printf("Found %d groups for session %s", len(groups), id)
+	if logger != nil {
+		logger.Info("Found %d groups for session %s", len(groups), id)
+	}
 
 	// Format groups data
 	var groupList []map[string]interface{}
@@ -2713,12 +3050,16 @@ func sendAttachment(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	id := vars["id"]
 
-	log.Printf("Send attachment request for session %s", id)
+	if logger != nil {
+		logger.Info("Send attachment request for session %s", id)
+	}
 
 	// Parse multipart form with size limit (16MB)
 	err := r.ParseMultipartForm(16 << 20)
 	if err != nil {
-		log.Printf("Failed to parse multipart form: %v", err)
+		if logger != nil {
+			logger.Error("Failed to parse multipart form: %v", err)
+		}
 		http.Error(w, "Failed to parse form data", http.StatusBadRequest)
 		return
 	}
@@ -2734,7 +3075,9 @@ func sendAttachment(w http.ResponseWriter, r *http.Request) {
 	// Get file from form
 	file, fileHeader, err := r.FormFile("file")
 	if err != nil {
-		log.Printf("Failed to get file from form: %v", err)
+		if logger != nil {
+			logger.Error("Failed to get file from form: %v", err)
+		}
 		http.Error(w, "File is required", http.StatusBadRequest)
 		return
 	}
@@ -2745,13 +3088,17 @@ func sendAttachment(w http.ResponseWriter, r *http.Request) {
 	sessionManager.mu.RUnlock()
 
 	if !exists {
-		log.Printf("Session %s not found", id)
+		if logger != nil {
+		logger.Error("Session %s not found", id)
+	}
 		http.Error(w, "Session not found", http.StatusNotFound)
 		return
 	}
 
 	if !session.LoggedIn {
-		log.Printf("Session %s is not logged in", id)
+		if logger != nil {
+			logger.Error("Session %s is not logged in", id)
+		}
 		http.Error(w, "Session is not logged in", http.StatusUnauthorized)
 		return
 	}
@@ -2764,12 +3111,16 @@ func sendAttachment(w http.ResponseWriter, r *http.Request) {
 		recipientJID = recipient + "@s.whatsapp.net"
 	}
 
-	log.Printf("Formatted recipient JID: %s", recipientJID)
+	if logger != nil {
+		logger.Debug("Formatted recipient JID: %s", recipientJID)
+	}
 
 	// Parse JID
 	jid, err := types.ParseJID(recipientJID)
 	if err != nil {
-		log.Printf("Failed to parse JID %s: %v", recipientJID, err)
+		if logger != nil {
+			logger.Error("Failed to parse JID %s: %v", recipientJID, err)
+		}
 		http.Error(w, "Invalid recipient format", http.StatusBadRequest)
 		return
 	}
@@ -2777,24 +3128,34 @@ func sendAttachment(w http.ResponseWriter, r *http.Request) {
 	// Read file content
 	fileData, err := io.ReadAll(file)
 	if err != nil {
-		log.Printf("Failed to read file: %v", err)
+		if logger != nil {
+			logger.Error("Failed to read file: %v", err)
+		}
 		http.Error(w, "Failed to read file", http.StatusInternalServerError)
 		return
 	}
 
 	// Detect MIME type
 	mimeType := http.DetectContentType(fileData)
-	log.Printf("Detected MIME type: %s for file: %s", mimeType, fileHeader.Filename)
+	if logger != nil {
+		logger.Debug("Detected MIME type: %s for file: %s", mimeType, fileHeader.Filename)
+	}
 
 	// Upload media
-	log.Printf("Attempting to upload file: %s, size: %d bytes, MIME: %s", fileHeader.Filename, len(fileData), mimeType)
+	if logger != nil {
+		logger.Info("Attempting to upload file: %s, size: %d bytes, MIME: %s", fileHeader.Filename, len(fileData), mimeType)
+	}
 	uploaded, err := session.Client.Upload(context.Background(), fileData, whatsmeow.MediaType(mimeType))
 	if err != nil {
-		log.Printf("Failed to upload media - File: %s, Size: %d, MIME: %s, Error: %v", fileHeader.Filename, len(fileData), mimeType, err)
+		if logger != nil {
+			logger.Error("Failed to upload media - File: %s, Size: %d, MIME: %s, Error: %v", fileHeader.Filename, len(fileData), mimeType, err)
+		}
 		http.Error(w, fmt.Sprintf("Failed to upload file: %v", err), http.StatusInternalServerError)
 		return
 	}
-	log.Printf("Media uploaded successfully: URL=%s, DirectPath=%s", uploaded.URL, uploaded.DirectPath)
+	if logger != nil {
+		logger.Info("Media uploaded successfully: URL=%s, DirectPath=%s", uploaded.URL, uploaded.DirectPath)
+	}
 
 	// Create message based on file type
 	var message *waProto.Message
@@ -2860,12 +3221,16 @@ func sendAttachment(w http.ResponseWriter, r *http.Request) {
 	// Send the message
 	resp, err := session.Client.SendMessage(context.Background(), jid, message)
 	if err != nil {
-		log.Printf("Failed to send attachment message: %v", err)
+		if logger != nil {
+			logger.Error("Failed to send attachment message: %v", err)
+		}
 		http.Error(w, "Failed to send attachment", http.StatusInternalServerError)
 		return
 	}
 
-	log.Printf("Attachment sent successfully to %s with message ID: %s", recipient, resp.ID)
+	if logger != nil {
+		logger.Info("Attachment sent successfully to %s with message ID: %s", recipient, resp.ID)
+	}
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]interface{}{
@@ -2885,14 +3250,18 @@ func sendTyping(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	id := vars["id"]
 
-	log.Printf("Send typing request for session %s", id)
+	if logger != nil {
+		logger.Info("Send typing request for session %s", id)
+	}
 
 	var req struct {
 		Recipient string `json:"recipient"`
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		log.Printf("Failed to decode request body: %v", err)
+		if logger != nil {
+			logger.Error("Failed to decode request body: %v", err)
+		}
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
@@ -2907,13 +3276,17 @@ func sendTyping(w http.ResponseWriter, r *http.Request) {
 	sessionManager.mu.RUnlock()
 
 	if !exists {
-		log.Printf("Session %s not found", id)
+		if logger != nil {
+		logger.Error("Session %s not found", id)
+	}
 		http.Error(w, "Session not found", http.StatusNotFound)
 		return
 	}
 
 	if !session.LoggedIn {
-		log.Printf("Session %s is not logged in", id)
+		if logger != nil {
+			logger.Error("Session %s is not logged in", id)
+		}
 		http.Error(w, "Session is not logged in", http.StatusUnauthorized)
 		return
 	}
@@ -2929,7 +3302,9 @@ func sendTyping(w http.ResponseWriter, r *http.Request) {
 	// Parse JID
 	jid, err := types.ParseJID(recipientJID)
 	if err != nil {
-		log.Printf("Failed to parse JID %s: %v", recipientJID, err)
+		if logger != nil {
+			logger.Error("Failed to parse JID %s: %v", recipientJID, err)
+		}
 		http.Error(w, "Invalid recipient format", http.StatusBadRequest)
 		return
 	}
@@ -2937,12 +3312,16 @@ func sendTyping(w http.ResponseWriter, r *http.Request) {
 	// Send typing indicator
 	err = session.Client.SendChatPresence(jid, types.ChatPresenceComposing, types.ChatPresenceMediaText)
 	if err != nil {
-		log.Printf("Failed to send typing indicator: %v", err)
+		if logger != nil {
+			logger.Error("Failed to send typing indicator: %v", err)
+		}
 		http.Error(w, "Failed to send typing indicator", http.StatusInternalServerError)
 		return
 	}
 
-	log.Printf("Typing indicator sent successfully to %s", req.Recipient)
+	if logger != nil {
+		logger.Info("Typing indicator sent successfully to %s", req.Recipient)
+	}
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]interface{}{
@@ -2958,14 +3337,18 @@ func stopTyping(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	id := vars["id"]
 
-	log.Printf("Stop typing request for session %s", id)
+	if logger != nil {
+		logger.Info("Stop typing request for session %s", id)
+	}
 
 	var req struct {
 		Recipient string `json:"recipient"`
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		log.Printf("Failed to decode request body: %v", err)
+		if logger != nil {
+			logger.Error("Failed to decode request body: %v", err)
+		}
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
@@ -2980,13 +3363,17 @@ func stopTyping(w http.ResponseWriter, r *http.Request) {
 	sessionManager.mu.RUnlock()
 
 	if !exists {
-		log.Printf("Session %s not found", id)
+		if logger != nil {
+		logger.Error("Session %s not found", id)
+	}
 		http.Error(w, "Session not found", http.StatusNotFound)
 		return
 	}
 
 	if !session.LoggedIn {
-		log.Printf("Session %s is not logged in", id)
+		if logger != nil {
+			logger.Error("Session %s is not logged in", id)
+		}
 		http.Error(w, "Session is not logged in", http.StatusUnauthorized)
 		return
 	}
@@ -3002,7 +3389,9 @@ func stopTyping(w http.ResponseWriter, r *http.Request) {
 	// Parse JID
 	jid, err := types.ParseJID(recipientJID)
 	if err != nil {
-		log.Printf("Failed to parse JID %s: %v", recipientJID, err)
+		if logger != nil {
+			logger.Error("Failed to parse JID %s: %v", recipientJID, err)
+		}
 		http.Error(w, "Invalid recipient format", http.StatusBadRequest)
 		return
 	}
@@ -3010,12 +3399,16 @@ func stopTyping(w http.ResponseWriter, r *http.Request) {
 	// Stop typing indicator (send paused state)
 	err = session.Client.SendChatPresence(jid, types.ChatPresencePaused, types.ChatPresenceMediaText)
 	if err != nil {
-		log.Printf("Failed to stop typing indicator: %v", err)
+		if logger != nil {
+			logger.Error("Failed to stop typing indicator: %v", err)
+		}
 		http.Error(w, "Failed to stop typing indicator", http.StatusInternalServerError)
 		return
 	}
 
-	log.Printf("Stopped typing indicator for %s", req.Recipient)
+	if logger != nil {
+		logger.Info("Stopped typing indicator for %s", req.Recipient)
+	}
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]interface{}{
