@@ -215,7 +215,7 @@ func initUsersTable(db *sql.DB) error {
 			CREATE TABLE IF NOT EXISTS users (
 				id INT AUTO_INCREMENT PRIMARY KEY,
 				username VARCHAR(50) UNIQUE NOT NULL,
-				password VARCHAR(255) NOT NULL,
+				password_hash VARCHAR(255) NOT NULL,
 				created_at BIGINT NOT NULL,
 				INDEX idx_username (username),
 				INDEX idx_created_at (created_at)
@@ -226,7 +226,7 @@ func initUsersTable(db *sql.DB) error {
 			CREATE TABLE IF NOT EXISTS users (
 				id INTEGER PRIMARY KEY AUTOINCREMENT,
 				username TEXT UNIQUE NOT NULL,
-				password TEXT NOT NULL,
+				password_hash TEXT NOT NULL,
 				created_at INTEGER NOT NULL
 			)
 		`
@@ -254,7 +254,7 @@ func initUsersTable(db *sql.DB) error {
 		}
 
 		_, err = db.Exec(`
-			INSERT INTO users (username, password, created_at) 
+			INSERT INTO users (username, password_hash, created_at) 
 			VALUES (?, ?, ?)
 		`, "admin", string(hashedPassword), time.Now().Unix())
 		
@@ -273,11 +273,19 @@ func initUsersTable(db *sql.DB) error {
 
 // saveSessionMetadata saves session metadata to database
 func (sm *SessionManager) saveSessionMetadata(session *Session) error {
-	_, err := sm.metadataDB.Exec(`
-		INSERT OR REPLACE INTO session_metadata (id, phone, actual_phone, name, created_at)
-		VALUES (?, ?, ?, ?, ?)
-	`, session.ID, session.Phone, session.ActualPhone, session.Name, time.Now().Unix())
-	return err
+	if config.DatabaseType == "mysql" {
+		_, err := sm.metadataDB.Exec(`
+			REPLACE INTO session_metadata (id, phone, actual_phone, name, created_at)
+			VALUES (?, ?, ?, ?, ?)
+		`, session.ID, session.Phone, session.ActualPhone, session.Name, time.Now().Unix())
+		return err
+	} else {
+		_, err := sm.metadataDB.Exec(`
+			INSERT OR REPLACE INTO session_metadata (id, phone, actual_phone, name, created_at)
+			VALUES (?, ?, ?, ?, ?)
+		`, session.ID, session.Phone, session.ActualPhone, session.Name, time.Now().Unix())
+		return err
+	}
 }
 
 // loadSessionMetadata loads session metadata from database
@@ -375,18 +383,35 @@ func authMiddleware(next http.HandlerFunc) http.HandlerFunc {
 func authenticateUser(username, password string) (*User, error) {
 	var user User
 	var hashedPassword string
+	var createdAtInterface interface{}
 
 	err := sessionManager.metadataDB.QueryRow(`
-		SELECT id, username, password, created_at 
+		SELECT id, username, password_hash, created_at 
 		FROM users 
 		WHERE username = ?
-	`, username).Scan(&user.ID, &user.Username, &hashedPassword, &user.CreatedAt)
+	`, username).Scan(&user.ID, &user.Username, &hashedPassword, &createdAtInterface)
 	
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil, fmt.Errorf("user not found")
 		}
 		return nil, err
+	}
+	
+	// Handle different timestamp formats
+	switch v := createdAtInterface.(type) {
+	case int64:
+		user.CreatedAt = v
+	case time.Time:
+		user.CreatedAt = v.Unix()
+	case []uint8: // MySQL timestamp as bytes
+		if t, err := time.Parse("2006-01-02 15:04:05", string(v)); err == nil {
+			user.CreatedAt = t.Unix()
+		} else {
+			user.CreatedAt = time.Now().Unix()
+		}
+	default:
+		user.CreatedAt = time.Now().Unix()
 	}
 
 	err = bcrypt.CompareHashAndPassword([]byte(hashedPassword), []byte(password))
@@ -570,8 +595,8 @@ func main() {
 	api.HandleFunc("/sessions/{id}/send", authMiddleware(sendMessage)).Methods("POST")
 	api.HandleFunc("/sessions/{id}/qr", authMiddleware(getQR)).Methods("GET")
 	
-	// WebSocket for real-time QR updates (protected)
-	api.HandleFunc("/ws/{id}", authMiddleware(handleWebSocket))
+	// WebSocket for real-time QR updates (with token query auth)
+	api.HandleFunc("/ws/{id}", handleWebSocketWithAuth)
 	
 	// Serve static files (Vue.js frontend)
 	router.PathPrefix("/").Handler(http.FileServer(http.Dir("./frontend/")))
@@ -672,7 +697,7 @@ func registerHandler(w http.ResponseWriter, r *http.Request) {
 
 	// Insert new user
 	result, err := sessionManager.metadataDB.Exec(`
-		INSERT INTO users (username, password, created_at) 
+		INSERT INTO users (username, password_hash, created_at) 
 		VALUES (?, ?, ?)
 	`, req.Username, string(hashedPassword), time.Now().Unix())
 	
@@ -1083,6 +1108,36 @@ func getQR(w http.ResponseWriter, r *http.Request) {
 			})
 		}
 	}
+}
+
+func handleWebSocketWithAuth(w http.ResponseWriter, r *http.Request) {
+	// Check for token in query parameters
+	token := r.URL.Query().Get("token")
+	if token == "" {
+		// Try to get from Authorization header
+		authHeader := r.Header.Get("Authorization")
+		if strings.HasPrefix(authHeader, "Bearer ") {
+			token = strings.TrimPrefix(authHeader, "Bearer ")
+		}
+	}
+	
+	if token == "" {
+		http.Error(w, "No authorization token provided", http.StatusUnauthorized)
+		return
+	}
+	
+	// Validate JWT token
+	claims := &Claims{}
+	jwtToken, err := jwt.ParseWithClaims(token, claims, func(token *jwt.Token) (interface{}, error) {
+		return []byte(config.JWTSecret), nil
+	})
+	
+	if err != nil || !jwtToken.Valid {
+		http.Error(w, "Invalid token", http.StatusUnauthorized)
+		return
+	}
+	
+	handleWebSocket(w, r)
 }
 
 func handleWebSocket(w http.ResponseWriter, r *http.Request) {

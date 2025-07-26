@@ -1,12 +1,99 @@
-2025/07/26 10:51:50 Initialized with latest whatsmeow version
-2025/07/26 10:51:50 Starting WhatsApp Multi-Session Manager with mysql database
-2025/07/26 10:51:50 Connected to MySQL database root@127.0.0.1:3306/whatsapGo
-2025/07/26 10:51:50 Initializing database tables...
-2025/07/26 10:51:50 Sessions table initialized successfully
-2025/07/26 10:51:50 Found 2 existing users, skipping admin user creation
-2025/07/26 10:51:50 Users table initialized successfully
-2025/07/26 10:51:50 Loading existing sessions...
-2025/07/26 10:51:50 Restored 0 sessions
+2025/07/26 11:07:10 Initialized with latest whatsmeow version
+2025/07/26 11:07:10 Starting WhatsApp Multi-Session Manager with mysql database
+2025/07/26 11:07:10 Connected to MySQL database root@localhost:3306/whatsapGo
+2025/07/26 11:07:10 Initializing database tables...
+2025/07/26 11:07:10 Sessions table initialized successfully
+2025/07/26 11:07:10 Found 1 existing users, skipping admin user creation
+2025/07/26 11:07:10 Users table initialized successfully
+2025/07/26 11:07:10 Loading existing sessions...
+2025/07/26 11:07:10 Restoring session 9049935660 (Test Session)
+2025/07/26 11:07:10 Created new device for session 9049935660 (will need re-authentication)
+2025/07/26 11:07:10 Restored session 9049935660 (Test Session)
+2025/07/26 11:07:10 Restored 1 sessions
 Server starting on http://localhost:8080
 API available at http://localhost:8080/api
 Frontend available at http://localhost:8080
+2025/07/26 11:07:18 User admin logged in successfully
+2025/07/26 11:07:31 WebSocket connected for session 9049935660
+2025/07/26 11:07:31 Connecting session 9049935660...
+2025/07/26 11:07:32 QR event for 9049935660: code
+2025/07/26 11:07:32 QR code sent successfully for 9049935660
+2025/07/26 11:07:48 WebSocket read error for 9049935660: websocket: close 1005 (no status)
+2025/07/26 11:08:25 WebSocket connected for session 9049935660
+2025/07/26 11:08:25 Disconnecting existing connection for 9049935660
+2025/07/26 11:08:25 Connecting session 9049935660...
+2025/07/26 11:08:26 QR event for 9049935660: code
+2025/07/26 11:08:26 QR code sent successfully for 9049935660
+11:08:32.172[36m [Client:9049935660 INFO] Successfully paired 6282260790996:20@s.whatsapp.net[0m
+2025/07/26 11:08:32 QR event for 9049935660: success
+2025/07/26 11:08:32 Login successful for 9049935660
+2025/07/26 11:08:32 WebSocket read error for 9049935660: websocket: close 1005 (no status)
+11:08:32.825[36m [Client:9049935660 INFO] Got 515 code, reconnecting...[0m
+11:08:33.721[36m [Client:9049935660 INFO] Successfully authenticated[0m
+11:08:34.202[36m [Client:9049935660 INFO] Uploading 50 new prekeys to server[0m
+2025/07/26 11:08:35 Session 9049935660 connected
+2025/07/26 11:08:35 Session 9049935660 actual phone: 6282260790996@s.whatsapp.net
+11:08:35.159[36m [Client:9049935660 INFO] Got prekey count from server: <notification from="s.whatsapp.net" id="2809587195" t="1753502915" type="encrypt"><count value="0"/></notification>[0m
+2025/07/26 11:08:35 Received message in session 9049935660: 
+2025/07/26 11:08:35 Received message in session 9049935660: 
+2025/07/26 11:08:35 Received message in session 9049935660: 
+2025/07/26 11:08:35 Received message in session 9049935660: 
+2025/07/26 11:08:35 Received message in session 9049935660: 
+2025/07/26 11:08:35 Received message in session 9049935660: 
+11:08:35.583[36m [Client:9049935660 INFO] Updating contact store with 21 push names from history sync[0m
+11:08:35.638[36m [Client:9049935660 INFO] Stored 20 message secret keys from history sync[0m
+11:08:35.640[36m [Client:9049935660 INFO] Stored 17 privacy tokens from history sync[0m
+11:08:36.125[33m [Client:9049935660/AppState WARN] Warnings while updating hash for critical_unblock_low: [missing value MAC of previous SET operation for A5C6217EEF738B4B186E8A75F5A9CA3332DC810418C4ECC3AB441610B2E21CDF][0m
+11:08:36.128[33m [Client:9049935660/AppState WARN] Warnings while updating hash for critical_unblock_low: [missing value MAC of previous SET operation for A5C6217EEF738B4B186E8A75F5A9CA3332DC810418C4ECC3AB441610B2E21CDF][0m
+11:08:36.143[33m [Database WARN] Duplicate contact info for 6285226380865@s.whatsapp.net in mass insert[0m
+11:08:36.143[33m [Database WARN] Duplicate contact info for 6285772826239@s.whatsapp.net in mass insert[0m
+11:08:36.143[33m [Database WARN] Duplicate contact info for 6285591500390@s.whatsapp.net in mass insert[0m
+11:08:36.143[33m [Database WARN] Duplicate contact info for 6285329937218@s.whatsapp.net in mass insert[0m
+11:08:36.143[33m [Database WARN] Duplicate contact info for 6285293255811@s.whatsapp.net in mass insert[0m
+11:08:36.143[33m [Database WARN] Duplicate contact info for 6283112312695@s.whatsapp.net in mass insert[0m
+11:08:36.143[33m [Database WARN] Duplicate contact info for 6282110899819@s.whatsapp.net in mass insert[0m
+11:08:36.558[33m [Client:9049935660/AppState WARN] Warnings while updating hash for regular_low: [missing value MAC of previous SET operation for 8DCC6B3E3E3CB5ABB80A4110D61E763F5BC62CA08C60BAE398904760F3F50B98][0m
+11:08:36.564[33m [Client:9049935660/AppState WARN] Warnings while updating hash for regular_low: [missing value MAC of previous SET operation for 57F146BAB515B2F89321CD2B4CE3B52CE3DE97794C318407FF22243E7121FFA7][0m
+11:08:36.570[33m [Client:9049935660/AppState WARN] Warnings while updating hash for regular_low: [missing value MAC of previous SET operation for 184CBCA4903C58036D297448D3865773A52B42BB2BF1B9DF88EAAE9BD7FD3730][0m
+2025/07/26 11:08:37 Received message in session 9049935660: 
+11:08:37.735[36m [Client:9049935660 INFO] Stored 344 message secret keys from history sync[0m
+11:08:37.735[36m [Client:9049935660 INFO] Stored 6 privacy tokens from history sync[0m
+2025/07/26 11:08:46 Auto-generated session ID: 8712661425
+2025/07/26 11:09:00 WebSocket connected for session 8712661425
+2025/07/26 11:09:00 Connecting session 8712661425...
+2025/07/26 11:09:01 QR event for 8712661425: code
+2025/07/26 11:09:01 QR code sent successfully for 8712661425
+11:09:05.550[36m [Client:8712661425 INFO] Successfully paired 6285591500390:48@s.whatsapp.net[0m
+2025/07/26 11:09:05 QR event for 8712661425: success
+2025/07/26 11:09:05 Login successful for 8712661425
+2025/07/26 11:09:05 WebSocket read error for 8712661425: websocket: close 1005 (no status)
+11:09:06.163[36m [Client:8712661425 INFO] Got 515 code, reconnecting...[0m
+11:09:07.041[36m [Client:8712661425 INFO] Successfully authenticated[0m
+11:09:07.354[36m [Client:8712661425 INFO] Uploading 50 new prekeys to server[0m
+2025/07/26 11:09:08 Session 8712661425 connected
+2025/07/26 11:09:08 Session 8712661425 actual phone: 6285591500390@s.whatsapp.net
+2025/07/26 11:09:08 Received message in session 8712661425: 
+2025/07/26 11:09:08 Received message in session 8712661425: 
+2025/07/26 11:09:08 Received message in session 8712661425: 
+2025/07/26 11:09:08 Received message in session 8712661425: 
+2025/07/26 11:09:08 Received message in session 8712661425: 
+11:09:08.921[36m [Client:8712661425 INFO] Updating contact store with 202 push names from history sync[0m
+2025/07/26 11:09:09 Received message in session 8712661425: 
+11:09:09.084[36m [Client:8712661425 INFO] Stored 166 message secret keys from history sync[0m
+11:09:09.084[36m [Client:8712661425 INFO] Stored 18 privacy tokens from history sync[0m
+11:09:09.397[33m [Client:8712661425/AppState WARN] Warnings while updating hash for critical_unblock_low: [missing value MAC of previous SET operation for 2D3D0325F6B1698EE079970EDC43C6D4B70A9B0DE1D579BDD60CC64979E61F5E][0m
+11:09:09.399[33m [Client:8712661425/AppState WARN] Warnings while updating hash for critical_unblock_low: [missing value MAC of previous SET operation for 2D3D0325F6B1698EE079970EDC43C6D4B70A9B0DE1D579BDD60CC64979E61F5E][0m
+11:09:09.401[33m [Database WARN] Duplicate contact info for 6289630398418@s.whatsapp.net in mass insert[0m
+11:09:09.401[33m [Database WARN] Duplicate contact info for 6285772826239@s.whatsapp.net in mass insert[0m
+11:09:09.401[33m [Database WARN] Duplicate contact info for 6281934135380@s.whatsapp.net in mass insert[0m
+11:09:09.401[33m [Database WARN] Duplicate contact info for 6287882207849@s.whatsapp.net in mass insert[0m
+11:09:10.233[33m [Client:8712661425/AppState WARN] Warnings while updating hash for regular_low: [missing value MAC of previous SET operation for 8303B45883D4CFCC1101B54958597E30F7C33BB48E06AD7F054C8E1487D6CDDE][0m
+2025/07/26 11:09:17 Received message in session 8712661425: 
+11:09:17.447[36m [Client:8712661425 INFO] Stored 1904 message secret keys from history sync[0m
+11:09:17.448[36m [Client:8712661425 INFO] Stored 5 privacy tokens from history sync[0m
+2025/07/26 11:09:23 Received message in session 8712661425: 
+11:09:23.271[36m [Client:8712661425 INFO] Stored 2236 message secret keys from history sync[0m
+11:09:23.271[36m [Client:8712661425 INFO] Stored 9 privacy tokens from history sync[0m
+2025/07/26 11:09:26 Received message in session 8712661425: 
+11:09:27.017[36m [Client:8712661425 INFO] Stored 1963 message secret keys from history sync[0m
+11:09:27.017[36m [Client:8712661425 INFO] Stored 3 privacy tokens from history sync[0m

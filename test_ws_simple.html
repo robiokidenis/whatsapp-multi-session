@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>WebSocket Test</title>
+</head>
+<body>
+    <h1>WebSocket QR Code Test</h1>
+    <div id="status"></div>
+    <div id="messages"></div>
+    
+    <script>
+        const token = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VybmFtZSI6ImFkbWluIiwidXNlcl9pZCI6MSwiZXhwIjoxNzUzNTg5MjM4LCJpYXQiOjE3NTM1MDI4Mzh9.XnDM_TuxsGJiwSy42XUEh6GeovsZ6O0OoGEoG0R-_ok';
+        const sessionId = '9049935660';
+        const wsUrl = `ws://localhost:8080/api/ws/${sessionId}?token=${encodeURIComponent(token)}`;
+        
+        const statusDiv = document.getElementById('status');
+        const messagesDiv = document.getElementById('messages');
+        
+        statusDiv.innerHTML = `Connecting to: ${wsUrl}`;
+        
+        const ws = new WebSocket(wsUrl);
+        
+        ws.onopen = function() {
+            statusDiv.innerHTML = 'WebSocket connected successfully!';
+            console.log('WebSocket connected');
+        };
+        
+        ws.onmessage = function(event) {
+            const message = JSON.parse(event.data);
+            console.log('Received:', message);
+            messagesDiv.innerHTML += `<div>Type: ${message.type}, Data: ${JSON.stringify(message.data)}</div>`;
+        };
+        
+        ws.onerror = function(error) {
+            statusDiv.innerHTML = 'WebSocket error occurred';
+            console.error('WebSocket error:', error);
+        };
+        
+        ws.onclose = function(event) {
+            statusDiv.innerHTML = `WebSocket closed: ${event.code} - ${event.reason}`;
+            console.log('WebSocket closed:', event);
+        };
+    </script>
+</body>
+</html>
