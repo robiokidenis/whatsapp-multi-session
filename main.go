@@ -38,10 +38,13 @@ type Session struct {
 	Phone         string              `json:"phone"`          // Session identifier (can be auto-generated)
 	ActualPhone   string              `json:"actual_phone"`   // Actual WhatsApp phone number after login
 	Name          string              `json:"name"`
+	Position      int                 `json:"position"`       // Display position/order
+	WebhookURL    string              `json:"webhook_url"`    // Webhook URL for receiving messages
 	Client        *whatsmeow.Client   `json:"-"`
 	QRChan        <-chan whatsmeow.QRChannelItem `json:"-"`
 	Connected     bool               `json:"connected"`
 	LoggedIn      bool               `json:"logged_in"`
+	Connecting    bool               `json:"-"`              // Flag to prevent multiple WebSocket connections
 }
 
 // SessionMetadata represents session data stored in database
@@ -50,6 +53,8 @@ type SessionMetadata struct {
 	Phone       string `json:"phone"`
 	ActualPhone string `json:"actual_phone"`
 	Name        string `json:"name"`
+	Position    int    `json:"position"`
+	WebhookURL  string `json:"webhook_url"`
 	CreatedAt   int64  `json:"created_at"`
 }
 
@@ -93,7 +98,21 @@ var (
 	config         *Config
 	upgrader       = websocket.Upgrader{
 		CheckOrigin: func(r *http.Request) bool {
-			return true // Allow all origins for development
+			// Allow connections from localhost and development origins
+			origin := r.Header.Get("Origin")
+			allowed := []string{
+				"http://localhost:3000",
+				"http://127.0.0.1:3000", 
+				"http://localhost:8080",
+				"http://127.0.0.1:8080",
+			}
+			for _, allow := range allowed {
+				if origin == allow {
+					return true
+				}
+			}
+			// Also allow if no origin (direct connection)
+			return origin == ""
 		},
 	}
 )
@@ -186,8 +205,11 @@ func initSessionsTable(db *sql.DB) error {
 				phone VARCHAR(255) NOT NULL,
 				actual_phone VARCHAR(255),
 				name VARCHAR(255),
+				position INT DEFAULT 0,
+				webhook_url VARCHAR(500),
 				created_at BIGINT NOT NULL,
 				INDEX idx_phone (phone),
+				INDEX idx_position (position),
 				INDEX idx_created_at (created_at)
 			) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
 		`
@@ -198,6 +220,8 @@ func initSessionsTable(db *sql.DB) error {
 				phone TEXT NOT NULL,
 				actual_phone TEXT,
 				name TEXT,
+				position INTEGER DEFAULT 0,
+				webhook_url TEXT,
 				created_at INTEGER NOT NULL
 			)
 		`
@@ -273,17 +297,27 @@ func initUsersTable(db *sql.DB) error {
 
 // saveSessionMetadata saves session metadata to database
 func (sm *SessionManager) saveSessionMetadata(session *Session) error {
+	// Get next position if not set
+	if session.Position == 0 {
+		var maxPosition int
+		err := sm.metadataDB.QueryRow(`SELECT COALESCE(MAX(position), 0) FROM session_metadata`).Scan(&maxPosition)
+		if err != nil {
+			maxPosition = 0
+		}
+		session.Position = maxPosition + 1
+	}
+	
 	if config.DatabaseType == "mysql" {
 		_, err := sm.metadataDB.Exec(`
-			REPLACE INTO session_metadata (id, phone, actual_phone, name, created_at)
-			VALUES (?, ?, ?, ?, ?)
-		`, session.ID, session.Phone, session.ActualPhone, session.Name, time.Now().Unix())
+			REPLACE INTO session_metadata (id, phone, actual_phone, name, position, webhook_url, created_at)
+			VALUES (?, ?, ?, ?, ?, ?, ?)
+		`, session.ID, session.Phone, session.ActualPhone, session.Name, session.Position, session.WebhookURL, time.Now().Unix())
 		return err
 	} else {
 		_, err := sm.metadataDB.Exec(`
-			INSERT OR REPLACE INTO session_metadata (id, phone, actual_phone, name, created_at)
-			VALUES (?, ?, ?, ?, ?)
-		`, session.ID, session.Phone, session.ActualPhone, session.Name, time.Now().Unix())
+			INSERT OR REPLACE INTO session_metadata (id, phone, actual_phone, name, position, webhook_url, created_at)
+			VALUES (?, ?, ?, ?, ?, ?, ?)
+		`, session.ID, session.Phone, session.ActualPhone, session.Name, session.Position, session.WebhookURL, time.Now().Unix())
 		return err
 	}
 }
@@ -291,8 +325,9 @@ func (sm *SessionManager) saveSessionMetadata(session *Session) error {
 // loadSessionMetadata loads session metadata from database
 func (sm *SessionManager) loadSessionMetadata() ([]SessionMetadata, error) {
 	rows, err := sm.metadataDB.Query(`
-		SELECT id, phone, actual_phone, name, created_at
-		FROM session_metadata
+		SELECT id, phone, actual_phone, name, position, webhook_url, created_at
+		FROM session_metadata 
+		ORDER BY position ASC, created_at ASC
 	`)
 	if err != nil {
 		return nil, err
@@ -302,13 +337,20 @@ func (sm *SessionManager) loadSessionMetadata() ([]SessionMetadata, error) {
 	var sessions []SessionMetadata
 	for rows.Next() {
 		var s SessionMetadata
-		var actualPhone sql.NullString
-		err := rows.Scan(&s.ID, &s.Phone, &actualPhone, &s.Name, &s.CreatedAt)
+		var actualPhone, webhookURL sql.NullString
+		var position sql.NullInt64
+		err := rows.Scan(&s.ID, &s.Phone, &actualPhone, &s.Name, &position, &webhookURL, &s.CreatedAt)
 		if err != nil {
 			continue
 		}
 		if actualPhone.Valid {
 			s.ActualPhone = actualPhone.String
+		}
+		if position.Valid {
+			s.Position = int(position.Int64)
+		}
+		if webhookURL.Valid {
+			s.WebhookURL = webhookURL.String
 		}
 		sessions = append(sessions, s)
 	}
@@ -473,6 +515,8 @@ func restoreSession(metadata SessionMetadata, container *sqlstore.Container) *Se
 		Phone:       metadata.Phone,
 		ActualPhone: metadata.ActualPhone,
 		Name:        metadata.Name,
+		Position:    metadata.Position,
+		WebhookURL:  metadata.WebhookURL,
 		Client:      client,
 		Connected:   false,
 		LoggedIn:    false,
@@ -506,6 +550,10 @@ func restoreSession(metadata SessionMetadata, container *sqlstore.Container) *Se
 			sessionManager.mu.Unlock()
 		case *events.Message:
 			log.Printf("Received message in session %s: %s", metadata.ID, v.Message.GetConversation())
+			// Send webhook if configured
+			if metadata.WebhookURL != "" {
+				go sendWebhook(metadata.WebhookURL, metadata.ID, v)
+			}
 		}
 	})
 	
@@ -597,6 +645,11 @@ func main() {
 	
 	// WebSocket for real-time QR updates (with token query auth)
 	api.HandleFunc("/ws/{id}", handleWebSocketWithAuth)
+	
+	// API endpoint for sending messages with token and phone selection
+	api.HandleFunc("/send", authMiddleware(sendMessageViaAPI)).Methods("POST")
+	api.HandleFunc("/sessions/{id}/webhook", authMiddleware(updateSessionWebhook)).Methods("PUT")
+	api.HandleFunc("/sessions/{id}/name", authMiddleware(updateSessionName)).Methods("PUT")
 	
 	// Serve React frontend
 	router.PathPrefix("/").Handler(http.StripPrefix("/", SPAHandler("./frontend/dist/")))
@@ -750,8 +803,10 @@ func listSessions(w http.ResponseWriter, r *http.Request) {
 
 func createSession(w http.ResponseWriter, r *http.Request) {
 	var req struct {
-		Phone string `json:"phone"`
-		Name  string `json:"name"`
+		Phone      string `json:"phone"`
+		Name       string `json:"name"`
+		Position   int    `json:"position"`
+		WebhookURL string `json:"webhook_url"`
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -804,6 +859,8 @@ func createSession(w http.ResponseWriter, r *http.Request) {
 		Phone:       phoneForDisplay,
 		ActualPhone: "", // Will be set after login
 		Name:        req.Name,
+		Position:    req.Position,
+		WebhookURL:  req.WebhookURL,
 		Client:      client,
 		Connected:   false,
 		LoggedIn:    false,
@@ -837,6 +894,12 @@ func createSession(w http.ResponseWriter, r *http.Request) {
 			sessionManager.mu.Unlock()
 		case *events.Message:
 			log.Printf("Received message in session %s: %s", sessionID, v.Message.GetConversation())
+			// Send webhook if configured
+			sessionManager.mu.RLock()
+			if s, ok := sessionManager.sessions[sessionID]; ok && s.WebhookURL != "" {
+				go sendWebhook(s.WebhookURL, sessionID, v)
+			}
+			sessionManager.mu.RUnlock()
 		}
 	})
 
@@ -1164,6 +1227,23 @@ func handleWebSocket(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Prevent multiple concurrent WebSocket connections for same session
+	sessionManager.mu.Lock()
+	if session.Connecting {
+		sessionManager.mu.Unlock()
+		http.Error(w, "QR generation already in progress", http.StatusConflict)
+		return
+	}
+	session.Connecting = true
+	sessionManager.mu.Unlock()
+	
+	// Ensure we reset the connecting flag when done
+	defer func() {
+		sessionManager.mu.Lock()
+		session.Connecting = false
+		sessionManager.mu.Unlock()
+	}()
+
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		log.Printf("WebSocket upgrade error: %v", err)
@@ -1182,10 +1262,12 @@ func handleWebSocket(w http.ResponseWriter, r *http.Request) {
 
 	log.Printf("WebSocket connected for session %s", id)
 
-	// Disconnect if already connected to reset the state
-	if session.Client.IsConnected() {
-		log.Printf("Disconnecting existing connection for %s", id)
+	// Only disconnect if we're connected but not logged in (stale connection)
+	if session.Client.IsConnected() && !session.Client.IsLoggedIn() {
+		log.Printf("Disconnecting stale connection for %s", id)
 		session.Client.Disconnect()
+		// Give it a moment to disconnect cleanly
+		time.Sleep(1 * time.Second)
 	}
 
 	// Get QR channel BEFORE connecting
@@ -1310,5 +1392,242 @@ func SPAHandler(staticPath string) http.Handler {
 		
 		// File exists, serve it
 		fileServer.ServeHTTP(w, r)
+	})
+}
+
+// sendMessageViaAPI sends a message via API with phone selection
+func sendMessageViaAPI(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Phone   string `json:"phone"`   // Session phone to use (can be session ID or actual phone)
+		To      string `json:"to"`      // Recipient
+		Message string `json:"message"` // Message content
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	if req.Phone == "" || req.To == "" || req.Message == "" {
+		http.Error(w, "Phone, to, and message are required", http.StatusBadRequest)
+		return
+	}
+
+	sessionManager.mu.RLock()
+	defer sessionManager.mu.RUnlock()
+
+	// Find session by phone (session ID or actual phone)
+	var selectedSession *Session
+	for _, session := range sessionManager.sessions {
+		if session.ID == req.Phone || 
+		   session.Phone == req.Phone || 
+		   session.ActualPhone == req.Phone ||
+		   strings.Replace(session.ActualPhone, "@s.whatsapp.net", "", 1) == req.Phone {
+			selectedSession = session
+			break
+		}
+	}
+
+	if selectedSession == nil {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"success": false,
+			"error":   "Session not found for phone: " + req.Phone,
+		})
+		return
+	}
+
+	if !selectedSession.LoggedIn {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"success": false,
+			"error":   "Session is not logged in",
+		})
+		return
+	}
+
+	log.Printf("API send message request for session %s to %s", selectedSession.ID, req.To)
+
+	// Format recipient JID
+	recipientJID := req.To
+	if !strings.Contains(recipientJID, "@") {
+		recipientJID = recipientJID + "@s.whatsapp.net"
+	}
+
+	jid, err := types.ParseJID(recipientJID)
+	if err != nil {
+		log.Printf("Failed to parse JID %s: %v", recipientJID, err)
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"success": false,
+			"error":   "Invalid recipient format",
+		})
+		return
+	}
+
+	// Send message
+	msg := &waProto.Message{
+		Conversation: proto.String(req.Message),
+	}
+
+	resp, err := selectedSession.Client.SendMessage(context.Background(), jid, msg)
+	if err != nil {
+		log.Printf("Failed to send message: %v", err)
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"success": false,
+			"error":   "Failed to send message: " + err.Error(),
+		})
+		return
+	}
+
+	log.Printf("API message sent successfully with ID: %s", resp.ID)
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"success":    true,
+		"message_id": resp.ID,
+		"timestamp":  resp.Timestamp.Unix(),
+		"session":    selectedSession.ID,
+	})
+}
+
+// sendWebhook sends incoming message data to configured webhook URL
+func sendWebhook(webhookURL, sessionID string, message *events.Message) {
+	// Prepare webhook payload
+	webhookData := map[string]interface{}{
+		"session_id": sessionID,
+		"timestamp":  message.Info.Timestamp.Unix(),
+		"message_id": message.Info.ID,
+		"from": map[string]interface{}{
+			"jid":          message.Info.Sender.String(),
+			"phone":        strings.Replace(message.Info.Sender.User, "", "", 1),
+			"push_name":    message.Info.PushName,
+		},
+		"message_type": "text", // Can be extended for other types
+		"content":      message.Message.GetConversation(),
+		"is_from_me":   message.Info.IsFromMe,
+		"is_group":     message.Info.Sender.Server == "g.us",
+	}
+
+	// Add group info if it's a group message
+	if message.Info.Sender.Server == "g.us" {
+		webhookData["group"] = map[string]interface{}{
+			"jid":  message.Info.Chat.String(),
+			"name": "", // Group name would need to be fetched separately
+		}
+	}
+
+	// Convert to JSON
+	jsonData, err := json.Marshal(webhookData)
+	if err != nil {
+		log.Printf("Failed to marshal webhook data for session %s: %v", sessionID, err)
+		return
+	}
+
+	// Send HTTP POST request to webhook URL
+	client := &http.Client{
+		Timeout: 10 * time.Second,
+	}
+
+	resp, err := client.Post(webhookURL, "application/json", strings.NewReader(string(jsonData)))
+	if err != nil {
+		log.Printf("Failed to send webhook for session %s to %s: %v", sessionID, webhookURL, err)
+		return
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode >= 200 && resp.StatusCode < 300 {
+		log.Printf("Webhook sent successfully for session %s to %s", sessionID, webhookURL)
+	} else {
+		log.Printf("Webhook failed for session %s to %s: HTTP %d", sessionID, webhookURL, resp.StatusCode)
+	}
+}
+
+// updateSessionWebhook updates the webhook URL for a specific session
+func updateSessionWebhook(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	id := vars["id"]
+
+	var req struct {
+		WebhookURL string `json:"webhook_url"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	sessionManager.mu.Lock()
+	session, exists := sessionManager.sessions[id]
+	if !exists {
+		sessionManager.mu.Unlock()
+		http.Error(w, "Session not found", http.StatusNotFound)
+		return
+	}
+
+	// Update session webhook URL
+	session.WebhookURL = req.WebhookURL
+	sessionManager.mu.Unlock()
+
+	// Update in database
+	err := sessionManager.saveSessionMetadata(session)
+	if err != nil {
+		log.Printf("Failed to save session metadata for %s: %v", id, err)
+		http.Error(w, "Failed to update webhook URL", http.StatusInternalServerError)
+		return
+	}
+
+	log.Printf("Updated webhook URL for session %s: %s", id, req.WebhookURL)
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"success": true,
+		"message": "Webhook URL updated successfully",
+		"webhook_url": req.WebhookURL,
+	})
+}
+
+// updateSessionName updates the name for a specific session
+func updateSessionName(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	id := vars["id"]
+
+	var req struct {
+		Name string `json:"name"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	sessionManager.mu.Lock()
+	session, exists := sessionManager.sessions[id]
+	if !exists {
+		sessionManager.mu.Unlock()
+		http.Error(w, "Session not found", http.StatusNotFound)
+		return
+	}
+
+	// Update session name
+	session.Name = req.Name
+	sessionManager.mu.Unlock()
+
+	// Update in database
+	err := sessionManager.saveSessionMetadata(session)
+	if err != nil {
+		log.Printf("Failed to save session metadata for %s: %v", id, err)
+		http.Error(w, "Failed to update session name", http.StatusInternalServerError)
+		return
+	}
+
+	log.Printf("Updated name for session %s: %s", id, req.Name)
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"success": true,
+		"message": "Session name updated successfully",
+		"name": req.Name,
 	})
 }
