@@ -28,7 +28,6 @@ import (
 	waLog "go.mau.fi/whatsmeow/util/log"
 	"golang.org/x/crypto/bcrypt"
 	"google.golang.org/protobuf/proto"
-	_ "github.com/go-sql-driver/mysql"
 	_ "github.com/mattn/go-sqlite3"
 )
 
@@ -68,13 +67,8 @@ type User struct {
 
 // Config holds database and application configuration
 type Config struct {
-	DatabaseType     string // "mysql" or "sqlite"
-	DatabaseHost     string
-	DatabasePort     string
-	DatabaseUser     string
-	DatabasePassword string
-	DatabaseName     string
-	JWTSecret        string
+	DatabasePath string // Path to SQLite database file
+	JWTSecret    string
 }
 
 // Claims represents JWT claims
@@ -140,13 +134,8 @@ func generatePhoneJID(sessionID string) string {
 // loadConfig loads configuration from environment variables or uses defaults
 func loadConfig() *Config {
 	return &Config{
-		DatabaseType:     getEnv("DB_TYPE", "mysql"),
-		DatabaseHost:     getEnv("DB_HOST", "localhost"),
-		DatabasePort:     getEnv("DB_PORT", "3306"),
-		DatabaseUser:     getEnv("DB_USER", "root"),
-		DatabasePassword: getEnv("DB_PASSWORD", "robioki"),
-		DatabaseName:     getEnv("DB_NAME", "whatsapGo"),
-		JWTSecret:        getEnv("JWT_SECRET", "your-super-secret-jwt-key-change-this-in-production"),
+		DatabasePath: getEnv("DATABASE_PATH", "./session_metadata.db"),
+		JWTSecret:    getEnv("JWT_SECRET", "your-super-secret-jwt-key-change-this-in-production"),
 	}
 }
 
@@ -160,72 +149,35 @@ func getEnv(key, fallback string) string {
 
 // setupDatabase creates database connection and initializes tables
 func setupDatabase(cfg *Config) (*sql.DB, error) {
-	var db *sql.DB
-	var err error
-
-	if cfg.DatabaseType == "mysql" {
-		// MySQL connection string
-		dsn := fmt.Sprintf("%s:%s@tcp(%s:%s)/%s?parseTime=true&charset=utf8mb4",
-			cfg.DatabaseUser,
-			cfg.DatabasePassword,
-			cfg.DatabaseHost,
-			cfg.DatabasePort,
-			cfg.DatabaseName,
-		)
-		db, err = sql.Open("mysql", dsn)
-		if err != nil {
-			return nil, fmt.Errorf("failed to connect to MySQL: %v", err)
-		}
-		
-		// Test connection
-		if err := db.Ping(); err != nil {
-			return nil, fmt.Errorf("failed to ping MySQL database: %v", err)
-		}
-		
-		log.Printf("Connected to MySQL database %s@%s:%s/%s", cfg.DatabaseUser, cfg.DatabaseHost, cfg.DatabasePort, cfg.DatabaseName)
-	} else {
-		// SQLite fallback
-		db, err = sql.Open("sqlite3", "session_metadata.db")
-		if err != nil {
-			return nil, fmt.Errorf("failed to open SQLite database: %v", err)
-		}
-		log.Println("Using SQLite database: session_metadata.db")
+	// SQLite connection only
+	db, err := sql.Open("sqlite3", cfg.DatabasePath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to connect to SQLite: %v", err)
 	}
-
+	
+	// Test connection
+	if err := db.Ping(); err != nil {
+		return nil, fmt.Errorf("failed to ping SQLite: %v", err)
+	}
+	
+	log.Printf("Using SQLite database: %s", cfg.DatabasePath)
 	return db, nil
 }
 
 // initSessionsTable creates the sessions metadata table if it doesn't exist
 func initSessionsTable(db *sql.DB) error {
-	var query string
-	if config.DatabaseType == "mysql" {
-		query = `
-			CREATE TABLE IF NOT EXISTS session_metadata (
-				id VARCHAR(255) PRIMARY KEY,
-				phone VARCHAR(255) NOT NULL,
-				actual_phone VARCHAR(255),
-				name VARCHAR(255),
-				position INT DEFAULT 0,
-				webhook_url VARCHAR(500),
-				created_at BIGINT NOT NULL,
-				INDEX idx_phone (phone),
-				INDEX idx_position (position),
-				INDEX idx_created_at (created_at)
-			) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
-		`
-	} else {
-		query = `
-			CREATE TABLE IF NOT EXISTS session_metadata (
-				id TEXT PRIMARY KEY,
-				phone TEXT NOT NULL,
-				actual_phone TEXT,
-				name TEXT,
-				position INTEGER DEFAULT 0,
-				webhook_url TEXT,
-				created_at INTEGER NOT NULL
-			)
-		`
-	}
+	// SQLite table creation
+	query := `
+		CREATE TABLE IF NOT EXISTS session_metadata (
+			id TEXT PRIMARY KEY,
+			phone TEXT NOT NULL,
+			actual_phone TEXT,
+			name TEXT,
+			position INTEGER DEFAULT 0,
+			webhook_url TEXT,
+			created_at INTEGER NOT NULL
+		)
+	`
 	
 	_, err := db.Exec(query)
 	return err
@@ -233,28 +185,15 @@ func initSessionsTable(db *sql.DB) error {
 
 // initUsersTable creates the users table if it doesn't exist
 func initUsersTable(db *sql.DB) error {
-	var query string
-	if config.DatabaseType == "mysql" {
-		query = `
-			CREATE TABLE IF NOT EXISTS users (
-				id INT AUTO_INCREMENT PRIMARY KEY,
-				username VARCHAR(50) UNIQUE NOT NULL,
-				password_hash VARCHAR(255) NOT NULL,
-				created_at BIGINT NOT NULL,
-				INDEX idx_username (username),
-				INDEX idx_created_at (created_at)
-			) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
-		`
-	} else {
-		query = `
-			CREATE TABLE IF NOT EXISTS users (
-				id INTEGER PRIMARY KEY AUTOINCREMENT,
-				username TEXT UNIQUE NOT NULL,
-				password_hash TEXT NOT NULL,
-				created_at INTEGER NOT NULL
-			)
-		`
-	}
+	// SQLite table creation
+	query := `
+		CREATE TABLE IF NOT EXISTS users (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			username TEXT UNIQUE NOT NULL,
+			password_hash TEXT NOT NULL,
+			created_at INTEGER NOT NULL
+		)
+	`
 	
 	_, err := db.Exec(query)
 	if err != nil {
@@ -307,19 +246,12 @@ func (sm *SessionManager) saveSessionMetadata(session *Session) error {
 		session.Position = maxPosition + 1
 	}
 	
-	if config.DatabaseType == "mysql" {
-		_, err := sm.metadataDB.Exec(`
-			REPLACE INTO session_metadata (id, phone, actual_phone, name, position, webhook_url, created_at)
-			VALUES (?, ?, ?, ?, ?, ?, ?)
-		`, session.ID, session.Phone, session.ActualPhone, session.Name, session.Position, session.WebhookURL, time.Now().Unix())
-		return err
-	} else {
-		_, err := sm.metadataDB.Exec(`
-			INSERT OR REPLACE INTO session_metadata (id, phone, actual_phone, name, position, webhook_url, created_at)
-			VALUES (?, ?, ?, ?, ?, ?, ?)
-		`, session.ID, session.Phone, session.ActualPhone, session.Name, session.Position, session.WebhookURL, time.Now().Unix())
-		return err
-	}
+	// SQLite INSERT OR REPLACE
+	_, err := sm.metadataDB.Exec(`
+		INSERT OR REPLACE INTO session_metadata (id, phone, actual_phone, name, position, webhook_url, created_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?)
+	`, session.ID, session.Phone, session.ActualPhone, session.Name, session.Position, session.WebhookURL, time.Now().Unix())
+	return err
 }
 
 // loadSessionMetadata loads session metadata from database
@@ -574,7 +506,7 @@ func restoreSession(metadata SessionMetadata, container *sqlstore.Container) *Se
 func main() {
 	// Load configuration
 	config = loadConfig()
-	log.Printf("Starting WhatsApp Multi-Session Manager with %s database", config.DatabaseType)
+	log.Println("Starting WhatsApp Multi-Session Manager with sqlite database")
 
 	// Initialize WhatsApp database (always SQLite for whatsmeow)
 	dbLog := waLog.Stdout("Database", "INFO", true)
@@ -584,7 +516,7 @@ func main() {
 		log.Fatal("Failed to initialize WhatsApp database:", err)
 	}
 
-	// Initialize metadata database (MySQL or SQLite based on config)
+	// Initialize metadata database (SQLite)
 	metadataDB, err := setupDatabase(config)
 	if err != nil {
 		log.Fatal("Failed to setup metadata database:", err)

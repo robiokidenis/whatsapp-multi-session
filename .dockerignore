@@ -1,0 +1,85 @@
+# Ignore files that shouldn't be included in the Docker build context
+
+# Development files
+*.md
+README.md
+LICENSE
+.gitignore
+.git/
+
+# Environment and configuration
+.env
+.env.*
+config/
+
+# Log files
+*.log
+logs/
+whatsapp/logs/
+
+# Database files
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+whatsapp/
+sessions.db
+session_metadata.db
+
+# Build artifacts
+whatsapp-multi-session
+whatsapp-multi
+main
+
+# Test files
+*_test.go
+test_*.html
+test_*.js
+debug-*.html
+qr-test.html
+
+# Node.js (if frontend build is handled separately)
+frontend/node_modules/
+frontend/.npm
+frontend/.cache
+
+# Backup files
+*.bak
+*.backup
+*.sql
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Docker related
+Dockerfile.dev
+docker-compose.override.yml
+docker-compose.dev.yml
+
+# Documentation build
+docs/_build/
+docs/.doctrees/
+
+# Coverage reports
+coverage.out
+*.cover
+
+# Vendor (if using dep or glide)
+vendor/
+
+# Temporary files
+tmp/
+temp/

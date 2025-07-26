@@ -114,9 +114,9 @@ const Login = () => {
         {/* Footer */}
         <div className="bg-gray-50 px-6 py-4 rounded-b-lg text-center text-sm text-gray-600">
           <p>
-            <i className="fas fa-shield-alt mr-1"></i>Secure Administrative Access
+            <i className="fas fa-shield-alt mr-1"></i>Secure Access
           </p>
-          <p className="mt-2">Only authorized administrators can access this system</p>
+         
         </div>
       </div>
     </div>

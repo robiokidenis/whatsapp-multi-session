@@ -1,0 +1,566 @@
+openapi: 3.0.3
+info:
+  title: WhatsApp Multi-Session API
+  description: |
+    A REST API for managing multiple WhatsApp sessions and sending messages.
+    
+    ## Features
+    - Multiple WhatsApp sessions management
+    - QR code authentication via WebSocket
+    - Message sending with token authentication
+    - Webhook support for incoming messages
+    - Session name and position management
+    
+    ## Authentication
+    All API endpoints (except login) require Bearer token authentication.
+    
+    ## WebSocket Connection
+    QR code authentication uses WebSocket connection at `/api/ws/{sessionId}?token={authToken}`
+  version: 1.0.0
+  contact:
+    name: WhatsApp Multi-Session API
+    url: https://github.com/robiokidenis/whatsapp-multi-session
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+
+servers:
+  - url: http://localhost:8080/api
+    description: Local development server
+
+security:
+  - BearerAuth: []
+
+paths:
+  /login:
+    post:
+      tags:
+        - Authentication
+      summary: User login
+      description: Authenticate user and get access token
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - username
+                - password
+              properties:
+                username:
+                  type: string
+                  example: admin
+                password:
+                  type: string
+                  example: admin
+      responses:
+        '200':
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  token:
+                    type: string
+                    example: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+                  user:
+                    type: object
+                    properties:
+                      id:
+                        type: integer
+                        example: 1
+                      username:
+                        type: string
+                        example: admin
+        '401':
+          description: Invalid credentials
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /sessions:
+    get:
+      tags:
+        - Sessions
+      summary: Get all sessions
+      description: Retrieve list of all WhatsApp sessions
+      responses:
+        '200':
+          description: List of sessions
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Session'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+    post:
+      tags:
+        - Sessions
+      summary: Create new session
+      description: Create a new WhatsApp session
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                phone:
+                  type: string
+                  description: Optional phone number identifier
+                  example: "+1234567890"
+                name:
+                  type: string
+                  description: Optional session name
+                  example: "My WhatsApp Session"
+                webhook_url:
+                  type: string
+                  format: uri
+                  description: Optional webhook URL for receiving messages
+                  example: "https://myapp.com/webhook"
+      responses:
+        '201':
+          description: Session created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Session'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /sessions/{sessionId}:
+    get:
+      tags:
+        - Sessions
+      summary: Get session details
+      description: Get details of a specific session
+      parameters:
+        - $ref: '#/components/parameters/SessionId'
+      responses:
+        '200':
+          description: Session details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Session'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+    delete:
+      tags:
+        - Sessions
+      summary: Delete session
+      description: Delete a WhatsApp session and disconnect
+      parameters:
+        - $ref: '#/components/parameters/SessionId'
+      responses:
+        '200':
+          description: Session deleted successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Session deleted successfully"
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /sessions/{sessionId}/name:
+    put:
+      tags:
+        - Sessions
+      summary: Update session name
+      description: Update the display name of a session
+      parameters:
+        - $ref: '#/components/parameters/SessionId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - name
+              properties:
+                name:
+                  type: string
+                  example: "Updated Session Name"
+      responses:
+        '200':
+          description: Session name updated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Session name updated successfully"
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /sessions/{sessionId}/webhook:
+    put:
+      tags:
+        - Sessions
+      summary: Update session webhook URL
+      description: Update the webhook URL for receiving messages
+      parameters:
+        - $ref: '#/components/parameters/SessionId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - webhook_url
+              properties:
+                webhook_url:
+                  type: string
+                  format: uri
+                  example: "https://myapp.com/webhook"
+      responses:
+        '200':
+          description: Webhook URL updated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Webhook URL updated successfully"
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /sessions/{sessionId}/connect:
+    post:
+      tags:
+        - Sessions
+      summary: Connect session
+      description: Start connection process for a session (generates QR code)
+      parameters:
+        - $ref: '#/components/parameters/SessionId'
+      responses:
+        '200':
+          description: Connection started
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Connection started"
+                  websocket_url:
+                    type: string
+                    example: "ws://localhost:8080/api/ws/1234567890?token=your_token"
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /sessions/{sessionId}/disconnect:
+    post:
+      tags:
+        - Sessions
+      summary: Disconnect session
+      description: Disconnect a WhatsApp session
+      parameters:
+        - $ref: '#/components/parameters/SessionId'
+      responses:
+        '200':
+          description: Session disconnected
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Session disconnected successfully"
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /sessions/{sessionId}/send:
+    post:
+      tags:
+        - Messages
+      summary: Send message from specific session
+      description: Send a WhatsApp message using a specific session
+      parameters:
+        - $ref: '#/components/parameters/SessionId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SendMessageRequest'
+      responses:
+        '200':
+          description: Message sent successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SendMessageResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /send:
+    post:
+      tags:
+        - Messages
+      summary: Send message via API
+      description: Send a WhatsApp message using token authentication and phone selection
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              allOf:
+                - $ref: '#/components/schemas/SendMessageRequest'
+                - type: object
+                  required:
+                    - phone
+                  properties:
+                    phone:
+                      type: string
+                      description: Phone number to send from (must match a logged-in session)
+                      example: "6282260790996"
+      responses:
+        '200':
+          description: Message sent successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SendMessageResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          description: Session not found or not logged in
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  parameters:
+    SessionId:
+      name: sessionId
+      in: path
+      required: true
+      description: Session ID
+      schema:
+        type: string
+        example: "1234567890"
+
+  schemas:
+    Session:
+      type: object
+      properties:
+        id:
+          type: string
+          description: Unique session identifier
+          example: "1234567890"
+        phone:
+          type: string
+          description: Session phone identifier
+          example: "+1234567890"
+        actual_phone:
+          type: string
+          description: Actual WhatsApp phone number after login
+          example: "6282260790996@s.whatsapp.net"
+        name:
+          type: string
+          description: Display name of the session
+          example: "My WhatsApp Session"
+        position:
+          type: integer
+          description: Display position/order
+          example: 1
+        webhook_url:
+          type: string
+          format: uri
+          description: Webhook URL for receiving messages
+          example: "https://myapp.com/webhook"
+        connected:
+          type: boolean
+          description: Whether session is connected to WhatsApp
+          example: true
+        logged_in:
+          type: boolean
+          description: Whether session is logged in
+          example: true
+
+    SendMessageRequest:
+      type: object
+      required:
+        - recipient
+        - message
+      properties:
+        recipient:
+          type: string
+          description: Recipient phone number (with country code, without +)
+          example: "6281381393739"
+        message:
+          type: string
+          description: Message text to send
+          example: "Hello from WhatsApp API!"
+
+    SendMessageResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        message:
+          type: string
+          example: "Message sent successfully"
+        message_id:
+          type: string
+          description: WhatsApp message ID
+          example: "3EB0BEDDE45EF384377BD7"
+        session_id:
+          type: string
+          example: "1234567890"
+
+    WebSocketMessage:
+      type: object
+      properties:
+        type:
+          type: string
+          enum: [qr, success, error]
+          description: Message type
+        data:
+          type: object
+          description: Message data (varies by type)
+      examples:
+        qr_message:
+          summary: QR Code Message
+          value:
+            type: qr
+            data:
+              qr: "2@BAxEFSgFCONIGGPQVR8DBxC/XSU5W8nwGDFCGfj+VJ2G6I3gpTkeZSWXuuMBu2WN2oB4Mgnob01jm4hofuE++9RnmxCH/k53ogo="
+              timeout: 60000000000
+        success_message:
+          summary: Success Message
+          value:
+            type: success
+            data: {}
+        error_message:
+          summary: Error Message
+          value:
+            type: error
+            data:
+              error: "Connection failed"
+
+    WebhookPayload:
+      type: object
+      description: Payload sent to webhook URL when messages are received
+      properties:
+        session_id:
+          type: string
+          example: "1234567890"
+        message:
+          type: object
+          properties:
+            id:
+              type: string
+              example: "3EB0BEDDE45EF384377BD7"
+            from:
+              type: string
+              example: "6281381393739@s.whatsapp.net"
+            to:
+              type: string
+              example: "6282260790996@s.whatsapp.net"
+            message:
+              type: string
+              example: "Hello!"
+            timestamp:
+              type: integer
+              format: int64
+              example: 1643723400
+
+    Error:
+      type: object
+      properties:
+        error:
+          type: string
+          example: "Error message"
+        message:
+          type: string
+          example: "Detailed error description"
+
+  responses:
+    Unauthorized:
+      description: Unauthorized - Invalid or missing token
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error: "Unauthorized"
+            message: "Invalid or missing authentication token"
+
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error: "Not Found"
+            message: "Session not found"
+
+    BadRequest:
+      description: Bad request - Invalid input
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error: "Bad Request"
+            message: "Invalid request parameters"
+
+tags:
+  - name: Authentication
+    description: User authentication endpoints
+  - name: Sessions
+    description: WhatsApp session management
+  - name: Messages
+    description: Send WhatsApp messages
