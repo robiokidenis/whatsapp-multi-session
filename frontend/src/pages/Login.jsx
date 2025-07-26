@@ -30,6 +30,12 @@ const Login = () => {
     
     if (!result.success) {
       setError(result.error);
+      
+      // If rate limited, disable the form for a short time
+      if (result.rateLimited) {
+        // You could add additional UI feedback here like disabling the button
+        // or showing a countdown timer
+      }
     }
     
     setLoading(false);

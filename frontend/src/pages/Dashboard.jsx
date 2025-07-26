@@ -67,9 +67,12 @@ const Dashboard = () => {
     try {
       await axios.post(`/api/sessions/${id}/logout`);
       showMessage('Session logged out successfully!', 'success');
-      await loadSessions();
     } catch (error) {
-      showMessage('Error logging out session: ' + error.message, 'error');
+      // Even if logout fails due to session errors, still refresh to show current state
+      showMessage('Session logout completed (session may have already been disconnected)', 'success');
+    } finally {
+      // Always refresh sessions list to show current state
+      await loadSessions();
     }
   };
 

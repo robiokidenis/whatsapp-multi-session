@@ -21,8 +21,24 @@ export const AuthProvider = ({ children }) => {
       axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
       const userData = localStorage.getItem('user_data');
       if (userData) {
-        setUser(JSON.parse(userData));
+        try {
+          setUser(JSON.parse(userData));
+        } catch (error) {
+          // Invalid user data, clear everything
+          localStorage.removeItem('auth_token');
+          localStorage.removeItem('user_data');
+          setToken(null);
+          setUser(null);
+        }
+      } else {
+        // Token exists but no user data, clear token
+        localStorage.removeItem('auth_token');
+        setToken(null);
       }
+    } else {
+      // No token, ensure user is also cleared
+      setUser(null);
+      delete axios.defaults.headers.common['Authorization'];
     }
     setLoading(false);
   }, [token]);
@@ -65,9 +81,31 @@ export const AuthProvider = ({ children }) => {
         return { success: true };
       }
     } catch (error) {
+      if (error.response) {
+        const { status, data } = error.response;
+        
+        // Handle rate limiting (429 Too Many Requests)
+        if (status === 429) {
+          const retryAfter = data.retry_after_seconds || 0;
+          const minutes = Math.ceil(retryAfter / 60);
+          return {
+            success: false,
+            error: `Too many failed login attempts. Please try again in ${minutes} minute(s).`,
+            rateLimited: true,
+            retryAfter: retryAfter,
+          };
+        }
+        
+        // Handle other errors
+        return {
+          success: false,
+          error: data?.error || data || 'Login failed',
+        };
+      }
+      
       return {
         success: false,
-        error: error.response?.data || 'Login failed',
+        error: 'Network error. Please check your connection.',
       };
     }
   };
@@ -89,6 +127,7 @@ export const AuthProvider = ({ children }) => {
     logout,
     isAuthenticated: !!user && !!token,
   };
+
 
   return (
     <AuthContext.Provider value={value}>

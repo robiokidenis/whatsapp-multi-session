@@ -32,6 +32,131 @@ import (
 	_ "github.com/mattn/go-sqlite3"
 )
 
+// LoginAttempt tracks login attempts for rate limiting
+type LoginAttempt struct {
+	Count     int       `json:"count"`
+	LastAttempt time.Time `json:"last_attempt"`
+	BlockedUntil time.Time `json:"blocked_until"`
+}
+
+// LoginRateLimiter manages login rate limiting
+type LoginRateLimiter struct {
+	attempts map[string]*LoginAttempt
+	mu       sync.RWMutex
+	
+	// Configuration
+	MaxAttempts     int           // Max attempts before blocking
+	BlockDuration   time.Duration // How long to block after max attempts
+	WindowDuration  time.Duration // Time window to count attempts
+	CleanupInterval time.Duration // How often to clean up old attempts
+}
+
+// NewLoginRateLimiter creates a new rate limiter
+func NewLoginRateLimiter() *LoginRateLimiter {
+	limiter := &LoginRateLimiter{
+		attempts:        make(map[string]*LoginAttempt),
+		MaxAttempts:     5,                // 5 attempts
+		BlockDuration:   15 * time.Minute, // Block for 15 minutes
+		WindowDuration:  5 * time.Minute,  // 5 minute window
+		CleanupInterval: 30 * time.Minute, // Cleanup every 30 minutes
+	}
+	
+	// Start cleanup routine
+	go limiter.cleanup()
+	
+	return limiter
+}
+
+// IsBlocked checks if an IP is currently blocked
+func (l *LoginRateLimiter) IsBlocked(ip string) bool {
+	l.mu.RLock()
+	defer l.mu.RUnlock()
+	
+	attempt, exists := l.attempts[ip]
+	if !exists {
+		return false
+	}
+	
+	return time.Now().Before(attempt.BlockedUntil)
+}
+
+// RecordAttempt records a login attempt for an IP
+func (l *LoginRateLimiter) RecordAttempt(ip string, success bool) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	
+	now := time.Now()
+	attempt, exists := l.attempts[ip]
+	
+	if !exists {
+		attempt = &LoginAttempt{}
+		l.attempts[ip] = attempt
+	}
+	
+	if success {
+		// Reset on successful login
+		attempt.Count = 0
+		attempt.BlockedUntil = time.Time{}
+		return
+	}
+	
+	// Check if we're in a new window
+	if now.Sub(attempt.LastAttempt) > l.WindowDuration {
+		attempt.Count = 1
+	} else {
+		attempt.Count++
+	}
+	
+	attempt.LastAttempt = now
+	
+	// Block if max attempts reached
+	if attempt.Count >= l.MaxAttempts {
+		attempt.BlockedUntil = now.Add(l.BlockDuration)
+		log.Printf("IP %s blocked for %v after %d failed attempts", ip, l.BlockDuration, attempt.Count)
+	}
+}
+
+// GetRemainingTime returns how long until the IP is unblocked
+func (l *LoginRateLimiter) GetRemainingTime(ip string) time.Duration {
+	l.mu.RLock()
+	defer l.mu.RUnlock()
+	
+	attempt, exists := l.attempts[ip]
+	if !exists {
+		return 0
+	}
+	
+	remaining := attempt.BlockedUntil.Sub(time.Now())
+	if remaining < 0 {
+		return 0
+	}
+	
+	return remaining
+}
+
+// cleanup removes old entries periodically
+func (l *LoginRateLimiter) cleanup() {
+	ticker := time.NewTicker(l.CleanupInterval)
+	defer ticker.Stop()
+	
+	for range ticker.C {
+		l.mu.Lock()
+		now := time.Now()
+		
+		for ip, attempt := range l.attempts {
+			// Remove if not blocked and last attempt was long ago
+			if now.After(attempt.BlockedUntil) && now.Sub(attempt.LastAttempt) > l.WindowDuration*2 {
+				delete(l.attempts, ip)
+			}
+		}
+		
+		l.mu.Unlock()
+	}
+}
+
+// Global rate limiter instance
+var loginLimiter *LoginRateLimiter
+
 // Session represents a WhatsApp session
 type Session struct {
 	ID            string              `json:"id"`
@@ -518,6 +643,10 @@ func main() {
 	config = loadConfig()
 	log.Println("Starting WhatsApp Multi-Session Manager with sqlite database")
 
+	// Initialize login rate limiter
+	loginLimiter = NewLoginRateLimiter()
+	log.Println("Login rate limiter initialized")
+
 	// Initialize WhatsApp database (always SQLite for whatsmeow)
 	dbLog := waLog.Stdout("Database", "INFO", true)
 	ctx := context.Background()
@@ -633,35 +762,111 @@ func main() {
 
 // API Handlers
 
-// loginHandler handles user authentication
+// getClientIP extracts the real client IP from the request
+func getClientIP(r *http.Request) string {
+	// Check X-Forwarded-For header (for proxies)
+	xff := r.Header.Get("X-Forwarded-For")
+	if xff != "" {
+		// Take the first IP in case of multiple proxies
+		ips := strings.Split(xff, ",")
+		return strings.TrimSpace(ips[0])
+	}
+	
+	// Check X-Real-IP header
+	xri := r.Header.Get("X-Real-IP")
+	if xri != "" {
+		return strings.TrimSpace(xri)
+	}
+	
+	// Fall back to RemoteAddr
+	ip := r.RemoteAddr
+	if idx := strings.LastIndex(ip, ":"); idx != -1 {
+		ip = ip[:idx]
+	}
+	
+	return ip
+}
+
+// loginHandler handles user authentication with rate limiting
 func loginHandler(w http.ResponseWriter, r *http.Request) {
+	clientIP := getClientIP(r)
+	
+	// Check if IP is currently blocked
+	if loginLimiter.IsBlocked(clientIP) {
+		remaining := loginLimiter.GetRemainingTime(clientIP)
+		log.Printf("Login attempt from blocked IP %s, %v remaining", clientIP, remaining)
+		
+		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("Retry-After", fmt.Sprintf("%.0f", remaining.Seconds()))
+		w.WriteHeader(http.StatusTooManyRequests)
+		
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"success": false,
+			"error":   "Too many failed login attempts. Please try again later.",
+			"retry_after_seconds": int(remaining.Seconds()),
+		})
+		return
+	}
+
 	var req struct {
 		Username string `json:"username"`
 		Password string `json:"password"`
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		log.Printf("Invalid request body from IP %s: %v", clientIP, err)
 		http.Error(w, "Invalid request body", http.StatusBadRequest)
 		return
 	}
 
+	// Validate input
+	if strings.TrimSpace(req.Username) == "" || strings.TrimSpace(req.Password) == "" {
+		log.Printf("Empty credentials from IP %s", clientIP)
+		loginLimiter.RecordAttempt(clientIP, false)
+		
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusUnauthorized)
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"success": false,
+			"error":   "Username and password are required",
+		})
+		return
+	}
+
+	// Add a small delay to slow down brute force attempts
+	time.Sleep(500 * time.Millisecond)
+
 	user, err := authenticateUser(req.Username, req.Password)
 	if err != nil {
-		log.Printf("Authentication failed for user %s: %v", req.Username, err)
-		http.Error(w, "Invalid credentials", http.StatusUnauthorized)
+		log.Printf("Authentication failed for user %s from IP %s: %v", req.Username, clientIP, err)
+		loginLimiter.RecordAttempt(clientIP, false)
+		
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusUnauthorized)
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"success": false,
+			"error":   "Invalid credentials",
+		})
 		return
 	}
 
 	token, err := generateJWT(user.ID, user.Username)
 	if err != nil {
-		log.Printf("Failed to generate JWT for user %s: %v", req.Username, err)
+		log.Printf("Failed to generate JWT for user %s from IP %s: %v", req.Username, clientIP, err)
 		http.Error(w, "Failed to generate token", http.StatusInternalServerError)
 		return
 	}
 
-	log.Printf("User %s logged in successfully", req.Username)
+	// Record successful login (this resets the attempt counter)
+	loginLimiter.RecordAttempt(clientIP, true)
+	log.Printf("User %s logged in successfully from IP %s", req.Username, clientIP)
 
+	// Add security headers
 	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("X-Content-Type-Options", "nosniff")
+	w.Header().Set("X-Frame-Options", "DENY")
+	w.Header().Set("X-XSS-Protection", "1; mode=block")
+	
 	json.NewEncoder(w).Encode(map[string]interface{}{
 		"success": true,
 		"token":   token,
@@ -1000,7 +1205,30 @@ func sendMessage(w http.ResponseWriter, r *http.Request) {
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		log.Printf("Failed to decode request body: %v", err)
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		http.Error(w, "Invalid request body: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	// Validate required fields
+	if strings.TrimSpace(req.To) == "" {
+		log.Printf("Empty recipient field for session %s", id)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"success": false,
+			"error":   "Recipient (to) field is required",
+		})
+		return
+	}
+
+	if strings.TrimSpace(req.Message) == "" {
+		log.Printf("Empty message field for session %s", id)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"success": false,
+			"error":   "Message field is required",
+		})
 		return
 	}
 
@@ -1024,13 +1252,58 @@ func sendMessage(w http.ResponseWriter, r *http.Request) {
 
 	log.Printf("Session %s is logged in, parsing JID: %s", id, req.To)
 
+	// Clean and format the recipient
+	recipient := strings.TrimSpace(req.To)
+	
 	// Ensure the recipient is in proper WhatsApp JID format
 	var recipientJID string
-	if strings.Contains(req.To, "@s.whatsapp.net") {
-		recipientJID = req.To
+	if strings.Contains(recipient, "@s.whatsapp.net") {
+		recipientJID = recipient
+	} else if strings.Contains(recipient, "@g.us") {
+		// Group JID
+		recipientJID = recipient
 	} else {
+		// Clean the phone number - remove any non-digit characters except +
+		phoneNumber := recipient
+		if strings.HasPrefix(phoneNumber, "+") {
+			phoneNumber = strings.ReplaceAll(phoneNumber[1:], " ", "")
+			phoneNumber = strings.ReplaceAll(phoneNumber, "-", "")
+			phoneNumber = strings.ReplaceAll(phoneNumber, "(", "")
+			phoneNumber = strings.ReplaceAll(phoneNumber, ")", "")
+		} else {
+			phoneNumber = strings.ReplaceAll(phoneNumber, " ", "")
+			phoneNumber = strings.ReplaceAll(phoneNumber, "-", "")
+			phoneNumber = strings.ReplaceAll(phoneNumber, "(", "")
+			phoneNumber = strings.ReplaceAll(phoneNumber, ")", "")
+		}
+		
+		// Validate phone number format (should be digits only after cleaning)
+		for _, char := range phoneNumber {
+			if char < '0' || char > '9' {
+				log.Printf("Invalid phone number format: %s (cleaned: %s)", recipient, phoneNumber)
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusBadRequest)
+				json.NewEncoder(w).Encode(map[string]interface{}{
+					"success": false,
+					"error":   "Invalid phone number format. Use digits only (e.g., 6281234567890)",
+				})
+				return
+			}
+		}
+		
+		if len(phoneNumber) < 8 || len(phoneNumber) > 15 {
+			log.Printf("Invalid phone number length: %s (length: %d)", phoneNumber, len(phoneNumber))
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(map[string]interface{}{
+				"success": false,
+				"error":   "Invalid phone number length. Should be 8-15 digits",
+			})
+			return
+		}
+		
 		// Add @s.whatsapp.net if not present
-		recipientJID = req.To + "@s.whatsapp.net"
+		recipientJID = phoneNumber + "@s.whatsapp.net"
 	}
 	
 	log.Printf("Formatted recipient JID: %s", recipientJID)
@@ -1039,7 +1312,12 @@ func sendMessage(w http.ResponseWriter, r *http.Request) {
 	jid, err := types.ParseJID(recipientJID)
 	if err != nil {
 		log.Printf("Failed to parse JID %s: %v", recipientJID, err)
-		http.Error(w, "Invalid recipient: "+err.Error(), http.StatusBadRequest)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"success": false,
+			"error":   "Invalid recipient format: " + err.Error(),
+		})
 		return
 	}
 
@@ -1054,7 +1332,12 @@ func sendMessage(w http.ResponseWriter, r *http.Request) {
 	resp, err := session.Client.SendMessage(context.Background(), jid, msg)
 	if err != nil {
 		log.Printf("Failed to send message: %v", err)
-		http.Error(w, "Failed to send message: "+err.Error(), http.StatusInternalServerError)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"success": false,
+			"error":   "Failed to send message: " + err.Error(),
+		})
 		return
 	}
 
