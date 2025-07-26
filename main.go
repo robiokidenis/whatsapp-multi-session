@@ -598,8 +598,19 @@ func main() {
 	// WebSocket for real-time QR updates (with token query auth)
 	api.HandleFunc("/ws/{id}", handleWebSocketWithAuth)
 	
-	// Serve static files (Vue.js frontend)
-	router.PathPrefix("/").Handler(http.FileServer(http.Dir("./frontend/")))
+	// Serve React frontend
+	router.PathPrefix("/").Handler(http.StripPrefix("/", SPAHandler("./frontend/dist/")))
+	
+	// Fallback for React Router (SPA)
+	router.NotFoundHandler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// If it's an API route, return 404
+		if strings.HasPrefix(r.URL.Path, "/api/") {
+			http.NotFound(w, r)
+			return
+		}
+		// Otherwise serve index.html for SPA routing
+		http.ServeFile(w, r, "./frontend/dist/index.html")
+	})
 
 	// Enable CORS
 	c := cors.New(cors.Options{
@@ -1272,4 +1283,32 @@ func handleWebSocket(w http.ResponseWriter, r *http.Request) {
 	case done <- true:
 	default:
 	}
+}
+
+// SPAHandler serves a Single Page Application with fallback to index.html
+func SPAHandler(staticPath string) http.Handler {
+	fileServer := http.FileServer(http.Dir(staticPath))
+	
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Set proper MIME types for assets
+		if strings.HasSuffix(r.URL.Path, ".css") {
+			w.Header().Set("Content-Type", "text/css")
+		} else if strings.HasSuffix(r.URL.Path, ".js") {
+			w.Header().Set("Content-Type", "application/javascript")
+		} else if strings.HasSuffix(r.URL.Path, ".html") {
+			w.Header().Set("Content-Type", "text/html")
+		}
+		
+		// Check if file exists
+		path := staticPath + r.URL.Path
+		if _, err := os.Stat(path); os.IsNotExist(err) {
+			// File does not exist, serve index.html
+			w.Header().Set("Content-Type", "text/html")
+			http.ServeFile(w, r, staticPath+"index.html")
+			return
+		}
+		
+		// File exists, serve it
+		fileServer.ServeHTTP(w, r)
+	})
 }
