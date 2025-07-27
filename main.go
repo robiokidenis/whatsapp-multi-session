@@ -232,19 +232,25 @@ var (
 	logger         *Logger
 	upgrader       = websocket.Upgrader{
 		CheckOrigin: func(r *http.Request) bool {
-			// Allow connections from localhost and development origins
-			origin := r.Header.Get("Origin")
-			allowed := []string{
-				"http://localhost:3000",
-				"http://127.0.0.1:3000",
-				"http://localhost:8080",
-				"http://127.0.0.1:8080",
+			// Get allowed origins from environment variable
+			corsOrigins := getEnv("CORS_ALLOWED_ORIGINS", "http://localhost:3000,http://127.0.0.1:3000,http://localhost:8080,http://127.0.0.1:8080")
+			
+			// Allow all origins if set to "*"
+			if corsOrigins == "*" {
+				return true
 			}
+			
+			origin := r.Header.Get("Origin")
+			
+			// Split comma-separated origins
+			allowed := strings.Split(corsOrigins, ",")
 			for _, allow := range allowed {
+				allow = strings.TrimSpace(allow)
 				if origin == allow {
 					return true
 				}
 			}
+			
 			// Also allow if no origin (direct connection)
 			return origin == ""
 		},
