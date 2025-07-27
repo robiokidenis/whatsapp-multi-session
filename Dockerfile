@@ -1,4 +1,24 @@
 # Multi-stage build for WhatsApp Multi-Session Manager
+
+# Stage 1: Build frontend
+FROM node:20-alpine AS frontend-builder
+
+# Set working directory
+WORKDIR /app/frontend
+
+# Copy frontend package files
+COPY frontend/package*.json ./
+
+# Install dependencies
+RUN npm ci
+
+# Copy frontend source
+COPY frontend/ ./
+
+# Build frontend
+RUN npm run build
+
+# Stage 2: Build Go application
 FROM golang:1.23-alpine AS builder
 
 # Install build dependencies
@@ -19,7 +39,7 @@ COPY . .
 # Build the application
 RUN CGO_ENABLED=1 GOOS=linux go build -a -installsuffix cgo -o whatsapp-multi-session .
 
-# Final stage - minimal runtime image
+# Stage 3: Final runtime image
 FROM alpine:latest
 
 # Install runtime dependencies
@@ -33,12 +53,17 @@ RUN addgroup -g 1001 appgroup && \
 WORKDIR /app
 
 # Create directories with proper permissions
-RUN mkdir -p /app/data /app/logs && \
+RUN mkdir -p /app/data /app/logs /app/whatsapp/sessions /app/whatsapp/logs /app/config && \
     chown -R appuser:appgroup /app
+
+# Copy entrypoint script
+COPY docker-entrypoint.sh /app/
+RUN chmod +x /app/docker-entrypoint.sh
 
 # Copy built application from builder stage
 COPY --from=builder /app/whatsapp-multi-session .
-COPY --from=builder /app/frontend/dist ./frontend/dist
+# Copy frontend build from frontend-builder stage
+COPY --from=frontend-builder /app/frontend/dist ./frontend/dist
 
 # Set proper permissions
 RUN chown appuser:appgroup whatsapp-multi-session && \
@@ -57,6 +82,12 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
 # Set environment variables
 ENV GIN_MODE=release
 ENV PORT=8080
+
+# Create volume mount points
+VOLUME ["/app/data", "/app/sessions", "/app/logs"]
+
+# Set entrypoint
+ENTRYPOINT ["/app/docker-entrypoint.sh"]
 
 # Run the application
 CMD ["./whatsapp-multi-session"]

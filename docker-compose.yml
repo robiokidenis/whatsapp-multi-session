@@ -8,6 +8,8 @@ services:
     restart: unless-stopped
     ports:
       - "${PORT:-8080}:8080"
+    env_file:
+      - .env
     environment:
       # Application Configuration
       - PORT=${PORT:-8080}
@@ -47,6 +49,9 @@ services:
       # Optional: Custom configuration
       - ${CONFIG_DIR:-./config}:/app/config:ro
       
+      # Mount .env file if exists
+      - ./.env:/app/config/.env:ro
+      
     networks:
       - whatsapp-network
     
@@ -80,24 +85,9 @@ networks:
     driver: bridge
     name: whatsapp-network
 
-volumes:
-  whatsapp-data:
-    driver: local
-    driver_opts:
-      type: none
-      o: bind
-      device: ${DATA_DIR:-./whatsapp}
-  
-  whatsapp-sessions:
-    driver: local
-    driver_opts:
-      type: none
-      o: bind
-      device: ${WHATSAPP_DIR:-./whatsapp/sessions}
-      
-  whatsapp-logs:
-    driver: local
-    driver_opts:
-      type: none
-      o: bind
-      device: ${LOGS_DIR:-./whatsapp/logs}
+# Named volumes are defined but not used in favor of bind mounts
+# Uncomment if you prefer named volumes over bind mounts
+# volumes:
+#   whatsapp-data:
+#   whatsapp-sessions:
+#   whatsapp-logs:
