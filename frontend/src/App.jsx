@@ -3,6 +3,8 @@ import { AuthProvider } from './contexts/AuthContext';
 import ProtectedRoute from './components/ProtectedRoute';
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
+import UserManagement from './components/UserManagement';
+import Layout from './components/Layout';
 
 function App() {
   return (
@@ -14,7 +16,19 @@ function App() {
             path="/"
             element={
               <ProtectedRoute>
-                <Dashboard />
+                <Layout>
+                  <Dashboard />
+                </Layout>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/user-management"
+            element={
+              <ProtectedRoute>
+                <Layout>
+                  <UserManagement />
+                </Layout>
               </ProtectedRoute>
             }
           />
