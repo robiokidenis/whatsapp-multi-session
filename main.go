@@ -205,6 +205,8 @@ type Config struct {
 	JWTSecret      string
 	EnableLogging  bool   // Whether to enable logging
 	LogLevel       string // Log level: "debug", "info", "warn", "error"
+	AdminUsername  string // Default admin username
+	AdminPassword  string // Default admin password
 }
 
 // Claims represents JWT claims
@@ -371,6 +373,8 @@ func loadConfig() *Config {
 		JWTSecret:      getEnv("JWT_SECRET", "your-super-secret-jwt-key-change-this-in-production"),
 		EnableLogging:  getEnv("ENABLE_LOGGING", "true") == "true",
 		LogLevel:       getEnv("LOG_LEVEL", "info"),
+		AdminUsername:  getEnv("ADMIN_USERNAME", "admin"),
+		AdminPassword:  getEnv("ADMIN_PASSWORD", "admin123"),
 	}
 }
 
@@ -445,7 +449,7 @@ func initSessionsTable(db *sql.DB) error {
 }
 
 // initUsersTable creates the users table if it doesn't exist
-func initUsersTable(db *sql.DB) error {
+func initUsersTable(db *sql.DB, cfg *Config) error {
 	// SQLite table creation
 	query := `
 		CREATE TABLE IF NOT EXISTS users (
@@ -494,7 +498,11 @@ func initUsersTable(db *sql.DB) error {
 	}
 
 	if count == 0 {
-		hashedPassword, err := bcrypt.GenerateFromPassword([]byte("admin123"), bcrypt.DefaultCost)
+		// Get admin credentials from config
+		adminUsername := cfg.AdminUsername
+		adminPassword := cfg.AdminPassword
+		
+		hashedPassword, err := bcrypt.GenerateFromPassword([]byte(adminPassword), bcrypt.DefaultCost)
 		if err != nil {
 			if logger != nil {
 				logger.Error("Failed to hash password: %v", err)
@@ -505,7 +513,7 @@ func initUsersTable(db *sql.DB) error {
 		_, err = db.Exec(`
 			INSERT INTO users (username, password_hash, role, session_limit, is_active, created_at) 
 			VALUES (?, ?, ?, ?, ?, ?)
-		`, "admin", string(hashedPassword), "admin", -1, 1, time.Now().Unix())
+		`, adminUsername, string(hashedPassword), "admin", -1, 1, time.Now().Unix())
 
 		if err != nil {
 			if logger != nil {
@@ -515,7 +523,7 @@ func initUsersTable(db *sql.DB) error {
 		}
 
 		if logger != nil {
-			logger.Info("Created default admin user (username: admin, password: admin123)")
+			logger.Info("Created default admin user (username: %s, password: %s)", adminUsername, adminPassword)
 		}
 	} else {
 		if logger != nil {
@@ -1414,7 +1422,7 @@ func main() {
 		logger.Info("Sessions table initialized successfully")
 	}
 
-	if err := initUsersTable(metadataDB); err != nil {
+	if err := initUsersTable(metadataDB, config); err != nil {
 		if logger != nil {
 			logger.Fatal("Failed to initialize users table:", err)
 		} else {
