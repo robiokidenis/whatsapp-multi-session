@@ -386,8 +386,26 @@ func getEnv(key, fallback string) string {
 func setupDatabase(cfg *Config) (*sql.DB, error) {
 	// Ensure database directory exists
 	dir := filepath.Dir(cfg.DatabasePath)
+	if logger != nil {
+		logger.Info("Creating metadata database directory: %s", dir)
+	}
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		return nil, fmt.Errorf("failed to create database directory: %v", err)
+	}
+
+	// Create empty database file if it doesn't exist
+	if logger != nil {
+		logger.Info("Initializing metadata database at: %s", cfg.DatabasePath)
+	}
+	if _, err := os.Stat(cfg.DatabasePath); os.IsNotExist(err) {
+		file, err := os.Create(cfg.DatabasePath)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create database file: %v", err)
+		}
+		file.Close()
+		if logger != nil {
+			logger.Info("Created empty metadata database file")
+		}
 	}
 
 	// SQLite connection only
@@ -1350,8 +1368,20 @@ func main() {
 	ctx := context.Background()
 	// Ensure WhatsApp database directory exists
 	whatsappDBDir := filepath.Dir(config.WhatsAppDBPath)
+	logger.Info("Creating WhatsApp database directory: %s", whatsappDBDir)
 	if err := os.MkdirAll(whatsappDBDir, 0755); err != nil {
 		logger.Fatal("Failed to create WhatsApp database directory:", err)
+	}
+
+	// Create empty database file if it doesn't exist
+	logger.Info("Initializing WhatsApp database at: %s", config.WhatsAppDBPath)
+	if _, err := os.Stat(config.WhatsAppDBPath); os.IsNotExist(err) {
+		file, err := os.Create(config.WhatsAppDBPath)
+		if err != nil {
+			logger.Fatal("Failed to create WhatsApp database file:", err)
+		}
+		file.Close()
+		logger.Info("Created empty WhatsApp database file")
 	}
 
 	container, err := sqlstore.New(ctx, "sqlite3", fmt.Sprintf("file:%s?_foreign_keys=on", config.WhatsAppDBPath), dbLog)
