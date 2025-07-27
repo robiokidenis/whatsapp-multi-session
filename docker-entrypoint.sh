@@ -6,6 +6,15 @@ echo "Starting WhatsApp Multi-Session Manager..."
 # Create necessary directories if they don't exist
 mkdir -p /app/data /app/sessions /app/logs /app/whatsapp/sessions /app/whatsapp/logs
 
+# Fix permissions for mounted volumes (this will succeed if we have write access)
+# This is needed because bind mounts may have different ownership
+chmod -R u+w /app/data /app/sessions /app/logs 2>/dev/null || {
+    echo "Warning: Could not set write permissions on mounted directories."
+    echo "This may cause permission issues. Consider running:"
+    echo "  sudo chown -R 1001:1001 ./whatsapp ./config"
+    echo "on the host system."
+}
+
 # Initialize database if it doesn't exist
 if [ ! -f "/app/data/session_metadata.db" ]; then
     echo "Database not found. Application will create it on first run."
