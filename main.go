@@ -11,6 +11,7 @@ import (
 	"math/big"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -199,10 +200,11 @@ type User struct {
 
 // Config holds database and application configuration
 type Config struct {
-	DatabasePath  string // Path to SQLite database file
-	JWTSecret     string
-	EnableLogging bool   // Whether to enable logging
-	LogLevel      string // Log level: "debug", "info", "warn", "error"
+	DatabasePath   string // Path to SQLite database file
+	WhatsAppDBPath string // Path to WhatsApp SQLite database file
+	JWTSecret      string
+	EnableLogging  bool   // Whether to enable logging
+	LogLevel       string // Log level: "debug", "info", "warn", "error"
 }
 
 // Claims represents JWT claims
@@ -364,10 +366,11 @@ func generatePhoneJID(sessionID string) string {
 // loadConfig loads configuration from environment variables or uses defaults
 func loadConfig() *Config {
 	return &Config{
-		DatabasePath:  getEnv("DATABASE_PATH", "./database/session_metadata.db"),
-		JWTSecret:     getEnv("JWT_SECRET", "your-super-secret-jwt-key-change-this-in-production"),
-		EnableLogging: getEnv("ENABLE_LOGGING", "true") == "true",
-		LogLevel:      getEnv("LOG_LEVEL", "info"),
+		DatabasePath:   getEnv("DATABASE_PATH", "./database/session_metadata.db"),
+		WhatsAppDBPath: getEnv("WHATSAPP_DB_PATH", "./database/sessions.db"),
+		JWTSecret:      getEnv("JWT_SECRET", "your-super-secret-jwt-key-change-this-in-production"),
+		EnableLogging:  getEnv("ENABLE_LOGGING", "true") == "true",
+		LogLevel:       getEnv("LOG_LEVEL", "info"),
 	}
 }
 
@@ -381,6 +384,12 @@ func getEnv(key, fallback string) string {
 
 // setupDatabase creates database connection and initializes tables
 func setupDatabase(cfg *Config) (*sql.DB, error) {
+	// Ensure database directory exists
+	dir := filepath.Dir(cfg.DatabasePath)
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return nil, fmt.Errorf("failed to create database directory: %v", err)
+	}
+
 	// SQLite connection only
 	db, err := sql.Open("sqlite3", cfg.DatabasePath)
 	if err != nil {
@@ -1339,12 +1348,13 @@ func main() {
 	// Initialize WhatsApp database (always SQLite for whatsmeow)
 	dbLog := waLog.Stdout("Database", "INFO", true)
 	ctx := context.Background()
-	// Ensure database directory exists
-	if err := os.MkdirAll("database", 0755); err != nil {
-		logger.Fatal("Failed to create database directory:", err)
+	// Ensure WhatsApp database directory exists
+	whatsappDBDir := filepath.Dir(config.WhatsAppDBPath)
+	if err := os.MkdirAll(whatsappDBDir, 0755); err != nil {
+		logger.Fatal("Failed to create WhatsApp database directory:", err)
 	}
 
-	container, err := sqlstore.New(ctx, "sqlite3", "file:database/sessions.db?_foreign_keys=on", dbLog)
+	container, err := sqlstore.New(ctx, "sqlite3", fmt.Sprintf("file:%s?_foreign_keys=on", config.WhatsAppDBPath), dbLog)
 	if err != nil {
 		logger.Fatal("Failed to initialize WhatsApp database:", err)
 	}
