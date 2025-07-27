@@ -49,8 +49,7 @@ services:
       # Optional: Custom configuration
       - ${CONFIG_DIR:-./config}:/app/config:ro
       
-      # Mount .env file if exists
-      - ./.env:/app/config/.env:ro
+      # .env file loaded via env_file above
       
     networks:
       - whatsapp-network
