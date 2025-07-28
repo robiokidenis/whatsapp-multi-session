@@ -28,7 +28,17 @@ func main() {
 	log.Info("Configuration loaded - Port: %s, Log Level: %s", cfg.Port, cfg.LogLevel)
 
 	// Initialize database
-	db, err := repository.NewDatabase(cfg.DatabasePath)
+	dbConfig := repository.DatabaseConfig{
+		Type:     cfg.DatabaseType,
+		Path:     cfg.DatabasePath,
+		Host:     cfg.MySQLHost,
+		Port:     cfg.MySQLPort,
+		User:     cfg.MySQLUser,
+		Password: cfg.MySQLPassword,
+		Database: cfg.MySQLDatabase,
+	}
+	
+	db, err := repository.NewDatabase(dbConfig)
 	if err != nil {
 		log.Fatalf("Failed to connect to database: %v", err)
 	}
@@ -117,7 +127,6 @@ func setupRoutes(
 	// Auth routes (no authentication required)
 	auth := api.PathPrefix("/auth").Subrouter()
 	auth.HandleFunc("/login", authHandler.Login).Methods("POST")
-	auth.HandleFunc("/register", authHandler.Register).Methods("POST")
 	
 	// Health check
 	api.HandleFunc("/health", healthHandler).Methods("GET")
@@ -178,6 +187,12 @@ func setupRoutes(
 	admin.HandleFunc("/users/{id}", adminHandler.GetUser).Methods("GET")
 	admin.HandleFunc("/users/{id}", adminHandler.UpdateUser).Methods("PUT")
 	admin.HandleFunc("/users/{id}", adminHandler.DeleteUser).Methods("DELETE")
+	
+	// User registration (admin only)
+	auth_admin := api.PathPrefix("/auth").Subrouter()
+	auth_admin.Use(middleware.AuthMiddleware(cfg.JWTSecret))
+	auth_admin.Use(middleware.RequireRole("admin"))
+	auth_admin.HandleFunc("/register", authHandler.Register).Methods("POST")
 
 	// Static files (frontend) - register last to avoid conflicts
 	router.PathPrefix("/").Handler(SPAHandler("./frontend/dist/"))

@@ -17,7 +17,13 @@ services:
       - GIN_MODE=${GIN_MODE:-release}
       
       # Database Configuration
+      - DATABASE_TYPE=${DATABASE_TYPE:-sqlite}
       - DATABASE_PATH=${DATABASE_PATH}
+      - MYSQL_HOST=${MYSQL_HOST:-mysql}
+      - MYSQL_PORT=${MYSQL_PORT:-3306}
+      - MYSQL_USER=${MYSQL_USER:-root}
+      - MYSQL_PASSWORD=${MYSQL_PASSWORD}
+      - MYSQL_DATABASE=${MYSQL_DATABASE:-waGo}
       
       # Default Admin User
       - ADMIN_USERNAME=${ADMIN_USERNAME:-admin}
@@ -79,10 +85,36 @@ services:
         max-size: "10m"
         max-file: "3"
 
+  # MySQL service (optional - only used when DATABASE_TYPE=mysql)
+  mysql:
+    image: mysql:8.0
+    container_name: whatsapp-mysql
+    restart: unless-stopped
+    environment:
+      - MYSQL_ROOT_PASSWORD=${MYSQL_PASSWORD:-robioki}
+      - MYSQL_DATABASE=${MYSQL_DATABASE:-waGo}
+      - MYSQL_USER=${MYSQL_USER:-root}
+    ports:
+      - "${MYSQL_PORT:-3306}:3306"
+    volumes:
+      - mysql-data:/var/lib/mysql
+    networks:
+      - whatsapp-network
+    command: --default-authentication-plugin=mysql_native_password --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${MYSQL_PASSWORD:-robioki}"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+
 networks:
   whatsapp-network:
     driver: bridge
     name: whatsapp-network
+
+volumes:
+  mysql-data:
 
 # Named volumes are defined but not used in favor of bind mounts
 # Uncomment if you prefer named volumes over bind mounts

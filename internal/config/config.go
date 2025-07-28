@@ -4,76 +4,94 @@ import (
 	"os"
 	"strconv"
 	"time"
+	
+	"github.com/joho/godotenv"
 )
 
 // Config holds all application configuration
 type Config struct {
 	// Server configuration
 	Port string
-	
+
 	// Database configuration
-	DatabasePath  string
+	DatabasePath   string
 	WhatsAppDBPath string
-	
+	DatabaseType   string // "sqlite" or "mysql"
+	MySQLHost      string
+	MySQLPort      string
+	MySQLUser      string
+	MySQLPassword  string
+	MySQLDatabase  string
+
 	// JWT configuration
 	JWTSecret     string
 	JWTExpiration time.Duration
-	
+
 	// Admin credentials
 	AdminUsername string
 	AdminPassword string
-	
+
 	// Application settings
-	EnableLogging bool
-	LogLevel      string
-	MaxSessions   int
+	EnableLogging  bool
+	LogLevel       string
+	MaxSessions    int
 	SessionTimeout time.Duration
-	
+
 	// WhatsApp settings
 	AutoConnect bool
 	QRTimeout   time.Duration
-	
+
 	// Security settings
 	CORSAllowedOrigins []string
 	RateLimit          int
-	
+
 	// Webhook settings
-	WebhookTimeout time.Duration
+	WebhookTimeout    time.Duration
 	WebhookMaxRetries int
 }
 
 // Load loads configuration from environment variables
 func Load() *Config {
+	// Load .env.local first (for local development), then .env (fallback)
+	_ = godotenv.Load(".env.local")
+	_ = godotenv.Load(".env")
+	
 	return &Config{
 		// Server
 		Port: getEnv("PORT", "8080"),
-		
+
 		// Database
 		DatabasePath:   getEnv("DATABASE_PATH", "./database/session_metadata.db"),
 		WhatsAppDBPath: getEnv("WHATSAPP_DB_PATH", "./database/sessions.db"),
-		
+		DatabaseType:   getEnv("DATABASE_TYPE", "sqlite"),
+		MySQLHost:      getEnv("MYSQL_HOST", "localhost"),
+		MySQLPort:      getEnv("MYSQL_PORT", "3306"),
+		MySQLUser:      getEnv("MYSQL_USER", "root"),
+		MySQLPassword:  getEnv("MYSQL_PASSWORD", ""),
+		MySQLDatabase:  getEnv("MYSQL_DATABASE", "waGo"),
+
 		// JWT
 		JWTSecret:     getEnv("JWT_SECRET", "your-super-secret-jwt-key-change-this-in-production"),
 		JWTExpiration: getDurationEnv("SESSION_TIMEOUT", 24*time.Hour),
-		
+
 		// Admin
 		AdminUsername: getEnv("ADMIN_USERNAME", "admin"),
 		AdminPassword: getEnv("ADMIN_PASSWORD", "admin123"),
-		
+
 		// Application
 		EnableLogging:  getBoolEnv("ENABLE_LOGGING", true),
 		LogLevel:       getEnv("LOG_LEVEL", "info"),
 		MaxSessions:    getIntEnv("MAX_SESSIONS", 10),
 		SessionTimeout: getDurationEnv("SESSION_TIMEOUT", 24*time.Hour),
-		
+
 		// WhatsApp
 		AutoConnect: getBoolEnv("AUTO_CONNECT", true),
 		QRTimeout:   getDurationEnv("QR_TIMEOUT", 30*time.Second),
-		
+
 		// Security
 		CORSAllowedOrigins: getStringSliceEnv("CORS_ALLOWED_ORIGINS", []string{"*"}),
 		RateLimit:          getIntEnv("RATE_LIMIT", 100),
-		
+
 		// Webhook
 		WebhookTimeout:    getDurationEnv("WEBHOOK_TIMEOUT", 30*time.Second),
 		WebhookMaxRetries: getIntEnv("WEBHOOK_MAX_RETRIES", 3),
@@ -163,15 +181,15 @@ func stringSplit(s, sep string) []string {
 func trimString(s string) string {
 	start := 0
 	end := len(s)
-	
+
 	for start < end && isSpace(s[start]) {
 		start++
 	}
-	
+
 	for end > start && isSpace(s[end-1]) {
 		end--
 	}
-	
+
 	return s[start:end]
 }
 

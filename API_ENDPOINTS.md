@@ -13,21 +13,12 @@ Authorization: Bearer <token>
 
 ## Public Endpoints (No Authentication Required)
 
-### POST /api/login
+### POST /api/auth/login
 Login with username and password
 ```json
 {
   "username": "admin",
   "password": "admin123"
-}
-```
-
-### POST /api/register
-Register a new user account
-```json
-{
-  "username": "newuser",
-  "password": "password123"
 }
 ```
 
@@ -136,6 +127,15 @@ Stop typing indicator
 Get all groups for a session
 
 ## Admin User Management (Admin Role Required)
+
+### POST /api/auth/register
+Register a new user account (Admin only)
+```json
+{
+  "username": "newuser",
+  "password": "password123"
+}
+```
 
 ### GET /api/admin/users
 Get all users
