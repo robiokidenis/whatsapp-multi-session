@@ -206,22 +206,22 @@ const Dashboard = () => {
         </div>
 
         {/* Improved Stats Dashboard */}
-        <div className="grid-stats mb-8">
+        <div className="grid-stats mb-6">
           <div className="card border border-gray-200">
-            <div className="p-4">
+            <div className="p-3">
               <div className="flex items-center justify-between">
                 <div>
                   <div className="text-overline mb-1 text-gray-600">
                     Total Sessions
                   </div>
-                  <div className="text-title text-gray-900">{stats.total}</div>
-                  <div className="text-caption mt-1 text-gray-500">
+                  <div className="text-xl font-semibold text-gray-900">{stats.total}</div>
+                  <div className="text-xs mt-1 text-gray-500">
                     All registered
                   </div>
                 </div>
-                <div className="w-8 h-8 bg-gray-50 border border-gray-200 rounded-lg flex items-center justify-center">
+                <div className="w-6 h-6 bg-gray-50 border border-gray-200 rounded-md flex items-center justify-center">
                   <svg
-                    className="w-4 h-4 text-gray-500"
+                    className="w-3 h-3 text-gray-500"
                     fill="none"
                     stroke="currentColor"
                     viewBox="0 0 24 24"
@@ -239,22 +239,22 @@ const Dashboard = () => {
           </div>
 
           <div className="card border border-success-200 bg-success-25">
-            <div className="p-4">
+            <div className="p-3">
               <div className="flex items-center justify-between">
                 <div>
                   <div className="text-overline mb-1 text-success-600">
                     Active Sessions
                   </div>
-                  <div className="text-title text-success-800">
+                  <div className="text-xl font-semibold text-success-800">
                     {stats.connected}
                   </div>
-                  <div className="text-caption mt-1 text-success-600">
+                  <div className="text-xs mt-1 text-success-600">
                     Connected & ready
                   </div>
                 </div>
-                <div className="w-8 h-8 bg-success-50 border border-success-200 rounded-lg flex items-center justify-center">
+                <div className="w-6 h-6 bg-success-50 border border-success-200 rounded-md flex items-center justify-center">
                   <svg
-                    className="w-4 h-4 text-success-600"
+                    className="w-3 h-3 text-success-600"
                     fill="none"
                     stroke="currentColor"
                     viewBox="0 0 24 24"
@@ -272,22 +272,22 @@ const Dashboard = () => {
           </div>
 
           <div className="card border border-error-200 bg-error-25">
-            <div className="p-4">
+            <div className="p-3">
               <div className="flex items-center justify-between">
                 <div>
                   <div className="text-overline mb-1 text-error-600">
                     Offline Sessions
                   </div>
-                  <div className="text-title text-error-800">
+                  <div className="text-xl font-semibold text-error-800">
                     {stats.offline}
                   </div>
-                  <div className="text-caption mt-1 text-error-600">
+                  <div className="text-xs mt-1 text-error-600">
                     Disconnected
                   </div>
                 </div>
-                <div className="w-8 h-8 bg-error-50 border border-error-200 rounded-lg flex items-center justify-center">
+                <div className="w-6 h-6 bg-error-50 border border-error-200 rounded-md flex items-center justify-center">
                   <svg
-                    className="w-4 h-4 text-error-600"
+                    className="w-3 h-3 text-error-600"
                     fill="none"
                     stroke="currentColor"
                     viewBox="0 0 24 24"
@@ -352,14 +352,14 @@ const Dashboard = () => {
         )}
 
         {/* CRM Search & Filters */}
-        <div className="card mb-8">
-          <div className="card-body">
-            <div className="flex flex-col sm:flex-row gap-4 mb-4">
+        <div className="card mb-6">
+          <div className="p-4">
+            <div className="flex flex-col sm:flex-row gap-3 mb-3">
               <div className="flex-1">
                 <div className="relative">
                   <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                     <svg
-                      className="w-5 h-5 text-gray-400"
+                      className="w-4 h-4 text-gray-400"
                       fill="none"
                       stroke="currentColor"
                       viewBox="0 0 24 24"
@@ -374,21 +374,23 @@ const Dashboard = () => {
                   </div>
                   <input
                     type="text"
-                    placeholder="Search sessions by name, phone, or ID..."
+                    placeholder="Search sessions..."
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
-                    className="input pl-10"
+                    className="w-full py-2.5 pl-9 pr-4 text-sm border border-gray-300 rounded-lg bg-white focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 placeholder-gray-500"
                   />
                 </div>
               </div>
               <button
                 onClick={() => setShowFilters(!showFilters)}
-                className={`btn ${
-                  showFilters ? "btn-primary" : "btn-secondary"
+                className={`px-4 py-2.5 text-sm font-medium rounded-lg border transition-all duration-200 flex items-center gap-2 ${
+                  showFilters 
+                    ? "bg-blue-600 text-white border-blue-600 shadow-md" 
+                    : "bg-white text-gray-700 border-gray-300 hover:bg-gray-50 hover:border-gray-400"
                 }`}
               >
                 <svg
-                  className="w-4 h-4 mr-2"
+                  className="w-4 h-4"
                   fill="none"
                   stroke="currentColor"
                   viewBox="0 0 24 24"
@@ -400,20 +402,25 @@ const Dashboard = () => {
                     d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.707A1 1 0 013 7V4z"
                   />
                 </svg>
-                Filters {showFilters ? "& Actions" : ""}
+                <span className="hidden sm:inline">Filters</span>
+                {filteredSessions.length !== sessions.length && (
+                  <span className="inline-flex items-center justify-center w-5 h-5 text-xs font-bold text-white bg-red-500 rounded-full">
+                    {filteredSessions.length}
+                  </span>
+                )}
               </button>
             </div>
 
             {/* Advanced Filters */}
             {showFilters && (
-              <div className="animate-fade-in pt-6 border-t border-gray-200">
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
+              <div className="animate-fade-in pt-4 border-t border-gray-200">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
                   <div>
-                    <label className="input-label">Status Filter</label>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">Status Filter</label>
                     <select
                       value={statusFilter}
                       onChange={(e) => setStatusFilter(e.target.value)}
-                      className="select"
+                      className="w-full py-2 px-3 text-sm border border-gray-300 rounded-lg bg-white focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200"
                     >
                       <option value="all">All Status</option>
                       <option value="connected">Connected</option>
@@ -423,13 +430,13 @@ const Dashboard = () => {
 
                   <div className="sm:col-span-1 lg:col-span-3">
                     {filteredSessions.length > 0 && (
-                      <div className="flex items-center gap-3 mt-6">
-                        <span className="text-body-medium text-gray-700">
+                      <div className="flex items-center gap-2 mt-5">
+                        <span className="text-xs font-medium text-gray-600">
                           Bulk Actions:
                         </span>
                         <button
                           onClick={handleSelectAll}
-                          className="btn btn-sm btn-secondary"
+                          className="px-3 py-1.5 text-xs font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 transition-colors duration-200"
                         >
                           {selectedSessions.length === filteredSessions.length
                             ? "Deselect All"
@@ -440,17 +447,17 @@ const Dashboard = () => {
                           <button
                             onClick={handleBulkDelete}
                             disabled={bulkActionLoading}
-                            className="btn btn-sm btn-danger"
+                            className="px-3 py-1.5 text-xs font-medium text-white bg-red-600 hover:bg-red-700 disabled:bg-red-400 rounded-md transition-colors duration-200 flex items-center gap-1"
                           >
                             {bulkActionLoading ? (
                               <>
-                                <div className="loading-spinner mr-2"></div>
-                                Deleting...
+                                <div className="w-3 h-3 border border-white/30 border-t-white rounded-full animate-spin"></div>
+                                <span>Deleting...</span>
                               </>
                             ) : (
                               <>
                                 <svg
-                                  className="w-4 h-4 mr-1"
+                                  className="w-3 h-3"
                                   fill="none"
                                   stroke="currentColor"
                                   viewBox="0 0 24 24"
@@ -462,7 +469,7 @@ const Dashboard = () => {
                                     d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
                                   />
                                 </svg>
-                                Delete ({selectedSessions.length})
+                                <span>Delete ({selectedSessions.length})</span>
                               </>
                             )}
                           </button>
@@ -530,7 +537,7 @@ const Dashboard = () => {
               </div>
             </div>
           ) : (
-            <div className="grid-auto">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {filteredSessions.map((session) => {
                 const isSelected = selectedSessions.includes(session.id);
 
