@@ -61,7 +61,7 @@ func main() {
 
 	// Initialize handlers
 	authHandler := handlers.NewAuthHandler(userService, rateLimiter, log)
-	sessionHandler := handlers.NewSessionHandler(whatsappService, cfg.JWTSecret, log)
+	sessionHandler := handlers.NewSessionHandler(whatsappService, cfg.JWTSecret, log, cfg.CORSAllowedOrigins)
 	adminHandler := handlers.NewAdminHandler(userService, log)
 	mediaHandler := handlers.NewMediaHandler(log)
 

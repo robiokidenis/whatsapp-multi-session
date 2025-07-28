@@ -32,22 +32,27 @@ func NewSessionHandler(
 	whatsappService *services.WhatsAppService,
 	jwtSecret string,
 	log *logger.Logger,
+	corsOrigins []string,
 ) *SessionHandler {
 	upgrader := websocket.Upgrader{
 		CheckOrigin: func(r *http.Request) bool {
-			// Allow connections from localhost and development origins
+			// Get origin from request
 			origin := r.Header.Get("Origin")
-			allowed := []string{
-				"http://localhost:3000",
-				"http://127.0.0.1:3000",
-				"http://localhost:8080",
-				"http://127.0.0.1:8080",
-			}
-			for _, allow := range allowed {
-				if origin == allow {
+			
+			// Allow all origins if configured with "*"
+			for _, allowed := range corsOrigins {
+				if allowed == "*" {
 					return true
 				}
 			}
+			
+			// Check against allowed origins
+			for _, allowed := range corsOrigins {
+				if origin == allowed {
+					return true
+				}
+			}
+			
 			// Also allow if no origin (direct connection)
 			return origin == ""
 		},
