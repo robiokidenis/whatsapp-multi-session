@@ -1069,18 +1069,34 @@ func (s *WhatsAppService) sendWebhook(session *models.Session, evt *events.Messa
 	} else if evt.Message.GetImageMessage() != nil {
 		webhookMsg.Message = evt.Message.GetImageMessage().GetCaption()
 		webhookMsg.MessageType = "image"
-		// TODO: Add media download URL
+		// Download and save media file
+		if fileName, err := s.downloadIncomingMedia(session, evt); err == nil {
+			// Create temporary access URL (valid for 1 hour)
+			webhookMsg.MediaURL = fmt.Sprintf("/api/media/temp/%s?expires=%d", fileName, time.Now().Add(time.Hour).Unix())
+		}
 	} else if evt.Message.GetDocumentMessage() != nil {
 		webhookMsg.Message = evt.Message.GetDocumentMessage().GetCaption()
 		webhookMsg.MessageType = "document"
-		// TODO: Add media download URL
+		// Download and save media file
+		if fileName, err := s.downloadIncomingMedia(session, evt); err == nil {
+			// Create temporary access URL (valid for 1 hour)
+			webhookMsg.MediaURL = fmt.Sprintf("/api/media/temp/%s?expires=%d", fileName, time.Now().Add(time.Hour).Unix())
+		}
 	} else if evt.Message.GetAudioMessage() != nil {
 		webhookMsg.MessageType = "audio"
-		// TODO: Add media download URL
+		// Download and save media file
+		if fileName, err := s.downloadIncomingMedia(session, evt); err == nil {
+			// Create temporary access URL (valid for 1 hour)
+			webhookMsg.MediaURL = fmt.Sprintf("/api/media/temp/%s?expires=%d", fileName, time.Now().Add(time.Hour).Unix())
+		}
 	} else if evt.Message.GetVideoMessage() != nil {
 		webhookMsg.Message = evt.Message.GetVideoMessage().GetCaption()
 		webhookMsg.MessageType = "video"
-		// TODO: Add media download URL
+		// Download and save media file
+		if fileName, err := s.downloadIncomingMedia(session, evt); err == nil {
+			// Create temporary access URL (valid for 1 hour)
+			webhookMsg.MediaURL = fmt.Sprintf("/api/media/temp/%s?expires=%d", fileName, time.Now().Add(time.Hour).Unix())
+		}
 	} else {
 		webhookMsg.Message = "[Unsupported message type]"
 		webhookMsg.MessageType = "unknown"
@@ -1137,6 +1153,70 @@ func (s *WhatsAppService) sendWebhookHTTP(webhookURL string, msg *models.Webhook
 	}
 
 	return nil
+}
+
+// downloadIncomingMedia downloads media from incoming messages and saves locally
+func (s *WhatsAppService) downloadIncomingMedia(session *models.Session, evt *events.Message) (string, error) {
+	var mediaData []byte
+	var fileName string
+	var err error
+	ctx := context.Background()
+
+	// Create media directory
+	mediaDir := "./media/received"
+	if err := os.MkdirAll(mediaDir, 0755); err != nil {
+		return "", fmt.Errorf("failed to create media directory: %v", err)
+	}
+
+	// Generate unique filename
+	timestamp := time.Now().Unix()
+	sessionID := session.ID
+	messageID := evt.Info.ID
+
+	// Download based on message type
+	if img := evt.Message.GetImageMessage(); img != nil {
+		mediaData, err = session.Client.Download(ctx, img)
+		if err != nil {
+			return "", fmt.Errorf("failed to download image: %v", err)
+		}
+		fileName = fmt.Sprintf("%s_%d_%s.jpg", sessionID, timestamp, messageID)
+	} else if doc := evt.Message.GetDocumentMessage(); doc != nil {
+		mediaData, err = session.Client.Download(ctx, doc)
+		if err != nil {
+			return "", fmt.Errorf("failed to download document: %v", err)
+		}
+		// Use original filename if available, otherwise generate one
+		if doc.GetFileName() != "" {
+			ext := filepath.Ext(doc.GetFileName())
+			name := strings.TrimSuffix(doc.GetFileName(), ext)
+			fileName = fmt.Sprintf("%s_%d_%s_%s%s", sessionID, timestamp, messageID, name, ext)
+		} else {
+			fileName = fmt.Sprintf("%s_%d_%s.bin", sessionID, timestamp, messageID)
+		}
+	} else if video := evt.Message.GetVideoMessage(); video != nil {
+		mediaData, err = session.Client.Download(ctx, video)
+		if err != nil {
+			return "", fmt.Errorf("failed to download video: %v", err)
+		}
+		fileName = fmt.Sprintf("%s_%d_%s.mp4", sessionID, timestamp, messageID)
+	} else if audio := evt.Message.GetAudioMessage(); audio != nil {
+		mediaData, err = session.Client.Download(ctx, audio)
+		if err != nil {
+			return "", fmt.Errorf("failed to download audio: %v", err)
+		}
+		fileName = fmt.Sprintf("%s_%d_%s.ogg", sessionID, timestamp, messageID)
+	} else {
+		return "", fmt.Errorf("unsupported media type")
+	}
+
+	// Save file locally
+	filePath := filepath.Join(mediaDir, fileName)
+	if err := os.WriteFile(filePath, mediaData, 0644); err != nil {
+		return "", fmt.Errorf("failed to save media file: %v", err)
+	}
+
+	s.logger.Info("Downloaded media file: %s", filePath)
+	return fileName, nil
 }
 
 // Close closes all sessions and the service

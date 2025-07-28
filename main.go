@@ -63,9 +63,10 @@ func main() {
 	authHandler := handlers.NewAuthHandler(userService, rateLimiter, log)
 	sessionHandler := handlers.NewSessionHandler(whatsappService, cfg.JWTSecret, log)
 	adminHandler := handlers.NewAdminHandler(userService, log)
+	mediaHandler := handlers.NewMediaHandler(log)
 
 	// Setup routes
-	router := setupRoutes(authHandler, sessionHandler, adminHandler, cfg)
+	router := setupRoutes(authHandler, sessionHandler, adminHandler, mediaHandler, cfg)
 
 	// Setup CORS
 	corsHandler := middleware.NewCORS(cfg.CORSAllowedOrigins)
@@ -105,6 +106,7 @@ func setupRoutes(
 	authHandler *handlers.AuthHandler,
 	sessionHandler *handlers.SessionHandler,
 	adminHandler *handlers.AdminHandler,
+	mediaHandler *handlers.MediaHandler,
 	cfg *config.Config,
 ) *mux.Router {
 	router := mux.NewRouter()
@@ -119,6 +121,11 @@ func setupRoutes(
 	
 	// Health check
 	api.HandleFunc("/health", healthHandler).Methods("GET")
+
+	// Media routes (authentication required for security)
+	media := api.PathPrefix("/media").Subrouter()
+	media.Use(middleware.AuthMiddleware(cfg.JWTSecret))
+	media.HandleFunc("/temp/{filename}", mediaHandler.ServeTempMedia).Methods("GET")
 
 	// Protected routes (authentication required)
 	protected := api.PathPrefix("").Subrouter()

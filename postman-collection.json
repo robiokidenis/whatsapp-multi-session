@@ -1,559 +1,1132 @@
 {
-  "info": {
-    "name": "WhatsApp Multi-Session API",
-    "description": "Complete collection for WhatsApp Multi-Session API testing",
-    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
-    "_postman_id": "whatsapp-multi-session-api"
-  },
-  "variable": [
-    {
-      "key": "base_url",
-      "value": "http://localhost:8080/api",
-      "type": "string"
-    },
-    {
-      "key": "auth_token",
-      "value": "",
-      "type": "string"
-    },
-    {
-      "key": "session_id",
-      "value": "",
-      "type": "string"
-    }
-  ],
-  "item": [
-    {
-      "name": "🔐 Authentication",
-      "item": [
-        {
-          "name": "Login",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "if (pm.response.code === 200) {",
-                  "    const response = pm.response.json();",
-                  "    if (response.success && response.token) {",
-                  "        pm.environment.set('auth_token', response.token);",
-                  "        pm.test('Login successful', function () {",
-                  "            pm.expect(response.success).to.be.true;",
-                  "        });",
-                  "    }",
-                  "}"
-                ]
-              }
-            }
-          ],
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"username\": \"admin\",\n  \"password\": \"admin\"\n}"
-            },
-            "url": {
-              "raw": "{{base_url}}/login",
-              "host": ["{{base_url}}"],
-              "path": ["login"]
-            }
-          }
-        }
-      ]
-    },
-    {
-      "name": "📱 Session Management",
-      "item": [
-        {
-          "name": "Get All Sessions",
-          "request": {
-            "method": "GET",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{auth_token}}"
-              }
-            ],
-            "url": {
-              "raw": "{{base_url}}/sessions",
-              "host": ["{{base_url}}"],
-              "path": ["sessions"]
-            }
-          }
-        },
-        {
-          "name": "Create New Session",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "if (pm.response.code === 201) {",
-                  "    const response = pm.response.json();",
-                  "    if (response.id) {",
-                  "        pm.environment.set('session_id', response.id);",
-                  "        pm.test('Session created', function () {",
-                  "            pm.expect(response.id).to.exist;",
-                  "        });",
-                  "    }",
-                  "}"
-                ]
-              }
-            }
-          ],
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{auth_token}}"
-              },
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"name\": \"Test Session\",\n  \"webhook_url\": \"https://myapp.com/webhook\"\n}"
-            },
-            "url": {
-              "raw": "{{base_url}}/sessions",
-              "host": ["{{base_url}}"],
-              "path": ["sessions"]
-            }
-          }
-        },
-        {
-          "name": "Get Session Details",
-          "request": {
-            "method": "GET",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{auth_token}}"
-              }
-            ],
-            "url": {
-              "raw": "{{base_url}}/sessions/{{session_id}}",
-              "host": ["{{base_url}}"],
-              "path": ["sessions", "{{session_id}}"]
-            }
-          }
-        },
-        {
-          "name": "Update Session Name",
-          "request": {
-            "method": "PUT",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{auth_token}}"
-              },
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"name\": \"Updated Session Name\"\n}"
-            },
-            "url": {
-              "raw": "{{base_url}}/sessions/{{session_id}}/name",
-              "host": ["{{base_url}}"],
-              "path": ["sessions", "{{session_id}}", "name"]
-            }
-          }
-        },
-        {
-          "name": "Update Session Webhook",
-          "request": {
-            "method": "PUT",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{auth_token}}"
-              },
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"webhook_url\": \"https://myapp.com/new-webhook\"\n}"
-            },
-            "url": {
-              "raw": "{{base_url}}/sessions/{{session_id}}/webhook",
-              "host": ["{{base_url}}"],
-              "path": ["sessions", "{{session_id}}", "webhook"]
-            }
-          }
-        },
-        {
-          "name": "Connect Session (Generate QR)",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{auth_token}}"
-              }
-            ],
-            "url": {
-              "raw": "{{base_url}}/sessions/{{session_id}}/connect",
-              "host": ["{{base_url}}"],
-              "path": ["sessions", "{{session_id}}", "connect"]
-            }
-          }
-        },
-        {
-          "name": "Disconnect Session",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{auth_token}}"
-              }
-            ],
-            "url": {
-              "raw": "{{base_url}}/sessions/{{session_id}}/disconnect",
-              "host": ["{{base_url}}"],
-              "path": ["sessions", "{{session_id}}", "disconnect"]
-            }
-          }
-        },
-        {
-          "name": "Delete Session",
-          "request": {
-            "method": "DELETE",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{auth_token}}"
-              }
-            ],
-            "url": {
-              "raw": "{{base_url}}/sessions/{{session_id}}",
-              "host": ["{{base_url}}"],
-              "path": ["sessions", "{{session_id}}"]
-            }
-          }
-        }
-      ]
-    },
-    {
-      "name": "💬 Message Sending",
-      "item": [
-        {
-          "name": "Send Message from Specific Session",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{auth_token}}"
-              },
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"recipient\": \"6281381393739\",\n  \"message\": \"Hello from WhatsApp API!\"\n}"
-            },
-            "url": {
-              "raw": "{{base_url}}/sessions/{{session_id}}/send",
-              "host": ["{{base_url}}"],
-              "path": ["sessions", "{{session_id}}", "send"]
-            }
-          }
-        },
-        {
-          "name": "Send Message via API (Token + Phone)",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{auth_token}}"
-              },
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"phone\": \"6282260790996\",\n  \"recipient\": \"6281381393739\",\n  \"message\": \"Hello from selected phone number!\"\n}"
-            },
-            "url": {
-              "raw": "{{base_url}}/send",
-              "host": ["{{base_url}}"],
-              "path": ["send"]
-            }
-          }
-        }
-      ]
-    },
-    {
-      "name": "🧪 Test Scenarios",
-      "item": [
-        {
-          "name": "Create Business Session",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "if (pm.response.code === 201) {",
-                  "    const response = pm.response.json();",
-                  "    pm.environment.set('business_session_id', response.id);",
-                  "}"
-                ]
-              }
-            }
-          ],
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{auth_token}}"
-              },
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"name\": \"Business WhatsApp\",\n  \"webhook_url\": \"https://myapp.com/webhook/business\"\n}"
-            },
-            "url": {
-              "raw": "{{base_url}}/sessions",
-              "host": ["{{base_url}}"],
-              "path": ["sessions"]
-            }
-          }
-        },
-        {
-          "name": "Create Personal Session",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "if (pm.response.code === 201) {",
-                  "    const response = pm.response.json();",
-                  "    pm.environment.set('personal_session_id', response.id);",
-                  "}"
-                ]
-              }
-            }
-          ],
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{auth_token}}"
-              },
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"name\": \"Personal WhatsApp\",\n  \"webhook_url\": \"https://myapp.com/webhook/personal\"\n}"
-            },
-            "url": {
-              "raw": "{{base_url}}/sessions",
-              "host": ["{{base_url}}"],
-              "path": ["sessions"]
-            }
-          }
-        },
-        {
-          "name": "Send Business Message",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{auth_token}}"
-              },
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"phone\": \"6282260790996\",\n  \"recipient\": \"6281381393739\",\n  \"message\": \"Thank you for choosing our business services!\"\n}"
-            },
-            "url": {
-              "raw": "{{base_url}}/send",
-              "host": ["{{base_url}}"],
-              "path": ["send"]
-            }
-          }
-        },
-        {
-          "name": "Send Personal Message",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{auth_token}}"
-              },
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"phone\": \"6285591500390\",\n  \"recipient\": \"6281381393739\",\n  \"message\": \"Hey! How are you doing?\"\n}"
-            },
-            "url": {
-              "raw": "{{base_url}}/send",
-              "host": ["{{base_url}}"],
-              "path": ["send"]
-            }
-          }
-        }
-      ]
-    },
-    {
-      "name": "🔍 Number & Group Management",
-      "item": [
-        {
-          "name": "Check Number on WhatsApp",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{auth_token}}"
-              },
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"number\": \"6281381393739\"\n}"
-            },
-            "url": {
-              "raw": "{{base_url}}/sessions/{{session_id}}/check-number",
-              "host": ["{{base_url}}"],
-              "path": ["sessions", "{{session_id}}", "check-number"]
-            }
-          }
-        },
-        {
-          "name": "List All Groups",
-          "request": {
-            "method": "GET",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{auth_token}}"
-              }
-            ],
-            "url": {
-              "raw": "{{base_url}}/sessions/{{session_id}}/groups",
-              "host": ["{{base_url}}"],
-              "path": ["sessions", "{{session_id}}", "groups"]
-            }
-          }
-        },
-        {
-          "name": "Check Business Number",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{auth_token}}"
-              },
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"number\": \"6282260790996\"\n}"
-            },
-            "url": {
-              "raw": "{{base_url}}/sessions/{{business_session_id}}/check-number",
-              "host": ["{{base_url}}"],
-              "path": ["sessions", "{{business_session_id}}", "check-number"]
-            }
-          }
-        },
-        {
-          "name": "List Business Groups",
-          "request": {
-            "method": "GET",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{auth_token}}"
-              }
-            ],
-            "url": {
-              "raw": "{{base_url}}/sessions/{{business_session_id}}/groups",
-              "host": ["{{base_url}}"],
-              "path": ["sessions", "{{business_session_id}}", "groups"]
-            }
-          }
-        }
-      ]
-    }
-  ],
-  "auth": {
-    "type": "bearer",
-    "bearer": [
-      {
-        "key": "token",
-        "value": "{{auth_token}}",
-        "type": "string"
-      }
-    ]
-  },
-  "event": [
-    {
-      "listen": "prerequest",
-      "script": {
-        "type": "text/javascript",
-        "exec": [
-          ""
-        ]
-      }
-    },
-    {
-      "listen": "test",
-      "script": {
-        "type": "text/javascript",
-        "exec": [
-          ""
-        ]
-      }
-    }
-  ]
+	"info": {
+		"_postman_id": "whatsapp-multi-session-2025",
+		"name": "WhatsApp Multi-Session Manager - Complete API Collection",
+		"description": "Complete API collection for WhatsApp Multi-Session Manager with media support, authentication, and security features.\n\n**Features:**\n- JWT Authentication\n- Session Management\n- Message Sending (Text, Image, File)\n- Media Reception & Temporary Access (Secured)\n- File Upload from URLs\n- Inter-session Messaging\n- User Management\n- Admin Operations\n\n**Security:**\n- All endpoints require JWT authentication except login/register\n- Media access requires valid JWT token\n- Temporary media URLs with expiration\n- Rate limiting on login attempts",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+		"_exporter_id": "12345678"
+	},
+	"item": [
+		{
+			"name": "🔐 Authentication",
+			"item": [
+				{
+					"name": "Login (Get JWT Token)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"if (pm.response.code === 200) {",
+									"    const responseJson = pm.response.json();",
+									"    pm.environment.set('auth_token', responseJson.token);",
+									"    pm.environment.set('user_id', responseJson.user.id);",
+									"    console.log('Token saved:', responseJson.token);",
+									"} else {",
+									"    console.log('Login failed:', pm.response.text());",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"username\": \"admin\",\n    \"password\": \"admin123\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/auth/login",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"auth",
+								"login"
+							]
+						},
+						"description": "Login to get JWT token. Token is automatically saved to environment variable."
+					},
+					"response": []
+				},
+				{
+					"name": "Register New User",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"username\": \"testuser\",\n    \"password\": \"password123\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/auth/register",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"auth",
+								"register"
+							]
+						},
+						"description": "Register a new user account."
+					},
+					"response": []
+				}
+			],
+			"description": "Authentication endpoints for login and registration."
+		},
+		{
+			"name": "📱 Session Management",
+			"item": [
+				{
+					"name": "Get All Sessions",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{auth_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/sessions",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"sessions"
+							]
+						},
+						"description": "Retrieve all WhatsApp sessions."
+					},
+					"response": []
+				},
+				{
+					"name": "Create New Session",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"if (pm.response.code === 200) {",
+									"    const responseJson = pm.response.json();",
+									"    pm.environment.set('session_id', responseJson.data.id);",
+									"    console.log('Session ID saved:', responseJson.data.id);",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{auth_token}}"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"name\": \"Test Session\",\n    \"webhook_url\": \"https://httpbin.org/post\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/sessions",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"sessions"
+							]
+						},
+						"description": "Create a new WhatsApp session. Session ID is automatically saved."
+					},
+					"response": []
+				},
+				{
+					"name": "Get Session Details",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{auth_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/sessions/{{session_id}}",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"sessions",
+								"{{session_id}}"
+							]
+						},
+						"description": "Get details of a specific session."
+					},
+					"response": []
+				},
+				{
+					"name": "Connect Session",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{auth_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/sessions/{{session_id}}/connect",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"sessions",
+								"{{session_id}}",
+								"connect"
+							]
+						},
+						"description": "Connect a session to WhatsApp."
+					},
+					"response": []
+				},
+				{
+					"name": "Disconnect Session",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{auth_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/sessions/{{session_id}}/disconnect",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"sessions",
+								"{{session_id}}",
+								"disconnect"
+							]
+						},
+						"description": "Disconnect a session from WhatsApp."
+					},
+					"response": []
+				},
+				{
+					"name": "Get QR Code",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{auth_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/sessions/{{session_id}}/qr",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"sessions",
+								"{{session_id}}",
+								"qr"
+							]
+						},
+						"description": "Get QR code for session authentication."
+					},
+					"response": []
+				},
+				{
+					"name": "Update Session Webhook",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{auth_token}}"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"webhook_url\": \"https://your-webhook-endpoint.com/whatsapp\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/sessions/{{session_id}}/webhook",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"sessions",
+								"{{session_id}}",
+								"webhook"
+							]
+						},
+						"description": "Update webhook URL for receiving messages."
+					},
+					"response": []
+				},
+				{
+					"name": "Update Session Name",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{auth_token}}"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"name\": \"Updated Session Name\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/sessions/{{session_id}}/name",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"sessions",
+								"{{session_id}}",
+								"name"
+							]
+						},
+						"description": "Update session display name."
+					},
+					"response": []
+				},
+				{
+					"name": "Delete Session",
+					"request": {
+						"method": "DELETE",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{auth_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/sessions/{{session_id}}",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"sessions",
+								"{{session_id}}"
+							]
+						},
+						"description": "Delete a session."
+					},
+					"response": []
+				}
+			],
+			"description": "Session management endpoints for creating, connecting, and managing WhatsApp sessions."
+		},
+		{
+			"name": "💬 Messaging",
+			"item": [
+				{
+					"name": "Send Text Message",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{auth_token}}"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"to\": \"6281234567890\",\n    \"message\": \"Hello from WhatsApp API! 👋\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/sessions/{{session_id}}/send",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"sessions",
+								"{{session_id}}",
+								"send"
+							]
+						},
+						"description": "Send a text message to a WhatsApp number."
+					},
+					"response": []
+				},
+				{
+					"name": "Send Image (Base64)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{auth_token}}"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"to\": \"6281234567890\",\n    \"image\": \"iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==\",\n    \"caption\": \"Test image sent via API 📸\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/sessions/{{session_id}}/send-image",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"sessions",
+								"{{session_id}}",
+								"send-image"
+							]
+						},
+						"description": "Send an image using base64 encoded data."
+					},
+					"response": []
+				},
+				{
+					"name": "Send File from URL",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{auth_token}}"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"to\": \"6281234567890\",\n    \"url\": \"https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf\",\n    \"filename\": \"sample-document.pdf\",\n    \"caption\": \"Document sent from API 📄\",\n    \"type\": \"document\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/sessions/{{session_id}}/send-file-url",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"sessions",
+								"{{session_id}}",
+								"send-file-url"
+							]
+						},
+						"description": "Send a file by downloading from URL. Supports images, documents, videos, audio."
+					},
+					"response": []
+				},
+				{
+					"name": "Send Attachment (File Upload)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{auth_token}}"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"to\": \"6281234567890\",\n    \"file\": \"base64-encoded-file-data-here\",\n    \"filename\": \"document.pdf\",\n    \"caption\": \"File attachment 📎\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/sessions/{{session_id}}/send-attachment",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"sessions",
+								"{{session_id}}",
+								"send-attachment"
+							]
+						},
+						"description": "Send a file attachment using base64 encoded data."
+					},
+					"response": []
+				},
+				{
+					"name": "Check Number Validity",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{auth_token}}"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"number\": \"6281234567890\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/sessions/{{session_id}}/check-number",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"sessions",
+								"{{session_id}}",
+								"check-number"
+							]
+						},
+						"description": "Check if a phone number is registered on WhatsApp."
+					},
+					"response": []
+				},
+				{
+					"name": "Send Typing Indicator",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{auth_token}}"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"to\": \"6281234567890\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/sessions/{{session_id}}/typing",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"sessions",
+								"{{session_id}}",
+								"typing"
+							]
+						},
+						"description": "Send typing indicator to a chat."
+					},
+					"response": []
+				},
+				{
+					"name": "Stop Typing Indicator",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{auth_token}}"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"to\": \"6281234567890\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/sessions/{{session_id}}/stop-typing",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"sessions",
+								"{{session_id}}",
+								"stop-typing"
+							]
+						},
+						"description": "Stop typing indicator in a chat."
+					},
+					"response": []
+				},
+				{
+					"name": "Get Groups",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{auth_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/sessions/{{session_id}}/groups",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"sessions",
+								"{{session_id}}",
+								"groups"
+							]
+						},
+						"description": "Get all groups for a session."
+					},
+					"response": []
+				},
+				{
+					"name": "Send Message (General)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{auth_token}}"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"session_id\": \"{{session_id}}\",\n    \"to\": \"6281234567890\",\n    \"message\": \"Message sent via general endpoint\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/send",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"send"
+							]
+						},
+						"description": "Send message using general endpoint (compatible with original API)."
+					},
+					"response": []
+				}
+			],
+			"description": "Messaging endpoints for sending text, images, files, and managing chat interactions."
+		},
+		{
+			"name": "🖼️ Media Management (SECURED)",
+			"item": [
+				{
+					"name": "Access Temporary Media (Valid)",
+					"event": [
+						{
+							"listen": "prerequest",
+							"script": {
+								"exec": [
+									"// Generate expiration timestamp (1 hour from now)",
+									"const expires = Math.floor(Date.now() / 1000) + 3600;",
+									"pm.environment.set('expires_valid', expires);"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{auth_token}}",
+								"description": "Required for media access"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/media/temp/test_image.jpg?expires={{expires_valid}}",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"media",
+								"temp",
+								"test_image.jpg"
+							],
+							"query": [
+								{
+									"key": "expires",
+									"value": "{{expires_valid}}",
+									"description": "Unix timestamp when link expires"
+								}
+							]
+						},
+						"description": "Access a temporary media file with valid authentication and expiration. Replace 'test_image.jpg' with actual filename from webhook."
+					},
+					"response": []
+				},
+				{
+					"name": "Access Media - No Auth (Should Fail)",
+					"event": [
+						{
+							"listen": "prerequest",
+							"script": {
+								"exec": [
+									"const expires = Math.floor(Date.now() / 1000) + 3600;",
+									"pm.environment.set('expires_valid', expires);"
+								],
+								"type": "text/javascript"
+							}
+						},
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Should return 401 Unauthorized', function () {",
+									"    pm.response.to.have.status(401);",
+									"});",
+									"",
+									"pm.test('Should contain auth error message', function () {",
+									"    pm.expect(pm.response.text()).to.include('authorization');",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/media/temp/test_image.jpg?expires={{expires_valid}}",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"media",
+								"temp",
+								"test_image.jpg"
+							],
+							"query": [
+								{
+									"key": "expires",
+									"value": "{{expires_valid}}"
+								}
+							]
+						},
+						"description": "Test security: Access media without authentication (should fail with 401)."
+					},
+					"response": []
+				},
+				{
+					"name": "Access Media - Expired Link (Should Fail)",
+					"event": [
+						{
+							"listen": "prerequest",
+							"script": {
+								"exec": [
+									"// Generate expired timestamp (1 hour ago)",
+									"const expired = Math.floor(Date.now() / 1000) - 3600;",
+									"pm.environment.set('expires_expired', expired);"
+								],
+								"type": "text/javascript"
+							}
+						},
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Should return 410 Gone', function () {",
+									"    pm.response.to.have.status(410);",
+									"});",
+									"",
+									"pm.test('Should contain expiration error message', function () {",
+									"    pm.expect(pm.response.text()).to.include('expired');",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{auth_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/media/temp/test_image.jpg?expires={{expires_expired}}",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"media",
+								"temp",
+								"test_image.jpg"
+							],
+							"query": [
+								{
+									"key": "expires",
+									"value": "{{expires_expired}}"
+								}
+							]
+						},
+						"description": "Test security: Access media with expired link (should fail with 410)."
+					},
+					"response": []
+				},
+				{
+					"name": "Access Media - Invalid Token (Should Fail)",
+					"event": [
+						{
+							"listen": "prerequest",
+							"script": {
+								"exec": [
+									"const expires = Math.floor(Date.now() / 1000) + 3600;",
+									"pm.environment.set('expires_valid', expires);"
+								],
+								"type": "text/javascript"
+							}
+						},
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Should return 401 Unauthorized', function () {",
+									"    pm.response.to.have.status(401);",
+									"});",
+									"",
+									"pm.test('Should contain token error message', function () {",
+									"    pm.expect(pm.response.text()).to.include('token');",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer invalid-token-12345"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/media/temp/test_image.jpg?expires={{expires_valid}}",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"media",
+								"temp",
+								"test_image.jpg"
+							],
+							"query": [
+								{
+									"key": "expires",
+									"value": "{{expires_valid}}"
+								}
+							]
+						},
+						"description": "Test security: Access media with invalid token (should fail with 401)."
+					},
+					"response": []
+				}
+			],
+			"description": "🔒 SECURED Media access endpoints. All media access now requires JWT authentication plus valid expiration timestamps."
+		},
+		{
+			"name": "👥 User Management (Admin)",
+			"item": [
+				{
+					"name": "Get All Users",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{auth_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/admin/users",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"admin",
+								"users"
+							]
+						},
+						"description": "Get all users (Admin only)."
+					},
+					"response": []
+				},
+				{
+					"name": "Create User",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{auth_token}}"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"username\": \"newuser\",\n    \"password\": \"password123\",\n    \"role\": \"user\",\n    \"session_limit\": 5\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/admin/users",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"admin",
+								"users"
+							]
+						},
+						"description": "Create a new user (Admin only)."
+					},
+					"response": []
+				},
+				{
+					"name": "Get User by ID",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{auth_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/admin/users/{{user_id}}",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"admin",
+								"users",
+								"{{user_id}}"
+							]
+						},
+						"description": "Get user details by ID (Admin only)."
+					},
+					"response": []
+				},
+				{
+					"name": "Update User",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{auth_token}}"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"username\": \"updateduser\",\n    \"role\": \"admin\",\n    \"session_limit\": 10,\n    \"is_active\": true\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/admin/users/{{user_id}}",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"admin",
+								"users",
+								"{{user_id}}"
+							]
+						},
+						"description": "Update user details (Admin only)."
+					},
+					"response": []
+				},
+				{
+					"name": "Delete User",
+					"request": {
+						"method": "DELETE",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{auth_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/admin/users/{{user_id}}",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"admin",
+								"users",
+								"{{user_id}}"
+							]
+						},
+						"description": "Delete a user (Admin only)."
+					},
+					"response": []
+				}
+			],
+			"description": "User management endpoints (Admin role required)."
+		},
+		{
+			"name": "🔧 Utility",
+			"item": [
+				{
+					"name": "Health Check",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/health",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"health"
+							]
+						},
+						"description": "Check API health status."
+					},
+					"response": []
+				}
+			],
+			"description": "Utility endpoints for health checks and system status."
+		}
+	],
+	"event": [
+		{
+			"listen": "prerequest",
+			"script": {
+				"type": "text/javascript",
+				"exec": [
+					"// Auto-refresh token if needed",
+					"const token = pm.environment.get('auth_token');",
+					"if (!token) {",
+					"    console.log('No auth token found. Please login first.');",
+					"}"
+				]
+			}
+		},
+		{
+			"listen": "test",
+			"script": {
+				"type": "text/javascript",
+				"exec": [
+					"// Global error handling",
+					"if (pm.response.code === 401) {",
+					"    console.log('Authentication failed. Please login again.');",
+					"} else if (pm.response.code === 403) {",
+					"    console.log('Forbidden. Check user permissions.');",
+					"} else if (pm.response.code >= 400) {",
+					"    console.log('Request failed:', pm.response.text());",
+					"}"
+				]
+			}
+		}
+	],
+	"variable": [
+		{
+			"key": "base_url",
+			"value": "http://localhost:8080",
+			"type": "string"
+		},
+		{
+			"key": "auth_token",
+			"value": "",
+			"type": "string"
+		},
+		{
+			"key": "session_id",
+			"value": "",
+			"type": "string"
+		},
+		{
+			"key": "user_id",
+			"value": "",
+			"type": "string"
+		},
+		{
+			"key": "expires_valid",
+			"value": "",
+			"type": "string"
+		},
+		{
+			"key": "expires_expired",
+			"value": "",
+			"type": "string"
+		}
+	]
 }
