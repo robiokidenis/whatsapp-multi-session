@@ -1,14 +1,14 @@
 import { useState, useEffect, useMemo } from 'react';
 import axios from 'axios';
+import { useNotification } from '../contexts/NotificationContext';
 
 const UserManagement = () => {
+  const { showSuccess, showError, showWarning } = useNotification();
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [roleFilter, setRoleFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('all');
-  const [message, setMessage] = useState('');
-  const [messageType, setMessageType] = useState('');
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [selectedUser, setSelectedUser] = useState(null);
@@ -58,29 +58,21 @@ const UserManagement = () => {
       if (response.data.success) {
         setUsers(response.data.data || []);
       } else {
-        showMessage('Failed to load users', 'error');
+        showError('Failed to load users');
       }
     } catch (error) {
-      showMessage('Error loading users', 'error');
+      showError('Error loading users');
     } finally {
       setLoading(false);
     }
   };
 
-  const showMessage = (text, type) => {
-    setMessage(text);
-    setMessageType(type);
-    setTimeout(() => {
-      setMessage('');
-      setMessageType('');
-    }, 4000);
-  };
 
   const handleCreateUser = async (e) => {
     e.preventDefault();
     
     if (!formData.username || !formData.password) {
-      showMessage('Username and password are required', 'error');
+      showError('Username and password are required');
       return;
     }
 
@@ -89,13 +81,13 @@ const UserManagement = () => {
       const response = await axios.post('/api/admin/users', formData);
 
       if (response.data.success) {
-        showMessage('User created successfully', 'success');
+        showSuccess('User created successfully');
         setShowCreateModal(false);
         setFormData({ username: '', password: '', role: 'user', session_limit: 5 });
         await loadUsers();
       }
     } catch (error) {
-      showMessage('Error creating user', 'error');
+      showError('Error creating user');
     } finally {
       setLoading(false);
     }
@@ -121,7 +113,7 @@ const UserManagement = () => {
     }
 
     if (Object.keys(updateData).length === 0) {
-      showMessage('No changes to update', 'warning');
+      showWarning('No changes to update');
       return;
     }
 
@@ -130,14 +122,14 @@ const UserManagement = () => {
       const response = await axios.put(`/api/admin/users/${selectedUser.id}`, updateData);
 
       if (response.data.success) {
-        showMessage('User updated successfully', 'success');
+        showSuccess('User updated successfully');
         setShowEditModal(false);
         setSelectedUser(null);
         setFormData({ username: '', password: '', role: 'user', session_limit: 5 });
         await loadUsers();
       }
     } catch (error) {
-      showMessage('Error updating user', 'error');
+      showError('Error updating user');
     } finally {
       setLoading(false);
     }
@@ -151,11 +143,11 @@ const UserManagement = () => {
       const response = await axios.delete(`/api/admin/users/${user.id}`);
 
       if (response.data.success) {
-        showMessage('User deleted successfully', 'success');
+        showSuccess('User deleted successfully');
         await loadUsers();
       }
     } catch (error) {
-      showMessage('Error deleting user', 'error');
+      showError('Error deleting user');
     } finally {
       setLoading(false);
     }
@@ -169,11 +161,11 @@ const UserManagement = () => {
       });
 
       if (response.data.success) {
-        showMessage(`User ${user.is_active ? 'deactivated' : 'activated'}`, 'success');
+        showSuccess(`User ${user.is_active ? 'deactivated' : 'activated'}`);
         await loadUsers();
       }
     } catch (error) {
-      showMessage('Error updating user status', 'error');
+      showError('Error updating user status');
     } finally {
       setLoading(false);
     }
@@ -202,7 +194,7 @@ const UserManagement = () => {
     });
     
     if (nonAdminUsers.length === 0) {
-      showMessage('Cannot delete admin users', 'error');
+      showError('Cannot delete admin users');
       return;
     }
     
@@ -213,11 +205,11 @@ const UserManagement = () => {
       await Promise.all(
         nonAdminUsers.map(id => axios.delete(`/api/admin/users/${id}`).catch(() => null))
       );
-      showMessage(`Deleted ${nonAdminUsers.length} users`, 'success');
+      showSuccess(`Deleted ${nonAdminUsers.length} users`);
       setSelectedUsers([]);
       await loadUsers();
     } catch (error) {
-      showMessage('Bulk delete failed', 'error');
+      showError('Bulk delete failed');
     } finally {
       setBulkActionLoading(false);
     }
@@ -354,21 +346,6 @@ const UserManagement = () => {
           </div>
         </div>
 
-        {/* Message Alert */}
-        {message && (
-          <div className={`card p-4 mb-6 border-l-4 ${
-            messageType === 'error' ? 'border-l-error' : 
-            messageType === 'warning' ? 'border-l-warning' : 'border-l-success'
-          }`}>
-            <div className="flex items-center gap-3">
-              <div className={`status-dot ${
-                messageType === 'error' ? 'status-dot-error' : 
-                messageType === 'warning' ? 'status-dot-warning' : 'status-dot-success'
-              }`}></div>
-              <span className="text-body">{message}</span>
-            </div>
-          </div>
-        )}
 
         {/* Search */}
         <div className="card p-6 mb-8">

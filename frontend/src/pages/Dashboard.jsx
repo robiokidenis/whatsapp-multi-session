@@ -6,12 +6,12 @@ import SendMessageModal from "../components/SendMessageModal";
 import EditSessionModal from "../components/EditSessionModal";
 import CreateSessionModal from "../components/CreateSessionModal";
 import { useAuth } from "../contexts/AuthContext";
+import { useNotification } from "../contexts/NotificationContext";
 
 const Dashboard = () => {
   const { user } = useAuth();
+  const { showSuccess, showError, showWarning } = useNotification();
   const [sessions, setSessions] = useState([]);
-  const [message, setMessage] = useState("");
-  const [messageType, setMessageType] = useState("");
   const [qrModal, setQrModal] = useState({ show: false, session: null });
   const [sendModal, setSendModal] = useState({ show: false, session: null });
   const [editModal, setEditModal] = useState({ show: false, session: null });
@@ -36,7 +36,7 @@ const Dashboard = () => {
       setSessions(response.data.data || []);
     } catch (error) {
       console.error("Error loading sessions:", error);
-      showMessage("Failed to load sessions", "error");
+      showError("Failed to load sessions");
     } finally {
       setIsLoading(false);
     }
@@ -72,7 +72,7 @@ const Dashboard = () => {
   }, [sessions, searchTerm, statusFilter]);
 
   const handleCreateSuccess = async (message) => {
-    showMessage(message, "success");
+    showSuccess(message);
     await loadSessions();
   };
 
@@ -80,32 +80,24 @@ const Dashboard = () => {
     if (!window.confirm("Delete this session?")) return;
     try {
       await axios.delete(`/api/sessions/${id}`);
-      showMessage("Session deleted", "success");
+      showSuccess("Session deleted");
       await loadSessions();
     } catch (error) {
-      showMessage("Failed to delete session", "error");
+      showError("Failed to delete session");
     }
   };
 
   const logoutSession = async (id) => {
     try {
       await axios.post(`/api/sessions/${id}/logout`);
-      showMessage("Session logged out", "success");
+      showSuccess("Session logged out");
     } catch (error) {
-      showMessage("Logout completed", "warning");
+      showWarning("Logout completed");
     } finally {
       await loadSessions();
     }
   };
 
-  const showMessage = (text, type) => {
-    setMessage(text);
-    setMessageType(type);
-    setTimeout(() => {
-      setMessage("");
-      setMessageType("");
-    }, 4000);
-  };
 
   const handleSelectSession = (sessionId) => {
     setSelectedSessions((prev) =>
@@ -134,11 +126,11 @@ const Dashboard = () => {
           axios.delete(`/api/sessions/${id}`).catch(() => null)
         )
       );
-      showMessage(`Deleted ${selectedSessions.length} sessions`, "success");
+      showSuccess(`Deleted ${selectedSessions.length} sessions`);
       setSelectedSessions([]);
       await loadSessions();
     } catch (error) {
-      showMessage("Bulk delete failed", "error");
+      showError("Bulk delete failed");
     } finally {
       setBulkActionLoading(false);
     }
@@ -155,7 +147,7 @@ const Dashboard = () => {
     setSessions((prev) =>
       prev.map((s) => (s.id === updatedSession.id ? updatedSession : s))
     );
-    showMessage("Session updated", "success");
+    showSuccess("Session updated");
   };
 
   if (isLoading && sessions.length === 0) {
@@ -305,51 +297,6 @@ const Dashboard = () => {
           </div>
         </div>
 
-        {/* CRM Message Alert */}
-        {message && (
-          <div
-            className={`card-elevated mb-6 border-l-4 ${
-              messageType === "error"
-                ? "border-l-error"
-                : messageType === "warning"
-                ? "border-l-warning"
-                : "border-l-success"
-            }`}
-          >
-            <div className="card-body">
-              <div className="flex items-center gap-3">
-                <div
-                  className={`status-dot ${
-                    messageType === "error"
-                      ? "status-dot-error"
-                      : messageType === "warning"
-                      ? "status-dot-warning"
-                      : "status-dot-success"
-                  }`}
-                ></div>
-                <span className="text-body-medium">{message}</span>
-                <button
-                  onClick={() => setMessage("")}
-                  className="ml-auto p-1 text-gray-400 hover:text-gray-600 transition-colors"
-                >
-                  <svg
-                    className="w-4 h-4"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M6 18L18 6M6 6l12 12"
-                    />
-                  </svg>
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
 
         {/* CRM Search & Filters */}
         <div className="card mb-6">
@@ -581,7 +528,7 @@ const Dashboard = () => {
         <SendMessageModal
           session={sendModal.session}
           onClose={closeSendModal}
-          onSuccess={() => showMessage("Message sent", "success")}
+          onSuccess={() => showSuccess("Message sent")}
         />
       )}
 

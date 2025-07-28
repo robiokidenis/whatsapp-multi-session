@@ -34,12 +34,12 @@ import (
 
 // WhatsAppService manages WhatsApp clients and sessions
 type WhatsAppService struct {
-	sessions       map[string]*models.Session
-	store          *sqlstore.Container
-	sessionRepo    *repository.SessionRepository
-	logger         *logger.Logger
-	mu             sync.RWMutex
-	eventHandlers  map[string]func(*events.Message)
+	sessions      map[string]*models.Session
+	store         *sqlstore.Container
+	sessionRepo   *repository.SessionRepository
+	logger        *logger.Logger
+	mu            sync.RWMutex
+	eventHandlers map[string]func(*events.Message)
 }
 
 // UserAgentData contains browser and OS information for randomization
@@ -52,8 +52,9 @@ type UserAgentData struct {
 
 // predefined user agents for randomization
 var userAgents = []UserAgentData{
+	// Existing entries
 	{"Chrome", "120.0.6099.71", "Windows", "10.0"},
-	{"Chrome", "119.0.6045.159", "Windows", "11.0"}, 
+	{"Chrome", "119.0.6045.159", "Windows", "11.0"},
 	{"Chrome", "120.0.6099.71", "macOS", "14.1"},
 	{"Chrome", "119.0.6045.199", "macOS", "13.6"},
 	{"Firefox", "121.0", "Windows", "10.0"},
@@ -63,6 +64,44 @@ var userAgents = []UserAgentData{
 	{"Edge", "119.0.2151.97", "Windows", "11.0"},
 	{"Safari", "17.1", "macOS", "14.1"},
 	{"Safari", "16.6", "macOS", "13.6"},
+
+	// New Chrome entries
+	{"Chrome", "123.0.6312.86", "Windows", "11.0"},
+	{"Chrome", "122.0.6261.129", "macOS", "14.0"},
+	{"Chrome", "121.0.6167.139", "macOS", "12.7"},
+	{"Chrome", "120.0.6099.109", "Windows", "10.0"},
+	{"Chrome", "119.0.6045.200", "Linux", "Ubuntu 22.04"},
+
+	// New Firefox entries
+	{"Firefox", "124.0", "Windows", "11.0"},
+	{"Firefox", "123.0.1", "macOS", "13.5"},
+	{"Firefox", "122.0.1", "Linux", "Debian 12"},
+	{"Firefox", "121.0.1", "Windows", "10.0"},
+	{"Firefox", "120.0", "macOS", "11.6"},
+
+	// New Edge entries
+	{"Edge", "123.0.2420.65", "Windows", "11.0"},
+	{"Edge", "122.0.2365.66", "Windows", "10.0"},
+	{"Edge", "121.0.2277.89", "macOS", "13.6"},
+	{"Edge", "120.0.2210.95", "Windows", "11.0"},
+
+	// Safari updates (macOS only)
+	{"Safari", "17.5", "macOS", "14.4"},
+	{"Safari", "16.3", "macOS", "12.6"},
+	{"Safari", "15.6", "macOS", "11.7"},
+	{"Safari", "14.1.2", "macOS", "10.15"},
+
+	// Brave (Chromium-based)
+	{"Brave", "1.65.132", "Windows", "11.0"},
+	{"Brave", "1.64.113", "macOS", "14.0"},
+
+	// Vivaldi (Chromium-based)
+	{"Vivaldi", "6.7.3329.19", "Windows", "10.0"},
+	{"Vivaldi", "6.6.3271.55", "Linux", "Fedora 39"},
+
+	// Opera (Chromium-based)
+	{"Opera", "108.0.5067.29", "Windows", "11.0"},
+	{"Opera", "106.0.4998.66", "macOS", "13.4"},
 }
 
 func init() {
@@ -88,7 +127,7 @@ func (s *WhatsAppService) getRandomUserAgent() UserAgentData {
 // setRandomDeviceProps sets random device properties for a session
 func (s *WhatsAppService) setRandomDeviceProps(deviceStore *store.Device) {
 	ua := s.getRandomUserAgent()
-	
+
 	// Set browser type based on random selection
 	switch ua.Browser {
 	case "Chrome":
@@ -102,7 +141,7 @@ func (s *WhatsAppService) setRandomDeviceProps(deviceStore *store.Device) {
 	default:
 		store.DeviceProps.PlatformType = waCompanionReg.DeviceProps_CHROME.Enum()
 	}
-	
+
 	// Set OS
 	switch ua.OS {
 	case "Windows":
@@ -112,9 +151,9 @@ func (s *WhatsAppService) setRandomDeviceProps(deviceStore *store.Device) {
 	default:
 		store.DeviceProps.Os = proto.String("Windows")
 	}
-	
+
 	// Log the selected user agent for debugging
-	s.logger.Info("Using random user agent - Browser: %s %s, OS: %s %s", 
+	s.logger.Info("Using random user agent - Browser: %s %s, OS: %s %s",
 		ua.Browser, ua.Version, ua.OS, ua.OSVersion)
 }
 
@@ -130,11 +169,25 @@ func NewWhatsAppService(
 		return nil, fmt.Errorf("failed to create WhatsApp database directory: %v", err)
 	}
 
-	// Create WhatsApp store with foreign keys enabled
+	// Check if WhatsApp database exists and might be corrupted
+	// If there are consistent foreign key errors, we might need to recreate it
+	if _, err := os.Stat(dbPath); err == nil {
+		log.Info("WhatsApp database exists, using existing: %s", dbPath)
+	}
+
+	// Create WhatsApp store - whatsmeow requires foreign keys for database upgrades
 	waLogger := waLog.Stdout("Store", "INFO", true)
+	
+	// Try with foreign keys enabled (required by whatsmeow)
 	connectionString := fmt.Sprintf("file:%s?_foreign_keys=on", dbPath)
 	container, err := sqlstore.New(context.Background(), "sqlite3", connectionString, waLogger)
 	if err != nil {
+		// If foreign key error occurs, it might be due to corrupted database
+		if strings.Contains(err.Error(), "foreign key") || strings.Contains(err.Error(), "constraint") {
+			log.Error("WhatsApp database has foreign key issues: %v", err)
+			log.Info("💡 To fix this issue, run: ./reset-whatsapp-db.sh")
+			log.Info("⚠️  This will require re-authentication of all WhatsApp sessions")
+		}
 		return nil, fmt.Errorf("failed to create WhatsApp store: %v", err)
 	}
 
@@ -178,22 +231,30 @@ func (s *WhatsAppService) CreateSession(req *models.CreateSessionRequest, userID
 		// This would need to be enhanced to get user's actual session limit from database
 		// For now, we'll use a default limit
 		sessionLimit := 5 // This should come from user's record
-		
+
 		if currentSessionCount >= sessionLimit {
 			return nil, fmt.Errorf("session limit reached. You can create maximum %d sessions", sessionLimit)
 		}
 	}
 
-	// Create device store
+	// Create device store with error handling
 	deviceStore := s.store.NewDevice()
-	
+	if deviceStore == nil {
+		return nil, fmt.Errorf("failed to create device store for session %s", sessionID)
+	}
+
 	// Set random device properties for this session
 	s.setRandomDeviceProps(deviceStore)
-	
-	// Create WhatsApp client
+
+	// Create WhatsApp client with error handling
 	clientLog := waLog.Stdout("Client", "INFO", true)
 	client := whatsmeow.NewClient(deviceStore, clientLog)
-	
+
+	// Validate the client was created successfully
+	if client == nil {
+		return nil, fmt.Errorf("failed to create WhatsApp client for session %s", sessionID)
+	}
+
 	// Enable auto-reconnect like in original
 	client.EnableAutoReconnect = true
 	client.AutoTrustIdentity = true
@@ -240,7 +301,7 @@ func (s *WhatsAppService) CreateSession(req *models.CreateSessionRequest, userID
 func (s *WhatsAppService) GetSession(sessionID string) (*models.Session, bool) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	
+
 	session, exists := s.sessions[sessionID]
 	return session, exists
 }
@@ -249,12 +310,12 @@ func (s *WhatsAppService) GetSession(sessionID string) (*models.Session, bool) {
 func (s *WhatsAppService) GetAllSessions() []*models.Session {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	
+
 	sessions := make([]*models.Session, 0, len(s.sessions))
 	for _, session := range s.sessions {
 		sessions = append(sessions, session)
 	}
-	
+
 	return sessions
 }
 
@@ -262,7 +323,7 @@ func (s *WhatsAppService) GetAllSessions() []*models.Session {
 func (s *WhatsAppService) FindSessionByPhone(phoneIdentifier string) string {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	
+
 	// Try to find session by various identifiers
 	for _, session := range s.sessions {
 		if session.ID == phoneIdentifier ||
@@ -272,7 +333,7 @@ func (s *WhatsAppService) FindSessionByPhone(phoneIdentifier string) string {
 			return session.ID
 		}
 	}
-	
+
 	return ""
 }
 
@@ -379,7 +440,7 @@ func (s *WhatsAppService) LoginSession(sessionID string) error {
 		if err := s.ConnectSession(sessionID); err != nil {
 			return fmt.Errorf("failed to connect session for login: %v", err)
 		}
-		
+
 		// Wait a bit for connection to establish
 		time.Sleep(2 * time.Second)
 	}
@@ -480,12 +541,12 @@ func (s *WhatsAppService) UpdateSession(sessionID string, req *models.UpdateSess
 
 	// Update in database
 	metadata := &models.SessionMetadata{
-		ID:         sessionID,
-		Phone:      session.Phone,
+		ID:          sessionID,
+		Phone:       session.Phone,
 		ActualPhone: session.ActualPhone,
-		Name:       session.Name,
-		Position:   req.Position,
-		WebhookURL: session.WebhookURL,
+		Name:        session.Name,
+		Position:    req.Position,
+		WebhookURL:  session.WebhookURL,
 	}
 
 	return s.sessionRepo.Update(metadata)
@@ -499,12 +560,12 @@ func (s *WhatsAppService) setupEventHandlers(session *models.Session) {
 			s.mu.Lock()
 			session.Connected = true
 			session.LoggedIn = session.Client.IsLoggedIn()
-			
+
 			// Update actual phone number if logged in (like original)
 			if session.Client.IsLoggedIn() && session.Client.Store.ID != nil {
 				session.ActualPhone = session.Client.Store.ID.User + "@s.whatsapp.net"
 				s.logger.Info("Session %s actual phone: %s", session.ID, session.ActualPhone)
-				
+
 				// Save updated metadata
 				go func() {
 					metadata := &models.SessionMetadata{
@@ -521,14 +582,14 @@ func (s *WhatsAppService) setupEventHandlers(session *models.Session) {
 				}()
 			}
 			s.mu.Unlock()
-			
+
 			s.logger.Info("Session %s connected", session.ID)
 
 		case *events.Disconnected:
 			s.mu.Lock()
 			session.Connected = false
 			s.mu.Unlock()
-			
+
 			s.logger.Info("Session %s disconnected", session.ID)
 
 		case *events.LoggedOut:
@@ -536,9 +597,9 @@ func (s *WhatsAppService) setupEventHandlers(session *models.Session) {
 			session.LoggedIn = false
 			session.ActualPhone = ""
 			s.mu.Unlock()
-			
+
 			s.logger.Info("Session %s logged out", session.ID)
-			
+
 			// Update database to clear actual phone
 			go func() {
 				metadata := &models.SessionMetadata{
@@ -559,7 +620,7 @@ func (s *WhatsAppService) setupEventHandlers(session *models.Session) {
 			if handler, exists := s.eventHandlers[session.ID]; exists {
 				handler(v)
 			}
-			
+
 			// Send webhook if configured
 			if session.WebhookURL != "" {
 				go s.sendWebhook(session, v)
@@ -572,7 +633,7 @@ func (s *WhatsAppService) setupEventHandlers(session *models.Session) {
 func (s *WhatsAppService) SetMessageHandler(sessionID string, handler func(*events.Message)) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	
+
 	s.eventHandlers[sessionID] = handler
 }
 
@@ -585,7 +646,7 @@ func (s *WhatsAppService) loadExistingSessions() error {
 
 	for _, metadata := range metadatas {
 		s.logger.Info("Restoring session %s (%s)", metadata.ID, metadata.Name)
-		
+
 		// Find existing device in store (like original)
 		var deviceStore *store.Device
 		devices, err := s.store.GetAllDevices(context.Background())
@@ -609,33 +670,33 @@ func (s *WhatsAppService) loadExistingSessions() error {
 				}
 			}
 		}
-		
+
 		// If no existing device found, create new one (will need re-authentication)
 		if deviceStore == nil {
 			deviceStore = s.store.NewDevice()
 			s.logger.Info("Created new device for session %s (will need re-authentication)", metadata.ID)
 		}
-		
+
 		// Create WhatsApp client
 		clientLog := waLog.Stdout("Client:"+metadata.ID, "INFO", true)
 		client := whatsmeow.NewClient(deviceStore, clientLog)
-		
+
 		// Enable auto-reconnect like in original
 		client.EnableAutoReconnect = true
 		client.AutoTrustIdentity = true
 
 		// Create session
 		session := &models.Session{
-			ID:         metadata.ID,
-			Phone:      metadata.Phone,
+			ID:          metadata.ID,
+			Phone:       metadata.Phone,
 			ActualPhone: metadata.ActualPhone,
-			Name:       metadata.Name,
-			Position:   metadata.Position,
-			WebhookURL: metadata.WebhookURL,
-			Client:     client,
-			Connected:  false,
-			LoggedIn:   false,
-			Connecting: false,
+			Name:        metadata.Name,
+			Position:    metadata.Position,
+			WebhookURL:  metadata.WebhookURL,
+			Client:      client,
+			Connected:   false,
+			LoggedIn:    false,
+			Connecting:  false,
 		}
 
 		// Set up event handlers
@@ -643,13 +704,13 @@ func (s *WhatsAppService) loadExistingSessions() error {
 
 		// Store in memory
 		s.sessions[metadata.ID] = session
-		
+
 		// Try to connect if device has stored credentials (like original)
 		if deviceStore != nil && deviceStore.ID != nil {
 			go func(sessionID string, client *whatsmeow.Client) {
 				// Wait a bit before connecting to ensure everything is initialized
 				time.Sleep(2 * time.Second)
-				
+
 				s.logger.Info("Auto-connecting restored session %s with JID %s", sessionID, deviceStore.ID.String())
 				err := client.Connect()
 				if err != nil {
@@ -704,21 +765,21 @@ func (s *WhatsAppService) SendMessage(sessionID string, req *models.SendMessageR
 
 	// Format recipient JID like original implementation
 	recipientJID := req.To
-	
+
 	// Check if it's a phone number (contains only digits and +)
 	if !strings.Contains(req.To, "@") {
 		phoneNumber := strings.ReplaceAll(req.To, "+", "")
 		phoneNumber = strings.ReplaceAll(phoneNumber, " ", "")
 		phoneNumber = strings.ReplaceAll(phoneNumber, "-", "")
-		
+
 		if len(phoneNumber) < 8 || len(phoneNumber) > 15 {
 			return "", fmt.Errorf("invalid phone number length. Should be 8-15 digits")
 		}
-		
+
 		// Add @s.whatsapp.net if not present
 		recipientJID = phoneNumber + "@s.whatsapp.net"
 	}
-	
+
 	s.logger.Debug("Formatted recipient JID: %s", recipientJID)
 
 	// Parse recipient JID
@@ -759,21 +820,21 @@ func (s *WhatsAppService) SendLocation(sessionID string, req *models.SendLocatio
 
 	// Format recipient JID like original implementation
 	recipientJID := req.To
-	
+
 	// Check if it's a phone number (contains only digits and +)
 	if !strings.Contains(req.To, "@") {
 		phoneNumber := strings.ReplaceAll(req.To, "+", "")
 		phoneNumber = strings.ReplaceAll(phoneNumber, " ", "")
 		phoneNumber = strings.ReplaceAll(phoneNumber, "-", "")
-		
+
 		if len(phoneNumber) < 8 || len(phoneNumber) > 15 {
 			return "", fmt.Errorf("invalid phone number length. Should be 8-15 digits")
 		}
-		
+
 		// Add @s.whatsapp.net if not present
 		recipientJID = phoneNumber + "@s.whatsapp.net"
 	}
-	
+
 	s.logger.Debug("Formatted recipient JID for location: %s", recipientJID)
 
 	// Parse recipient JID
@@ -817,17 +878,17 @@ func (s *WhatsAppService) SendAttachment(sessionID string, req *models.SendFileR
 
 	// Format recipient JID like original implementation
 	recipientJID := req.To
-	
+
 	// Check if it's a phone number (contains only digits and +)
 	if !strings.Contains(req.To, "@") {
 		phoneNumber := strings.ReplaceAll(req.To, "+", "")
 		phoneNumber = strings.ReplaceAll(phoneNumber, " ", "")
 		phoneNumber = strings.ReplaceAll(phoneNumber, "-", "")
-		
+
 		if len(phoneNumber) < 8 || len(phoneNumber) > 15 {
 			return "", fmt.Errorf("invalid phone number length. Should be 8-15 digits")
 		}
-		
+
 		// Add @s.whatsapp.net if not present
 		recipientJID = phoneNumber + "@s.whatsapp.net"
 	}
@@ -898,11 +959,11 @@ func (s *WhatsAppService) SendFileFromURL(sessionID string, req *models.SendFile
 		phoneNumber := strings.ReplaceAll(req.To, "+", "")
 		phoneNumber = strings.ReplaceAll(phoneNumber, " ", "")
 		phoneNumber = strings.ReplaceAll(phoneNumber, "-", "")
-		
+
 		if len(phoneNumber) < 8 || len(phoneNumber) > 15 {
 			return "", fmt.Errorf("invalid phone number length. Should be 8-15 digits")
 		}
-		
+
 		recipientJID = phoneNumber + "@s.whatsapp.net"
 	}
 
@@ -924,7 +985,7 @@ func (s *WhatsAppService) SendFileFromURL(sessionID string, req *models.SendFile
 
 	// Determine media type
 	mediaType := s.getMediaType(contentType, req.Type)
-	
+
 	// Send based on media type
 	return s.sendMediaByType(session, jid, fileData, contentType, filename, req.Caption, mediaType)
 }
@@ -950,11 +1011,11 @@ func (s *WhatsAppService) SendImage(sessionID string, req *models.SendImageReque
 		phoneNumber := strings.ReplaceAll(req.To, "+", "")
 		phoneNumber = strings.ReplaceAll(phoneNumber, " ", "")
 		phoneNumber = strings.ReplaceAll(phoneNumber, "-", "")
-		
+
 		if len(phoneNumber) < 8 || len(phoneNumber) > 15 {
 			return "", fmt.Errorf("invalid phone number length. Should be 8-15 digits")
 		}
-		
+
 		recipientJID = phoneNumber + "@s.whatsapp.net"
 	}
 
@@ -1033,7 +1094,7 @@ func (s *WhatsAppService) downloadFile(url string) ([]byte, string, string, erro
 
 	// Extract filename from URL or Content-Disposition
 	filename := s.extractFilename(url, resp.Header.Get("Content-Disposition"))
-	
+
 	// Save file locally
 	localPath := filepath.Join(downloadsDir, filename)
 	if err := os.WriteFile(localPath, fileData, 0644); err != nil {
@@ -1096,7 +1157,7 @@ func (s *WhatsAppService) getMediaType(contentType, requestedType string) string
 // sendMediaByType sends media based on the determined type
 func (s *WhatsAppService) sendMediaByType(session *models.Session, jid types.JID, fileData []byte, contentType, filename, caption, mediaType string) (string, error) {
 	ctx := context.Background()
-	
+
 	switch mediaType {
 	case "image":
 		uploaded, err := session.Client.Upload(ctx, fileData, whatsmeow.MediaImage)
@@ -1144,7 +1205,7 @@ func (s *WhatsAppService) sendMediaByType(session *models.Session, jid types.JID
 			},
 		}
 
-		if caption != "" {  
+		if caption != "" {
 			msg.VideoMessage.Caption = proto.String(caption)
 		}
 

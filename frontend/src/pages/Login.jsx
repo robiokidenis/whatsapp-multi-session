@@ -1,15 +1,16 @@
 import { useState, useEffect } from 'react';
 import { Navigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
+import { useNotification } from '../contexts/NotificationContext';
 
 const Login = () => {
   const { login, isAuthenticated } = useAuth();
+  const { showError } = useNotification();
   const [formData, setFormData] = useState({
     username: '',
     password: '',
   });
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(false);
   const [mounted, setMounted] = useState(false);
@@ -32,12 +33,11 @@ const Login = () => {
     e.preventDefault();
     
     if (!formData.username || !formData.password) {
-      setError('Please enter username and password');
+      showError('Please enter username and password');
       return;
     }
 
     setLoading(true);
-    setError('');
 
     // Save username if remember me is checked
     if (rememberMe) {
@@ -49,7 +49,7 @@ const Login = () => {
     const result = await login(formData.username, formData.password);
     
     if (!result.success) {
-      setError(result.error);
+      showError(result.error);
       
       // Add shake animation on error
       const form = e.target;
@@ -169,14 +169,6 @@ const Login = () => {
                 </a>
               </div>
 
-              {error && (
-                <div className="bg-red-50 border border-red-200 text-red-700 px-3 py-2 rounded-lg animate-slideDown">
-                  <div className="flex items-center">
-                    <i className="fas fa-exclamation-triangle mr-2 text-red-500 text-sm"></i>
-                    <span className="font-medium text-xs">{error}</span>
-                  </div>
-                </div>
-              )}
 
               <button
                 type="submit"
