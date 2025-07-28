@@ -19,7 +19,7 @@ import (
 )
 
 func main() {
-	// Load configuration
+	// Load configuration (will use environment variables if set, otherwise defaults)
 	cfg := config.Load()
 
 	// Initialize logger

@@ -90,6 +90,14 @@ update: ## Update and redeploy
 up: start ## Alias for start
 down: stop ## Alias for stop
 
+# Development commands for local run
+run: ## Run the application locally (loads .env)
+	@echo "🚀 Running application locally..."
+	@go run main.go
+
+run-watch: ## Run with auto-reload (requires air)
+	@echo "🚀 Running with auto-reload..."
+	@air
 
 kill:
 	@PID=$$(lsof -ti tcp:8080); \
