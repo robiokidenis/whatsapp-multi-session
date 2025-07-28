@@ -1,5 +1,5 @@
 const SessionCard = ({ session, onShowQR, onSendMessage, onLogout, onDelete, onEdit }) => {
-  const isConnected = session.status === 'Connected' || session.connected;
+  const isConnected = (session.status === 'Connected' || session.connected) && session.logged_in;
   const isLoggedIn = session.logged_in;
 
   return (

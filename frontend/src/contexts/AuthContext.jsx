@@ -68,7 +68,7 @@ export const AuthProvider = ({ children }) => {
       });
 
       if (response.data.success) {
-        const { token: newToken, user: userData } = response.data;
+        const { token: newToken, user: userData } = response.data.data;
         
         localStorage.setItem('auth_token', newToken);
         localStorage.setItem('user_data', JSON.stringify(userData));

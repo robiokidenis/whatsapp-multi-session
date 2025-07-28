@@ -56,7 +56,8 @@ const QRModal = ({ session, onClose, onSuccess }) => {
     wsRef.current = new WebSocket(wsUrl);
     
     wsRef.current.onopen = () => {
-      console.log('WebSocket connection opened');
+      console.log('✅ WebSocket connection opened for session:', session.id);
+      setError(''); // Clear any previous errors when connection opens
     };
     
     wsRef.current.onmessage = (event) => {
@@ -81,11 +82,15 @@ const QRModal = ({ session, onClose, onSuccess }) => {
           onSuccess();
           onClose();
         } else if (data.type === 'error') {
-          console.log('❌ Error message received:', data.error);
+          console.log('❌ Error message received:', data.data?.error || data.error);
           setLoading(false);
-          setError(data.error);
+          setError(data.data?.error || data.error);
+        } else if (data.type === 'qr_timeout') {
+          console.log('⏰ QR timeout received');
+          setLoading(false);
+          setError('QR code expired. Please try again.');
         } else {
-          console.log('❓ Unknown message type:', data.type);
+          console.log('❓ Unknown message type:', data.type, 'Data:', data);
         }
       } catch (parseError) {
         console.error('Failed to parse WebSocket message:', parseError);

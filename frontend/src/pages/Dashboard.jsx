@@ -121,13 +121,14 @@ const Dashboard = () => {
     showMessage('Session updated successfully!', 'success');
   };
 
-  // Filter sessions based on search and status
+  // Filter sessions based on search and status  
   const filteredSessions = sessions.filter(session => {
     const matchesSearch = session.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          session.phone?.toLowerCase().includes(searchTerm.toLowerCase());
+    const isConnectedAndAuthenticated = (session.status === 'Connected' || session.connected) && session.logged_in;
     const matchesStatus = statusFilter === 'all' || 
-                         (statusFilter === 'connected' && session.status === 'Connected') ||
-                         (statusFilter === 'disconnected' && session.status !== 'Connected');
+                         (statusFilter === 'connected' && isConnectedAndAuthenticated) ||
+                         (statusFilter === 'disconnected' && !isConnectedAndAuthenticated);
     return matchesSearch && matchesStatus;
   });
 
@@ -244,12 +245,12 @@ const Dashboard = () => {
           </div>
           <div className="bg-gray-50 px-4 py-2 rounded-lg border border-gray-200">
             <span className="text-gray-700 font-medium">
-              Connected: {sessions.filter(s => s.status === 'Connected').length}
+              Connected: {sessions.filter(s => (s.status === 'Connected' || s.connected) && s.logged_in).length}
             </span>
           </div>
           <div className="bg-gray-50 px-4 py-2 rounded-lg border border-gray-200">
             <span className="text-gray-700 font-medium">
-              Disconnected: {sessions.filter(s => s.status !== 'Connected').length}
+              Disconnected: {sessions.filter(s => !((s.status === 'Connected' || s.connected) && s.logged_in)).length}
             </span>
           </div>
           <div className="bg-gray-50 px-4 py-2 rounded-lg border border-gray-200">

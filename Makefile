@@ -1,4 +1,4 @@
-.PHONY: help init setup deploy start stop restart logs status clean fix-permissions build
+.PHONY: help init setup deploy start stop restart logs status clean fix-permissions build kill
 
 # Default target
 help: ## Show this help message
@@ -89,3 +89,13 @@ update: ## Update and redeploy
 # Quick commands
 up: start ## Alias for start
 down: stop ## Alias for stop
+
+
+kill:
+	@PID=$$(lsof -ti tcp:8080); \
+	if [ -n "$$PID" ]; then \
+		echo "Killing process on port 8080 (PID: $$PID)"; \
+		kill -9 $$PID; \
+	else \
+		echo "No process found on port 8080"; \
+	fi

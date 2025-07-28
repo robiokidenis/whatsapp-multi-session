@@ -91,53 +91,45 @@ func (h *SessionHandler) CreateSession(w http.ResponseWriter, r *http.Request) {
 	session, err := h.whatsappService.CreateSession(&req, userID, role)
 	if err != nil {
 		h.logger.Error("Failed to create session: %v", err)
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		HandleErrorWithMessage(w, http.StatusInternalServerError, err.Error(), models.ErrCodeInternalServer)
 		return
 	}
 
 	// Convert to response
 	response := &models.SessionResponse{
-		ID:         session.ID,
-		Phone:      session.Phone,
+		ID:          session.ID,
+		Phone:       session.Phone,
 		ActualPhone: session.ActualPhone,
-		Name:       session.Name,
-		Position:   session.Position,
-		WebhookURL: session.WebhookURL,
-		Connected:  session.Connected,
-		LoggedIn:   session.LoggedIn,
+		Name:        session.Name,
+		Position:    session.Position,
+		WebhookURL:  session.WebhookURL,
+		Connected:   session.Connected,
+		LoggedIn:    session.LoggedIn,
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]interface{}{
-		"success": true,
-		"data":    response,
-	})
+	WriteSuccessResponse(w, "Session created successfully", response)
 }
 
 // GetSessions handles getting all sessions
 func (h *SessionHandler) GetSessions(w http.ResponseWriter, r *http.Request) {
 	sessions := h.whatsappService.GetAllSessions()
-	
+
 	// Convert to response format
 	responses := make([]*models.SessionResponse, len(sessions))
 	for i, session := range sessions {
 		responses[i] = &models.SessionResponse{
-			ID:         session.ID,
-			Phone:      session.Phone,
+			ID:          session.ID,
+			Phone:       session.Phone,
 			ActualPhone: session.ActualPhone,
-			Name:       session.Name,
-			Position:   session.Position,
-			WebhookURL: session.WebhookURL,
-			Connected:  session.Connected,
-			LoggedIn:   session.LoggedIn,
+			Name:        session.Name,
+			Position:    session.Position,
+			WebhookURL:  session.WebhookURL,
+			Connected:   session.Connected,
+			LoggedIn:    session.LoggedIn,
 		}
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]interface{}{
-		"success": true,
-		"data":    responses,
-	})
+	WriteSuccessResponse(w, "Sessions retrieved successfully", responses)
 }
 
 // GetSession handles getting a specific session
@@ -147,26 +139,22 @@ func (h *SessionHandler) GetSession(w http.ResponseWriter, r *http.Request) {
 
 	session, exists := h.whatsappService.GetSession(sessionID)
 	if !exists {
-		http.Error(w, "Session not found", http.StatusNotFound)
+		HandleErrorWithMessage(w, http.StatusNotFound, "Session not found", models.ErrCodeNotFound)
 		return
 	}
 
 	response := &models.SessionResponse{
-		ID:         session.ID,
-		Phone:      session.Phone,
+		ID:          session.ID,
+		Phone:       session.Phone,
 		ActualPhone: session.ActualPhone,
-		Name:       session.Name,
-		Position:   session.Position,
-		WebhookURL: session.WebhookURL,
-		Connected:  session.Connected,
-		LoggedIn:   session.LoggedIn,
+		Name:        session.Name,
+		Position:    session.Position,
+		WebhookURL:  session.WebhookURL,
+		Connected:   session.Connected,
+		LoggedIn:    session.LoggedIn,
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]interface{}{
-		"success": true,
-		"data":    response,
-	})
+	WriteSuccessResponse(w, "Session retrieved successfully", response)
 }
 
 // ConnectSession handles session connection
@@ -176,12 +164,11 @@ func (h *SessionHandler) ConnectSession(w http.ResponseWriter, r *http.Request) 
 
 	if err := h.whatsappService.ConnectSession(sessionID); err != nil {
 		h.logger.Error("Failed to connect session %s: %v", sessionID, err)
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		HandleError(w, err)
 		return
 	}
 
-	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(map[string]string{"message": "Connection initiated"})
+	WriteSuccessResponse(w, "Connection initiated", nil)
 }
 
 // DisconnectSession handles session disconnection
@@ -191,12 +178,11 @@ func (h *SessionHandler) DisconnectSession(w http.ResponseWriter, r *http.Reques
 
 	if err := h.whatsappService.DisconnectSession(sessionID); err != nil {
 		h.logger.Error("Failed to disconnect session %s: %v", sessionID, err)
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		HandleError(w, err)
 		return
 	}
 
-	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(map[string]string{"message": "Session disconnected"})
+	WriteSuccessResponse(w, "Session disconnected", nil)
 }
 
 // DeleteSession handles session deletion
@@ -206,12 +192,11 @@ func (h *SessionHandler) DeleteSession(w http.ResponseWriter, r *http.Request) {
 
 	if err := h.whatsappService.DeleteSession(sessionID); err != nil {
 		h.logger.Error("Failed to delete session %s: %v", sessionID, err)
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		HandleError(w, err)
 		return
 	}
 
-	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(map[string]string{"message": "Session deleted"})
+	WriteSuccessResponse(w, "Session deleted successfully", nil)
 }
 
 // GetQRCode handles QR code generation
@@ -276,15 +261,12 @@ func (h *SessionHandler) SendMessage(w http.ResponseWriter, r *http.Request) {
 	messageID, err := h.whatsappService.SendMessage(sessionID, &req)
 	if err != nil {
 		h.logger.Error("Failed to send message from session %s: %v", sessionID, err)
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		HandleError(w, err)
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]interface{}{
-		"success": true,
-		"id":      messageID,
-		"message": "Message sent successfully",
+	WriteSuccessResponse(w, "Message sent successfully", map[string]interface{}{
+		"message_id": messageID,
 	})
 }
 
@@ -500,21 +482,35 @@ func (h *SessionHandler) GetGroups(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// SendMessageGeneral handles sending messages to any session (for compatibility)
+// SendMessageGeneral handles sending messages via API with phone selection (for compatibility)
 func (h *SessionHandler) SendMessageGeneral(w http.ResponseWriter, r *http.Request) {
 	var req struct {
-		SessionID string `json:"session_id"`
-		To        string `json:"to"`
-		Message   string `json:"message"`
+		Phone     string `json:"phone"`      // Session phone to use (can be session ID or actual phone)
+		SessionID string `json:"session_id"` // Legacy field for backward compatibility
+		To        string `json:"to"`         // Recipient
+		Message   string `json:"message"`    // Message content
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, "Invalid request body", http.StatusBadRequest)
 		return
 	}
 
+	// Support both 'phone' and 'session_id' for backward compatibility
+	phoneIdentifier := req.Phone
+	if phoneIdentifier == "" {
+		phoneIdentifier = req.SessionID
+	}
+
 	// Validate input
-	if req.SessionID == "" || req.To == "" || req.Message == "" {
-		http.Error(w, "session_id, to, and message fields are required", http.StatusBadRequest)
+	if phoneIdentifier == "" || req.To == "" || req.Message == "" {
+		http.Error(w, "phone (or session_id), to, and message fields are required", http.StatusBadRequest)
+		return
+	}
+
+	// Find session by phone identifier (session ID or actual phone)
+	sessionID := h.whatsappService.FindSessionByPhone(phoneIdentifier)
+	if sessionID == "" {
+		HandleErrorWithMessage(w, http.StatusNotFound, "Session not found for phone: "+phoneIdentifier, models.ErrCodeNotFound)
 		return
 	}
 
@@ -525,18 +521,19 @@ func (h *SessionHandler) SendMessageGeneral(w http.ResponseWriter, r *http.Reque
 	}
 
 	// Send message
-	messageID, err := h.whatsappService.SendMessage(req.SessionID, msgReq)
+	messageID, err := h.whatsappService.SendMessage(sessionID, msgReq)
 	if err != nil {
-		h.logger.Error("Failed to send message from session %s: %v", req.SessionID, err)
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		h.logger.Error("Failed to send message from session %s: %v", sessionID, err)
+		HandleError(w, err)
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]interface{}{
-		"success": true,
-		"id":      messageID,
-		"message": "Message sent successfully",
+	h.logger.Info("API message sent successfully with ID: %s", messageID)
+
+	WriteSuccessResponse(w, "Message sent successfully", map[string]interface{}{
+		"message_id": messageID,
+		"timestamp":  time.Now().Unix(),
+		"session":    sessionID,
 	})
 }
 
@@ -580,15 +577,18 @@ func (h *SessionHandler) WebSocketHandler(w http.ResponseWriter, r *http.Request
 	defer cancel()
 
 	if !session.LoggedIn {
+		h.logger.Info("Starting QR code generation for unauthenticated session %s", sessionID)
+		
 		// Disconnect if already connected but not logged in (like original implementation)
 		if session.Connected && session.Client.IsConnected() && !session.Client.IsLoggedIn() {
 			h.logger.Info("Disconnecting stale connection for session %s", sessionID)
 			session.Client.Disconnect()
-			// Give it a moment to disconnect cleanly  
+			// Give it a moment to disconnect cleanly
 			time.Sleep(1 * time.Second)
 		}
 
 		// Get QR channel before connecting (like original implementation)
+		h.logger.Debug("Getting QR channel for session %s", sessionID)
 		qrChan, err := session.Client.GetQRChannel(ctx)
 		if err != nil {
 			h.logger.Error("Failed to get QR channel for session %s: %v", sessionID, err)
@@ -600,14 +600,16 @@ func (h *SessionHandler) WebSocketHandler(w http.ResponseWriter, r *http.Request
 		}
 
 		// Start QR code streaming
+		h.logger.Debug("Starting QR code streaming for session %s", sessionID)
 		go h.streamQRUpdatesFromChannel(ctx, conn, qrChan, sessionID)
 
 		// Now connect after getting QR channel (only if not already connected)
 		if !session.Connected {
+			h.logger.Info("Connecting session %s for QR generation", sessionID)
 			if err := h.whatsappService.ConnectSession(sessionID); err != nil {
 				h.logger.Error("Failed to connect session %s: %v", sessionID, err)
 				conn.WriteJSON(models.WebSocketMessage{
-					Type: "error", 
+					Type: "error",
 					Data: map[string]string{"error": "Failed to connect: " + err.Error()},
 				})
 				return
@@ -615,6 +617,8 @@ func (h *SessionHandler) WebSocketHandler(w http.ResponseWriter, r *http.Request
 		} else {
 			h.logger.Info("Session %s already connected, starting QR generation", sessionID)
 		}
+	} else {
+		h.logger.Info("Session %s already logged in, no QR needed", sessionID)
 	}
 
 	// Handle WebSocket messages
@@ -640,8 +644,27 @@ func (h *SessionHandler) WebSocketHandler(w http.ResponseWriter, r *http.Request
 			h.logger.Debug("Received WebSocket message type %s for session %s", msg.Type, sessionID)
 		}
 	}
-}
 
+	// Clean up: If WebSocket connection is closed and session is not logged in,
+	// disconnect the session to avoid showing it as "connected" when it's not authenticated
+	// Run this in a goroutine with delay to avoid interfering with immediate reconnections
+	go func() {
+		if session, exists := h.whatsappService.GetSession(sessionID); exists {
+			if !session.LoggedIn && session.Connected {
+				// Give a delay to allow for immediate reconnection attempts
+				time.Sleep(5 * time.Second)
+				
+				// Check again after delay - if still not logged in, disconnect
+				if session, exists := h.whatsappService.GetSession(sessionID); exists && !session.LoggedIn && session.Connected {
+					h.logger.Info("WebSocket closed for unauthenticated session %s, disconnecting after delay", sessionID)
+					if err := h.whatsappService.DisconnectSession(sessionID); err != nil {
+						h.logger.Error("Failed to disconnect unauthenticated session %s: %v", sessionID, err)
+					}
+				}
+			}
+		}
+	}()
+}
 
 // validateJWT validates a JWT token
 func (h *SessionHandler) validateJWT(tokenString string) error {
@@ -667,12 +690,11 @@ func (h *SessionHandler) LoginSession(w http.ResponseWriter, r *http.Request) {
 
 	if err := h.whatsappService.LoginSession(sessionID); err != nil {
 		h.logger.Error("Failed to login session %s: %v", sessionID, err)
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		HandleError(w, err)
 		return
 	}
 
-	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(map[string]string{"message": "Login process initiated"})
+	WriteSuccessResponse(w, "Login process initiated", nil)
 }
 
 // LogoutSession handles session logout (WhatsApp logout)
@@ -682,12 +704,11 @@ func (h *SessionHandler) LogoutSession(w http.ResponseWriter, r *http.Request) {
 
 	if err := h.whatsappService.LogoutSession(sessionID); err != nil {
 		h.logger.Error("Failed to logout session %s: %v", sessionID, err)
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		HandleError(w, err)
 		return
 	}
 
-	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(map[string]string{"message": "Session logged out"})
+	WriteSuccessResponse(w, "Session logged out successfully", nil)
 }
 
 // UpdateSessionWebhook handles updating session webhook URL

@@ -124,6 +124,10 @@ func (s *WhatsAppService) CreateSession(req *models.CreateSessionRequest, userID
 	// Create WhatsApp client
 	clientLog := waLog.Stdout("Client", "INFO", true)
 	client := whatsmeow.NewClient(deviceStore, clientLog)
+	
+	// Enable auto-reconnect like in original
+	client.EnableAutoReconnect = true
+	client.AutoTrustIdentity = true
 
 	// Create session
 	session := &models.Session{
@@ -185,6 +189,24 @@ func (s *WhatsAppService) GetAllSessions() []*models.Session {
 	return sessions
 }
 
+// FindSessionByPhone finds a session by phone identifier (session ID or actual phone)
+func (s *WhatsAppService) FindSessionByPhone(phoneIdentifier string) string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	
+	// Try to find session by various identifiers
+	for _, session := range s.sessions {
+		if session.ID == phoneIdentifier ||
+			session.Phone == phoneIdentifier ||
+			session.ActualPhone == phoneIdentifier ||
+			strings.Replace(session.ActualPhone, "@s.whatsapp.net", "", 1) == phoneIdentifier {
+			return session.ID
+		}
+	}
+	
+	return ""
+}
+
 // ConnectSession initiates connection for a session
 func (s *WhatsAppService) ConnectSession(sessionID string) error {
 	s.mu.Lock()
@@ -192,15 +214,15 @@ func (s *WhatsAppService) ConnectSession(sessionID string) error {
 
 	session, exists := s.sessions[sessionID]
 	if !exists {
-		return fmt.Errorf("session %s not found", sessionID)
+		return models.NewNotFoundError("session %s not found", sessionID)
 	}
 
 	if session.Connecting {
-		return fmt.Errorf("session %s is already connecting", sessionID)
+		return models.NewBadRequestError("session %s is already connecting", sessionID)
 	}
 
 	if session.Connected {
-		return fmt.Errorf("session %s is already connected", sessionID)
+		return models.NewBadRequestError("session %s is already connected", sessionID)
 	}
 
 	session.Connecting = true
@@ -234,7 +256,7 @@ func (s *WhatsAppService) DisconnectSession(sessionID string) error {
 
 	session, exists := s.sessions[sessionID]
 	if !exists {
-		return fmt.Errorf("session %s not found", sessionID)
+		return models.NewNotFoundError("session %s not found", sessionID)
 	}
 
 	session.Client.Disconnect()
@@ -252,7 +274,7 @@ func (s *WhatsAppService) DeleteSession(sessionID string) error {
 
 	session, exists := s.sessions[sessionID]
 	if !exists {
-		return fmt.Errorf("session %s not found", sessionID)
+		return models.NewNotFoundError("session %s not found", sessionID)
 	}
 
 	// Disconnect if connected
@@ -276,11 +298,11 @@ func (s *WhatsAppService) DeleteSession(sessionID string) error {
 func (s *WhatsAppService) LoginSession(sessionID string) error {
 	session, exists := s.GetSession(sessionID)
 	if !exists {
-		return fmt.Errorf("session %s not found", sessionID)
+		return models.NewNotFoundError("session %s not found", sessionID)
 	}
 
 	if session.LoggedIn {
-		return fmt.Errorf("session %s is already logged in", sessionID)
+		return models.NewBadRequestError("session %s is already logged in", sessionID)
 	}
 
 	// Connect if not connected
@@ -312,11 +334,11 @@ func (s *WhatsAppService) LoginSession(sessionID string) error {
 func (s *WhatsAppService) LogoutSession(sessionID string) error {
 	session, exists := s.GetSession(sessionID)
 	if !exists {
-		return fmt.Errorf("session %s not found", sessionID)
+		return models.NewNotFoundError("session %s not found", sessionID)
 	}
 
 	if !session.LoggedIn {
-		return fmt.Errorf("session %s is not logged in", sessionID)
+		return models.NewBadRequestError("session %s is not logged in", sessionID)
 	}
 
 	// Perform logout
@@ -341,11 +363,11 @@ func (s *WhatsAppService) LogoutSession(sessionID string) error {
 func (s *WhatsAppService) GetQRCode(sessionID string) (string, error) {
 	session, exists := s.GetSession(sessionID)
 	if !exists {
-		return "", fmt.Errorf("session %s not found", sessionID)
+		return "", models.NewNotFoundError("session %s not found", sessionID)
 	}
 
 	if session.LoggedIn {
-		return "", fmt.Errorf("session %s is already logged in", sessionID)
+		return "", models.NewBadRequestError("session %s is already logged in", sessionID)
 	}
 
 	// Start QR code generation
@@ -376,7 +398,7 @@ func (s *WhatsAppService) UpdateSession(sessionID string, req *models.UpdateSess
 
 	session, exists := s.sessions[sessionID]
 	if !exists {
-		return fmt.Errorf("session %s not found", sessionID)
+		return models.NewNotFoundError("session %s not found", sessionID)
 	}
 
 	// Update in-memory session
@@ -407,7 +429,28 @@ func (s *WhatsAppService) setupEventHandlers(session *models.Session) {
 		case *events.Connected:
 			s.mu.Lock()
 			session.Connected = true
-			session.LoggedIn = session.Client.Store.ID != nil
+			session.LoggedIn = session.Client.IsLoggedIn()
+			
+			// Update actual phone number if logged in (like original)
+			if session.Client.IsLoggedIn() && session.Client.Store.ID != nil {
+				session.ActualPhone = session.Client.Store.ID.User + "@s.whatsapp.net"
+				s.logger.Info("Session %s actual phone: %s", session.ID, session.ActualPhone)
+				
+				// Save updated metadata
+				go func() {
+					metadata := &models.SessionMetadata{
+						ID:          session.ID,
+						Phone:       session.Phone,
+						ActualPhone: session.ActualPhone,
+						Name:        session.Name,
+						Position:    session.Position,
+						WebhookURL:  session.WebhookURL,
+					}
+					if err := s.sessionRepo.Update(metadata); err != nil {
+						s.logger.Error("Failed to update session metadata: %v", err)
+					}
+				}()
+			}
 			s.mu.Unlock()
 			
 			s.logger.Info("Session %s connected", session.ID)
@@ -422,9 +465,25 @@ func (s *WhatsAppService) setupEventHandlers(session *models.Session) {
 		case *events.LoggedOut:
 			s.mu.Lock()
 			session.LoggedIn = false
+			session.ActualPhone = ""
 			s.mu.Unlock()
 			
 			s.logger.Info("Session %s logged out", session.ID)
+			
+			// Update database to clear actual phone
+			go func() {
+				metadata := &models.SessionMetadata{
+					ID:          session.ID,
+					Phone:       session.Phone,
+					ActualPhone: "",
+					Name:        session.Name,
+					Position:    session.Position,
+					WebhookURL:  session.WebhookURL,
+				}
+				if err := s.sessionRepo.Update(metadata); err != nil {
+					s.logger.Error("Failed to update session metadata after logout: %v", err)
+				}
+			}()
 
 		case *events.Message:
 			// Handle incoming messages
@@ -456,12 +515,45 @@ func (s *WhatsAppService) loadExistingSessions() error {
 	}
 
 	for _, metadata := range metadatas {
-		// Create device store
-		deviceStore := s.store.NewDevice()
+		s.logger.Info("Restoring session %s (%s)", metadata.ID, metadata.Name)
+		
+		// Find existing device in store (like original)
+		var deviceStore *store.Device
+		devices, err := s.store.GetAllDevices(context.Background())
+		if err != nil {
+			s.logger.Error("Error getting devices: %v", err)
+		} else {
+			// Look for existing device by comparing JID
+			for _, d := range devices {
+				if d != nil && d.ID != nil {
+					// Compare by actual phone if available, otherwise try by session ID
+					deviceUser := d.ID.User
+					if metadata.ActualPhone != "" && deviceUser == strings.Replace(metadata.ActualPhone, "@s.whatsapp.net", "", 1) {
+						deviceStore = d
+						s.logger.Debug("Found existing device for session %s by actual phone", metadata.ID)
+						break
+					} else if deviceUser == metadata.ID {
+						deviceStore = d
+						s.logger.Debug("Found existing device for session %s by ID", metadata.ID)
+						break
+					}
+				}
+			}
+		}
+		
+		// If no existing device found, create new one (will need re-authentication)
+		if deviceStore == nil {
+			deviceStore = s.store.NewDevice()
+			s.logger.Info("Created new device for session %s (will need re-authentication)", metadata.ID)
+		}
 		
 		// Create WhatsApp client
-		clientLog := waLog.Stdout("Client", "INFO", true)
+		clientLog := waLog.Stdout("Client:"+metadata.ID, "INFO", true)
 		client := whatsmeow.NewClient(deviceStore, clientLog)
+		
+		// Enable auto-reconnect like in original
+		client.EnableAutoReconnect = true
+		client.AutoTrustIdentity = true
 
 		// Create session
 		session := &models.Session{
@@ -482,9 +574,25 @@ func (s *WhatsAppService) loadExistingSessions() error {
 
 		// Store in memory
 		s.sessions[metadata.ID] = session
+		
+		// Try to connect if device has stored credentials (like original)
+		if deviceStore != nil && deviceStore.ID != nil {
+			go func(sessionID string, client *whatsmeow.Client) {
+				// Wait a bit before connecting to ensure everything is initialized
+				time.Sleep(2 * time.Second)
+				
+				s.logger.Info("Auto-connecting restored session %s with JID %s", sessionID, deviceStore.ID.String())
+				err := client.Connect()
+				if err != nil {
+					s.logger.Error("Failed to auto-connect session %s: %v", sessionID, err)
+				}
+			}(metadata.ID, client)
+		} else {
+			s.logger.Info("Session %s needs re-authentication (no stored credentials)", metadata.ID)
+		}
 	}
 
-	s.logger.Info("Loaded %d existing sessions", len(metadatas))
+	s.logger.Info("Restored %d sessions", len(s.sessions))
 	return nil
 }
 
@@ -512,11 +620,17 @@ func (s *WhatsAppService) generatePhoneJID(sessionID string) string {
 func (s *WhatsAppService) SendMessage(sessionID string, req *models.SendMessageRequest) (string, error) {
 	session, exists := s.GetSession(sessionID)
 	if !exists {
-		return "", fmt.Errorf("session %s not found", sessionID)
+		return "", models.NewNotFoundError("session not found")
 	}
 
+	// Check if session is connected
+	if !session.Connected {
+		return "", models.NewServiceUnavailableError("session is not connected. Please connect the session first")
+	}
+
+	// Check if session is logged in
 	if !session.LoggedIn {
-		return "", fmt.Errorf("session %s is not logged in", sessionID)
+		return "", models.NewUnauthorizedError("session is not authenticated. Please scan QR code to login")
 	}
 
 	// Format recipient JID like original implementation
@@ -561,11 +675,15 @@ func (s *WhatsAppService) SendMessage(sessionID string, req *models.SendMessageR
 func (s *WhatsAppService) SendAttachment(sessionID string, req *models.SendFileRequest) (string, error) {
 	session, exists := s.GetSession(sessionID)
 	if !exists {
-		return "", fmt.Errorf("session %s not found", sessionID)
+		return "", models.NewNotFoundError("session not found")
+	}
+
+	if !session.Connected {
+		return "", models.NewServiceUnavailableError("session is not connected")
 	}
 
 	if !session.LoggedIn {
-		return "", fmt.Errorf("session %s is not logged in", sessionID)
+		return "", models.NewUnauthorizedError("session is not authenticated")
 	}
 
 	// Format recipient JID like original implementation
@@ -634,11 +752,15 @@ func (s *WhatsAppService) SendAttachment(sessionID string, req *models.SendFileR
 func (s *WhatsAppService) SendFileFromURL(sessionID string, req *models.SendFileURLRequest) (string, error) {
 	session, exists := s.GetSession(sessionID)
 	if !exists {
-		return "", fmt.Errorf("session %s not found", sessionID)
+		return "", models.NewNotFoundError("session not found")
+	}
+
+	if !session.Connected {
+		return "", models.NewServiceUnavailableError("session is not connected")
 	}
 
 	if !session.LoggedIn {
-		return "", fmt.Errorf("session %s is not logged in", sessionID)
+		return "", models.NewUnauthorizedError("session is not authenticated")
 	}
 
 	// Format recipient JID
@@ -682,11 +804,15 @@ func (s *WhatsAppService) SendFileFromURL(sessionID string, req *models.SendFile
 func (s *WhatsAppService) SendImage(sessionID string, req *models.SendImageRequest) (string, error) {
 	session, exists := s.GetSession(sessionID)
 	if !exists {
-		return "", fmt.Errorf("session %s not found", sessionID)
+		return "", models.NewNotFoundError("session not found")
+	}
+
+	if !session.Connected {
+		return "", models.NewServiceUnavailableError("session is not connected")
 	}
 
 	if !session.LoggedIn {
-		return "", fmt.Errorf("session %s is not logged in", sessionID)
+		return "", models.NewUnauthorizedError("session is not authenticated")
 	}
 
 	// Format recipient JID
@@ -959,11 +1085,15 @@ func (s *WhatsAppService) sendMediaByType(session *models.Session, jid types.JID
 func (s *WhatsAppService) CheckNumber(sessionID string, number string) (bool, string, error) {
 	session, exists := s.GetSession(sessionID)
 	if !exists {
-		return false, "", fmt.Errorf("session %s not found", sessionID)
+		return false, "", models.NewNotFoundError("session not found")
+	}
+
+	if !session.Connected {
+		return false, "", models.NewServiceUnavailableError("session is not connected")
 	}
 
 	if !session.LoggedIn {
-		return false, "", fmt.Errorf("session %s is not logged in", sessionID)
+		return false, "", models.NewUnauthorizedError("session is not authenticated")
 	}
 
 	// Parse number
@@ -989,11 +1119,15 @@ func (s *WhatsAppService) CheckNumber(sessionID string, number string) (bool, st
 func (s *WhatsAppService) SendTyping(sessionID string, to string, typing bool) error {
 	session, exists := s.GetSession(sessionID)
 	if !exists {
-		return fmt.Errorf("session %s not found", sessionID)
+		return models.NewNotFoundError("session not found")
+	}
+
+	if !session.Connected {
+		return models.NewServiceUnavailableError("session is not connected")
 	}
 
 	if !session.LoggedIn {
-		return fmt.Errorf("session %s is not logged in", sessionID)
+		return models.NewUnauthorizedError("session is not authenticated")
 	}
 
 	// Parse recipient JID
@@ -1014,11 +1148,15 @@ func (s *WhatsAppService) SendTyping(sessionID string, to string, typing bool) e
 func (s *WhatsAppService) GetGroups(sessionID string) ([]map[string]interface{}, error) {
 	session, exists := s.GetSession(sessionID)
 	if !exists {
-		return nil, fmt.Errorf("session %s not found", sessionID)
+		return nil, models.NewNotFoundError("session not found")
+	}
+
+	if !session.Connected {
+		return nil, models.NewServiceUnavailableError("session is not connected")
 	}
 
 	if !session.LoggedIn {
-		return nil, fmt.Errorf("session %s is not logged in", sessionID)
+		return nil, models.NewUnauthorizedError("session is not authenticated")
 	}
 
 	// Get groups
