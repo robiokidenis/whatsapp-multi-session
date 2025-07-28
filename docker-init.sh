@@ -23,6 +23,16 @@ chmod -R 755 whatsapp
 chmod -R 755 config
 chmod -R 755 database
 
+# Set proper ownership for Docker container (user ID 1001)
+echo "Setting directory ownership for Docker container..."
+if command -v sudo >/dev/null 2>&1; then
+    sudo chown -R 1001:1001 ./whatsapp ./config
+    echo "✅ Directory ownership set to 1001:1001"
+else
+    echo "⚠️  sudo not available. You may need to run manually:"
+    echo "   sudo chown -R 1001:1001 ./whatsapp ./config"
+fi
+
 # Check if frontend needs to be built
 if [ ! -d "frontend/dist" ]; then
     echo "Frontend dist not found. Building frontend..."
