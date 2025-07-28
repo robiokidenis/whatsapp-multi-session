@@ -1,17 +1,20 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import axios from 'axios';
 
 const UserManagement = () => {
   const [users, setUsers] = useState([]);
-  const [filteredUsers, setFilteredUsers] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [roleFilter, setRoleFilter] = useState('all');
+  const [statusFilter, setStatusFilter] = useState('all');
   const [message, setMessage] = useState('');
   const [messageType, setMessageType] = useState('');
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [selectedUser, setSelectedUser] = useState(null);
+  const [selectedUsers, setSelectedUsers] = useState([]);
+  const [showFilters, setShowFilters] = useState(false);
+  const [bulkActionLoading, setBulkActionLoading] = useState(false);
   const [formData, setFormData] = useState({
     username: '',
     password: '',
@@ -23,26 +26,29 @@ const UserManagement = () => {
     loadUsers();
   }, []);
 
-  useEffect(() => {
-    filterUsers();
-  }, [users, searchTerm, roleFilter]);
+  const stats = useMemo(() => {
+    const total = users.length;
+    const active = users.filter(u => u.is_active).length;
+    const inactive = total - active;
+    const admins = users.filter(u => u.role === 'admin').length;
+    return { total, active, inactive, admins };
+  }, [users]);
 
-  const filterUsers = () => {
-    let filtered = users;
-
-    if (searchTerm) {
-      filtered = filtered.filter(user =>
+  const filteredUsers = useMemo(() => {
+    return users.filter(user => {
+      const matchesSearch = !searchTerm || 
         user.username.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        user.role.toLowerCase().includes(searchTerm.toLowerCase())
-      );
-    }
-
-    if (roleFilter !== 'all') {
-      filtered = filtered.filter(user => user.role === roleFilter);
-    }
-
-    setFilteredUsers(filtered);
-  };
+        user.role.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        user.id?.toString().includes(searchTerm.toLowerCase());
+      
+      const matchesRole = roleFilter === 'all' || user.role === roleFilter;
+      const matchesStatus = statusFilter === 'all' || 
+        (statusFilter === 'active' && user.is_active) ||
+        (statusFilter === 'inactive' && !user.is_active);
+      
+      return matchesSearch && matchesRole && matchesStatus;
+    });
+  }, [users, searchTerm, roleFilter, statusFilter]);
 
   const loadUsers = async () => {
     try {
@@ -50,14 +56,12 @@ const UserManagement = () => {
       const response = await axios.get('/api/admin/users');
       
       if (response.data.success) {
-        const userData = response.data.data || [];
-        setUsers(userData);
-        setFilteredUsers(userData);
+        setUsers(response.data.data || []);
       } else {
-        showMessage('Failed to load users: ' + (response.data.error || 'Unknown error'), 'error');
+        showMessage('Failed to load users', 'error');
       }
     } catch (error) {
-      showMessage('Error loading users: ' + (error.response?.data?.error || error.message), 'error');
+      showMessage('Error loading users', 'error');
     } finally {
       setLoading(false);
     }
@@ -69,7 +73,7 @@ const UserManagement = () => {
     setTimeout(() => {
       setMessage('');
       setMessageType('');
-    }, 5000);
+    }, 4000);
   };
 
   const handleCreateUser = async (e) => {
@@ -82,22 +86,16 @@ const UserManagement = () => {
 
     try {
       setLoading(true);
-      const response = await axios.post('/api/admin/users', {
-        username: formData.username,
-        password: formData.password,
-        role: formData.role,
-        session_limit: formData.session_limit,
-      });
+      const response = await axios.post('/api/admin/users', formData);
 
       if (response.data.success) {
-        showMessage('User created successfully!', 'success');
+        showMessage('User created successfully', 'success');
         setShowCreateModal(false);
-        setFormData({ username: '', password: '' });
+        setFormData({ username: '', password: '', role: 'user', session_limit: 5 });
         await loadUsers();
       }
     } catch (error) {
-      console.error('Error creating user:', error);
-      showMessage('Error creating user: ' + (error.response?.data?.error || error.message), 'error');
+      showMessage('Error creating user', 'error');
     } finally {
       setLoading(false);
     }
@@ -123,7 +121,7 @@ const UserManagement = () => {
     }
 
     if (Object.keys(updateData).length === 0) {
-      showMessage('No changes to update', 'error');
+      showMessage('No changes to update', 'warning');
       return;
     }
 
@@ -132,38 +130,96 @@ const UserManagement = () => {
       const response = await axios.put(`/api/admin/users/${selectedUser.id}`, updateData);
 
       if (response.data.success) {
-        showMessage('User updated successfully!', 'success');
+        showMessage('User updated successfully', 'success');
         setShowEditModal(false);
         setSelectedUser(null);
-        setFormData({ username: '', password: '' });
+        setFormData({ username: '', password: '', role: 'user', session_limit: 5 });
         await loadUsers();
       }
     } catch (error) {
-      console.error('Error updating user:', error);
-      showMessage('Error updating user: ' + (error.response?.data?.error || error.message), 'error');
+      showMessage('Error updating user', 'error');
     } finally {
       setLoading(false);
     }
   };
 
   const handleDeleteUser = async (user) => {
-    if (!window.confirm(`Are you sure you want to delete user "${user.username}"?`)) {
-      return;
-    }
+    if (!window.confirm(`Delete user "${user.username}"?`)) return;
 
     try {
       setLoading(true);
       const response = await axios.delete(`/api/admin/users/${user.id}`);
 
       if (response.data.success) {
-        showMessage('User deleted successfully!', 'success');
+        showMessage('User deleted successfully', 'success');
         await loadUsers();
       }
     } catch (error) {
-      console.error('Error deleting user:', error);
-      showMessage('Error deleting user: ' + (error.response?.data?.error || error.message), 'error');
+      showMessage('Error deleting user', 'error');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleToggleUserStatus = async (user) => {
+    try {
+      setLoading(true);
+      const response = await axios.put(`/api/admin/users/${user.id}`, { 
+        is_active: !user.is_active 
+      });
+
+      if (response.data.success) {
+        showMessage(`User ${user.is_active ? 'deactivated' : 'activated'}`, 'success');
+        await loadUsers();
+      }
+    } catch (error) {
+      showMessage('Error updating user status', 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSelectUser = (userId) => {
+    setSelectedUsers(prev => 
+      prev.includes(userId) 
+        ? prev.filter(id => id !== userId)
+        : [...prev, userId]
+    );
+  };
+
+  const handleSelectAll = () => {
+    setSelectedUsers(
+      selectedUsers.length === filteredUsers.length 
+        ? [] 
+        : filteredUsers.map(u => u.id)
+    );
+  };
+
+  const handleBulkDelete = async () => {
+    const nonAdminUsers = selectedUsers.filter(id => {
+      const user = users.find(u => u.id === id);
+      return user && user.username !== 'admin';
+    });
+    
+    if (nonAdminUsers.length === 0) {
+      showMessage('Cannot delete admin users', 'error');
+      return;
+    }
+    
+    if (!window.confirm(`Delete ${nonAdminUsers.length} selected users?`)) return;
+    
+    setBulkActionLoading(true);
+    try {
+      await Promise.all(
+        nonAdminUsers.map(id => axios.delete(`/api/admin/users/${id}`).catch(() => null))
+      );
+      showMessage(`Deleted ${nonAdminUsers.length} users`, 'success');
+      setSelectedUsers([]);
+      await loadUsers();
+    } catch (error) {
+      showMessage('Bulk delete failed', 'error');
+    } finally {
+      setBulkActionLoading(false);
     }
   };
 
@@ -190,513 +246,517 @@ const UserManagement = () => {
     setFormData({ username: '', password: '', role: 'user', session_limit: 5 });
   };
 
-  return (
-    <div>
-      {/* Header Section */}
-      <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6">
-        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900 flex items-center">
-              <div className="bg-gray-100 p-3 rounded-lg mr-4">
-                <i className="fas fa-users text-gray-600 text-xl"></i>
-              </div>
-              User Management
-            </h1>
-            <p className="text-gray-600 mt-2">Manage user accounts and permissions</p>
-          </div>
-          <button
-            onClick={openCreateModal}
-            className="bg-green-600 hover:bg-green-700 text-white px-6 py-3 rounded-lg font-medium transition-colors duration-200"
-          >
-            <i className="fas fa-plus mr-2"></i>Add User
-          </button>
+  if (loading && users.length === 0) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="loading-spinner-lg mx-auto mb-4"></div>
+          <p className="text-secondary">Loading users...</p>
         </div>
       </div>
+    );
+  }
 
-      {/* Search and Filter Section */}
-      <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6">
-        <div className="flex flex-col sm:flex-row gap-4">
-          <div className="flex-1">
-            <div className="relative">
-              <i className="fas fa-search absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400"></i>
-              <input
-                type="text"
-                placeholder="Search users by username or role..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-colors duration-200"
-              />
+  return (
+    <div className="min-h-screen bg-gray-50">
+      <div className="max-w-7xl mx-auto px-6 py-8">
+        
+        {/* CRM Header */}
+        <div className="mb-8">
+          <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-6">
+            <div>
+              <div className="flex items-center gap-3 mb-2">
+    
+                <h1 className="text-display">User Management</h1>
+              </div>
+              <p className="text-secondary">Manage user accounts, roles, and access permissions</p>
+            </div>
+            <button 
+              onClick={openCreateModal}
+              className="btn btn-primary btn-lg"
+            >
+              <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
+              </svg>
+              Add New User
+            </button>
+          </div>
+        </div>
+
+        {/* Improved User Stats */}
+        <div className="grid-cols-4 mb-8">
+          <div className="card border border-gray-200">
+            <div className="p-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="text-overline mb-1 text-gray-600">Total Users</div>
+                  <div className="text-title text-gray-900">{stats.total}</div>
+                  <div className="text-caption mt-1 text-gray-500">All registered</div>
+                </div>
+                <div className="w-8 h-8 bg-gray-50 border border-gray-200 rounded-lg flex items-center justify-center">
+                  <svg className="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+                  </svg>
+                </div>
+              </div>
             </div>
           </div>
-          <div className="w-full sm:w-48">
-            <select
-              value={roleFilter}
-              onChange={(e) => setRoleFilter(e.target.value)}
-              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-colors duration-200"
-            >
-              <option value="all">All Roles</option>
-              <option value="admin">Admin</option>
-              <option value="user">User</option>
-            </select>
+          
+          <div className="card border border-success-200 bg-success-25">
+            <div className="p-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="text-overline mb-1 text-success-600">Active Users</div>
+                  <div className="text-title text-success-800">{stats.active}</div>
+                  <div className="text-caption mt-1 text-success-600">Currently enabled</div>
+                </div>
+                <div className="w-8 h-8 bg-success-50 border border-success-200 rounded-lg flex items-center justify-center">
+                  <svg className="w-4 h-4 text-success-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                </div>
+              </div>
+            </div>
+          </div>
+          
+          <div className="card border border-error-200 bg-error-25">
+            <div className="p-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="text-overline mb-1 text-error-600">Inactive Users</div>
+                  <div className="text-title text-error-800">{stats.inactive}</div>
+                  <div className="text-caption mt-1 text-error-600">Disabled accounts</div>
+                </div>
+                <div className="w-8 h-8 bg-error-50 border border-error-200 rounded-lg flex items-center justify-center">
+                  <svg className="w-4 h-4 text-error-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728L5.636 5.636m12.728 12.728L18.364 5.636M5.636 18.364l12.728-12.728" />
+                  </svg>
+                </div>
+              </div>
+            </div>
+          </div>
+          
+          <div className="card border border-primary-200 bg-primary-25">
+            <div className="p-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="text-overline mb-1 text-primary-600">Administrators</div>
+                  <div className="text-title text-primary-800">{stats.admins}</div>
+                  <div className="text-caption mt-1 text-primary-600">Admin privileges</div>
+                </div>
+                <div className="w-8 h-8 bg-primary-50 border border-primary-200 rounded-lg flex items-center justify-center">
+                  <svg className="w-4 h-4 text-primary-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                  </svg>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
-        
-        {/* Stats */}
-        <div className="mt-4 flex flex-wrap gap-4">
-          <div className="bg-gray-50 px-4 py-2 rounded-lg border border-gray-200">
-            <span className="text-gray-700 font-medium">
-              Total: {users.length}
-            </span>
+
+        {/* Message Alert */}
+        {message && (
+          <div className={`card p-4 mb-6 border-l-4 ${
+            messageType === 'error' ? 'border-l-error' : 
+            messageType === 'warning' ? 'border-l-warning' : 'border-l-success'
+          }`}>
+            <div className="flex items-center gap-3">
+              <div className={`status-dot ${
+                messageType === 'error' ? 'status-dot-error' : 
+                messageType === 'warning' ? 'status-dot-warning' : 'status-dot-success'
+              }`}></div>
+              <span className="text-body">{message}</span>
+            </div>
           </div>
-          <div className="bg-gray-50 px-4 py-2 rounded-lg border border-gray-200">
-            <span className="text-gray-700 font-medium">
-              Filtered: {filteredUsers.length}
-            </span>
+        )}
+
+        {/* Search */}
+        <div className="card p-6 mb-8">
+          <div className="flex flex-col sm:flex-row gap-4">
+            <div className="flex-1">
+              <input
+                type="text"
+                placeholder="Search users..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="input"
+              />
+            </div>
+            <button
+              onClick={() => setShowFilters(!showFilters)}
+              className={`btn ${showFilters ? 'btn-primary' : 'btn-secondary'}`}
+            >
+              Filters
+            </button>
           </div>
-          <div className="bg-gray-50 px-4 py-2 rounded-lg border border-gray-200">
-            <span className="text-gray-700 font-medium">
-              Active: {users.filter(u => u.is_active).length}
-            </span>
-          </div>
+
+          {/* Filters */}
+          {showFilters && (
+            <div className="animate-fade-in mt-6 pt-6 border-t border-gray-200">
+              <div className="flex flex-col sm:flex-row gap-4">
+                <select
+                  value={roleFilter}
+                  onChange={(e) => setRoleFilter(e.target.value)}
+                  className="select"
+                >
+                  <option value="all">All Roles</option>
+                  <option value="admin">Admin</option>
+                  <option value="user">User</option>
+                </select>
+
+                <select
+                  value={statusFilter}
+                  onChange={(e) => setStatusFilter(e.target.value)}
+                  className="select"
+                >
+                  <option value="all">All Status</option>
+                  <option value="active">Active</option>
+                  <option value="inactive">Inactive</option>
+                </select>
+
+                {filteredUsers.length > 0 && (
+                  <div className="flex items-center gap-4">
+                    <button
+                      onClick={handleSelectAll}
+                      className="btn btn-sm btn-secondary"
+                    >
+                      {selectedUsers.length === filteredUsers.length ? 'Deselect All' : 'Select All'}
+                    </button>
+                    
+                    {selectedUsers.length > 0 && (
+                      <button
+                        onClick={handleBulkDelete}
+                        disabled={bulkActionLoading}
+                        className="btn btn-sm btn-danger"
+                      >
+                        {bulkActionLoading ? 'Deleting...' : `Delete (${selectedUsers.length})`}
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Users Table */}
+        <div className="mb-8">
+          {filteredUsers.length === 0 ? (
+            <div className="card p-12 text-center">
+              <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-6">
+                <svg className="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197m13.5-9a2.5 2.5 0 11-5 0 2.5 2.5 0 015 0z" />
+                </svg>
+              </div>
+              <h3 className="text-title mb-2">
+                {users.length === 0 ? 'No Users Yet' : 'No Matching Users'}
+              </h3>
+              <p className="text-secondary mb-6 max-w-md mx-auto">
+                {users.length === 0 
+                  ? 'Create your first user account to get started.'
+                  : 'Try adjusting your search or filters.'
+                }
+              </p>
+              {users.length === 0 && (
+                <button
+                  onClick={openCreateModal}
+                  className="btn btn-primary"
+                >
+                  Create First User
+                </button>
+              )}
+            </div>
+          ) : (
+            <div className="card">
+              <table className="table">
+                <thead>
+                  <tr>
+                    {showFilters && (
+                      <th className="w-12">
+                        <input
+                          type="checkbox"
+                          checked={selectedUsers.length === filteredUsers.length && filteredUsers.length > 0}
+                          onChange={handleSelectAll}
+                          className="w-4 h-4"
+                        />
+                      </th>
+                    )}
+                    <th>User</th>
+                    <th>Role</th>
+                    <th>Status</th>
+                    <th>Session Limit</th>
+                    <th>Created</th>
+                    <th className="text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredUsers.map((user) => {
+                    const isSelected = selectedUsers.includes(user.id);
+                    
+                    return (
+                      <tr key={user.id} className={isSelected ? 'bg-gray-50' : ''}>
+                        {showFilters && (
+                          <td>
+                            <input
+                              type="checkbox"
+                              checked={isSelected}
+                              onChange={() => handleSelectUser(user.id)}
+                              className="w-4 h-4"
+                            />
+                          </td>
+                        )}
+                        <td>
+                          <div>
+                            <div className="text-body mb-1">
+                              {user.username}
+                              {user.username === 'admin' && (
+                                <span className="badge badge-warning ml-2">Super Admin</span>
+                              )}
+                            </div>
+                            <div className="text-caption">ID: {user.id}</div>
+                          </div>
+                        </td>
+                        <td>
+                          <div className={`badge ${user.role === 'admin' ? 'badge-warning' : 'badge'}`}>
+                            {user.role === 'admin' ? 'Administrator' : 'User'}
+                          </div>
+                        </td>
+                        <td>
+                          <div className={`badge ${user.is_active ? 'badge-success' : 'badge-error'}`}>
+                            <div className={`status-dot ${user.is_active ? 'status-dot-success' : 'status-dot-error'}`}></div>
+                            {user.is_active ? 'Active' : 'Inactive'}
+                          </div>
+                        </td>
+                        <td>
+                          <span className="text-body">
+                            {user.session_limit === -1 ? 'Unlimited' : user.session_limit}
+                          </span>
+                        </td>
+                        <td>
+                          <div>
+                            <div className="text-body">{new Date(user.created_at).toLocaleDateString()}</div>
+                            <div className="text-caption">{new Date(user.created_at).toLocaleTimeString()}</div>
+                          </div>
+                        </td>
+                        <td>
+                          <div className="flex justify-end gap-2">
+                            <button
+                              onClick={() => openEditModal(user)}
+                              className="btn btn-xs btn-secondary"
+                            >
+                              Edit
+                            </button>
+                            {user.username !== 'admin' && (
+                              <>
+                                <button
+                                  onClick={() => handleToggleUserStatus(user)}
+                                  className={`btn btn-xs ${user.is_active ? 'btn-warning' : 'btn-success'}`}
+                                >
+                                  {user.is_active ? 'Deactivate' : 'Activate'}
+                                </button>
+                                <button
+                                  onClick={() => handleDeleteUser(user)}
+                                  className="btn btn-xs btn-danger"
+                                >
+                                  Delete
+                                </button>
+                              </>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
       </div>
 
-      {/* Message Alert */}
-      {message && (
-        <div className={`mb-6 p-4 rounded-lg border ${
-          messageType === 'error'
-            ? 'bg-red-50 border-red-200 text-red-800'
-            : 'bg-green-50 border-green-200 text-green-800'
-        }`}>
-          <div className="flex items-center">
-            <i className={`fas ${messageType === 'error' ? 'fa-exclamation-circle' : 'fa-check-circle'} mr-3`}></i>
-            <span className="font-medium">{message}</span>
+      {/* Create User Modal */}
+      {showCreateModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="card max-w-md w-full animate-scale-in">
+            <div className="p-6">
+              <div className="flex items-center justify-between mb-6">
+                <h3 className="text-title">Create New User</h3>
+                <button 
+                  onClick={closeModals} 
+                  className="btn btn-ghost p-2"
+                >
+                  ×
+                </button>
+              </div>
+              
+              <form onSubmit={handleCreateUser} className="space-y-6">
+                <div>
+                  <label className="block text-body mb-2">Username</label>
+                  <input
+                    type="text"
+                    value={formData.username}
+                    onChange={(e) => setFormData({ ...formData, username: e.target.value })}
+                    placeholder="Enter username"
+                    className="input"
+                    required
+                    minLength={3}
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-body mb-2">Password</label>
+                  <input
+                    type="password"
+                    value={formData.password}
+                    onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                    placeholder="Enter password"
+                    className="input"
+                    required
+                    minLength={6}
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-body mb-2">Role</label>
+                  <select
+                    value={formData.role}
+                    onChange={(e) => setFormData({ ...formData, role: e.target.value })}
+                    className="select"
+                    required
+                  >
+                    <option value="user">User</option>
+                    <option value="admin">Administrator</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-body mb-2">Session Limit</label>
+                  <input
+                    type="number"
+                    value={formData.session_limit}
+                    onChange={(e) => setFormData({ ...formData, session_limit: parseInt(e.target.value) || 5 })}
+                    className="input"
+                    min="-1"
+                    required
+                  />
+                  <p className="text-caption mt-1">Use -1 for unlimited sessions</p>
+                </div>
+
+                <div className="flex gap-3 pt-4">
+                  <button
+                    type="button"
+                    onClick={closeModals}
+                    className="btn btn-secondary flex-1"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={loading}
+                    className="btn btn-primary flex-1"
+                  >
+                    {loading ? 'Creating...' : 'Create User'}
+                  </button>
+                </div>
+              </form>
+            </div>
           </div>
         </div>
       )}
 
-      {/* Main Content Area */}
-      {loading ? (
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-12">
-          <div className="text-center">
-            <div className="inline-flex items-center justify-center w-16 h-16 bg-gray-100 rounded-full mb-4">
-              <i className="fas fa-spinner fa-spin text-gray-600 text-2xl"></i>
+      {/* Edit User Modal */}
+      {showEditModal && selectedUser && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="card max-w-md w-full animate-scale-in">
+            <div className="p-6">
+              <div className="flex items-center justify-between mb-6">
+                <div>
+                  <h3 className="text-title">Edit User</h3>
+                  <p className="text-secondary">@{selectedUser.username}</p>
+                </div>
+                <button 
+                  onClick={closeModals} 
+                  className="btn btn-ghost p-2"
+                >
+                  ×
+                </button>
+              </div>
+              
+              <form onSubmit={handleUpdateUser} className="space-y-6">
+                <div>
+                  <label className="block text-body mb-2">Username</label>
+                  <input
+                    type="text"
+                    value={formData.username}
+                    onChange={(e) => setFormData({ ...formData, username: e.target.value })}
+                    placeholder="Enter new username"
+                    className="input"
+                    minLength={3}
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-body mb-2">New Password</label>
+                  <input
+                    type="password"
+                    value={formData.password}
+                    onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                    placeholder="Enter new password (optional)"
+                    className="input"
+                    minLength={6}
+                  />
+                  <p className="text-caption mt-1">Leave empty to keep current password</p>
+                </div>
+
+                <div>
+                  <label className="block text-body mb-2">Role</label>
+                  <select
+                    value={formData.role}
+                    onChange={(e) => setFormData({ ...formData, role: e.target.value })}
+                    className="select"
+                    disabled={selectedUser.username === 'admin'}
+                  >
+                    <option value="user">User</option>
+                    <option value="admin">Administrator</option>
+                  </select>
+                  {selectedUser.username === 'admin' && (
+                    <p className="text-caption mt-1">Admin user role cannot be changed</p>
+                  )}
+                </div>
+
+                <div>
+                  <label className="block text-body mb-2">Session Limit</label>
+                  <input
+                    type="number"
+                    value={formData.session_limit}
+                    onChange={(e) => setFormData({ ...formData, session_limit: parseInt(e.target.value) || 5 })}
+                    className="input"
+                    min="-1"
+                  />
+                  <p className="text-caption mt-1">Use -1 for unlimited sessions</p>
+                </div>
+
+                <div className="flex gap-3 pt-4">
+                  <button
+                    type="button"
+                    onClick={closeModals}
+                    className="btn btn-secondary flex-1"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={loading}
+                    className="btn btn-primary flex-1"
+                  >
+                    {loading ? 'Updating...' : 'Update User'}
+                  </button>
+                </div>
+              </form>
             </div>
-            <h3 className="text-xl font-semibold text-gray-900 mb-2">Loading Users</h3>
-            <p className="text-gray-600">Please wait while we fetch the user data...</p>
           </div>
         </div>
-      ) : filteredUsers.length > 0 ? (
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    User
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Role
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Session Limit
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Status
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Created At
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Actions
-                  </th>
-                </tr>
-              </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
-                  {filteredUsers.map((user, index) => (
-                    <tr 
-                      key={user.id} 
-                      className="hover:bg-gray-50 transition-colors duration-200"
-                    >
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="flex items-center">
-                          <div className="flex-shrink-0 h-12 w-12">
-                            <div className={`h-12 w-12 rounded-full ${
-                              user.role === 'admin' 
-                                ? 'bg-gray-700' 
-                                : 'bg-gray-500'
-                            } flex items-center justify-center`}>
-                              <i className={`fas ${
-                                user.role === 'admin' ? 'fa-crown' : 'fa-user'
-                              } text-white text-lg`}></i>
-                            </div>
-                          </div>
-                          <div className="ml-4">
-                            <div className="text-base font-semibold text-gray-900">
-                              {user.username}
-                            </div>
-                            <div className="text-sm text-gray-500">ID: {user.id}</div>
-                          </div>
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <span className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium ${
-                          user.role === 'admin' 
-                            ? 'bg-gray-100 text-gray-800 border border-gray-200' 
-                            : 'bg-green-100 text-green-800 border border-green-200'
-                        }`}>
-                          <i className={`fas ${
-                            user.role === 'admin' ? 'fa-shield-alt' : 'fa-user-circle'
-                          } mr-2`}></i>
-                          {user.role === 'admin' ? 'Administrator' : 'User'}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-sm font-medium text-gray-900">
-                          {user.session_limit === -1 ? (
-                            <span className="inline-flex items-center text-gray-700">
-                              <i className="fas fa-infinity mr-2"></i>
-                              Unlimited
-                            </span>
-                          ) : (
-                            <span className="inline-flex items-center text-gray-700">
-                              <i className="fas fa-list-ol mr-2"></i>
-                              {user.session_limit}
-                            </span>
-                          )}
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <span className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium ${
-                          user.is_active 
-                            ? 'bg-green-100 text-green-800 border border-green-200' 
-                            : 'bg-red-100 text-red-800 border border-red-200'
-                        }`}>
-                          <div className={`w-2 h-2 rounded-full mr-2 ${
-                            user.is_active ? 'bg-green-500' : 'bg-red-500'
-                          }`}></div>
-                          {user.is_active ? 'Active' : 'Inactive'}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-sm text-gray-900 font-medium">
-                          {new Date(user.created_at).toLocaleDateString()}
-                        </div>
-                        <div className="text-xs text-gray-500">
-                          {new Date(user.created_at).toLocaleTimeString()}
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="flex items-center space-x-3">
-                          <button
-                            onClick={() => openEditModal(user)}
-                            className="inline-flex items-center px-3 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg transition-colors duration-200"
-                            title="Edit User"
-                          >
-                            <i className="fas fa-edit text-sm"></i>
-                          </button>
-                          {user.username !== 'admin' && (
-                            <button
-                              onClick={() => handleDeleteUser(user)}
-                              className="inline-flex items-center px-3 py-2 bg-red-100 hover:bg-red-200 text-red-700 rounded-lg transition-colors duration-200"
-                              title="Delete User"
-                            >
-                              <i className="fas fa-trash text-sm"></i>
-                            </button>
-                          )}
-                        </div>
-                      </td>
-                </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        ) : (
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-12">
-            <div className="text-center">
-              <div className="inline-flex items-center justify-center w-24 h-24 bg-gray-100 rounded-full mb-6">
-                <i className="fas fa-users text-4xl text-gray-400"></i>
-              </div>
-              <h3 className="text-2xl font-bold text-gray-900 mb-3">
-                {searchTerm || roleFilter !== 'all' ? 'No Matching Users' : 'No Users Found'}
-              </h3>
-              <p className="text-gray-600 mb-6 max-w-md mx-auto">
-                {searchTerm || roleFilter !== 'all' 
-                  ? 'Try adjusting your search criteria or filters to find users.'
-                  : 'Get started by creating your first user account to manage access to the system.'
-                }
-              </p>
-              {(!searchTerm && roleFilter === 'all') && (
-                <button
-                  onClick={openCreateModal}
-                  className="bg-green-600 hover:bg-green-700 text-white px-6 py-3 rounded-lg font-medium transition-colors duration-200"
-                >
-                  <i className="fas fa-plus mr-2"></i>Create First User
-                </button>
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* Create User Modal */}
-        {showCreateModal && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-lg max-w-lg w-full shadow-lg">
-              <div className="bg-green-600 rounded-t-lg p-6">
-                <div className="flex justify-between items-center">
-                  <div className="flex items-center">
-                    <div className="bg-white bg-opacity-20 p-2 rounded-lg mr-3">
-                      <i className="fas fa-user-plus text-white text-lg"></i>
-                    </div>
-                    <h3 className="text-xl font-bold text-white">Create New User</h3>
-                  </div>
-                  <button 
-                    onClick={closeModals} 
-                    className="text-white hover:bg-white hover:bg-opacity-20 p-2 rounded-lg transition-all duration-200"
-                  >
-                    <i className="fas fa-times text-lg"></i>
-                  </button>
-                </div>
-                <p className="text-green-100 mt-2">Add a new user to the system with custom permissions</p>
-              </div>
-              
-              <div className="p-6">
-
-                <form onSubmit={handleCreateUser} className="space-y-6">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div>
-                      <label className="block text-sm font-semibold text-gray-700 mb-3">
-                        <i className="fas fa-user mr-2 text-gray-600"></i>Username
-                      </label>
-                      <input
-                        type="text"
-                        value={formData.username}
-                        onChange={(e) => setFormData({ ...formData, username: e.target.value })}
-                        placeholder="Enter username"
-                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-colors duration-200"
-                        required
-                        minLength={3}
-                      />
-                      <p className="text-xs text-gray-500 mt-1">Minimum 3 characters</p>
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-semibold text-gray-700 mb-3">
-                        <i className="fas fa-shield-alt mr-2 text-gray-600"></i>Role
-                      </label>
-                      <select
-                        value={formData.role}
-                        onChange={(e) => setFormData({ ...formData, role: e.target.value })}
-                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-colors duration-200"
-                        required
-                      >
-                        <option value="user">Standard User</option>
-                        <option value="admin">Administrator</option>
-                      </select>
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-semibold text-gray-700 mb-3">
-                      <i className="fas fa-lock mr-2 text-gray-600"></i>Password
-                    </label>
-                    <input
-                      type="password"
-                      value={formData.password}
-                      onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                      placeholder="Enter secure password"
-                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-colors duration-200"
-                      required
-                      minLength={6}
-                    />
-                    <p className="text-xs text-gray-500 mt-1">Minimum 6 characters</p>
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-semibold text-gray-700 mb-3">
-                      <i className="fas fa-list-ol mr-2 text-gray-600"></i>Session Limit
-                    </label>
-                    <input
-                      type="number"
-                      value={formData.session_limit}
-                      onChange={(e) => setFormData({ ...formData, session_limit: parseInt(e.target.value) || 5 })}
-                      placeholder="Enter session limit"
-                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-colors duration-200"
-                      min="-1"
-                      required
-                    />
-                    <div className="flex items-center mt-2 p-3 bg-gray-50 border border-gray-200 rounded-lg">
-                      <i className="fas fa-info-circle text-gray-600 mr-2"></i>
-                      <p className="text-xs text-gray-700">Use -1 for unlimited sessions (recommended for admins)</p>
-                    </div>
-                  </div>
-
-                  <div className="flex gap-4 pt-6 border-t border-gray-200">
-                    <button
-                      type="button"
-                      onClick={closeModals}
-                      className="flex-1 px-6 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors duration-200 font-medium"
-                    >
-                      Cancel
-                    </button>
-                    <button
-                      type="submit"
-                      disabled={loading}
-                      className="flex-1 bg-green-600 hover:bg-green-700 disabled:bg-gray-400 text-white px-6 py-3 rounded-lg font-medium transition-colors duration-200 disabled:cursor-not-allowed"
-                    >
-                      {loading ? (
-                        <>
-                          <i className="fas fa-spinner fa-spin mr-2"></i>
-                          Creating User...
-                        </>
-                      ) : (
-                        <>
-                          <i className="fas fa-user-plus mr-2"></i>
-                          Create User
-                        </>
-                      )}
-                    </button>
-                  </div>
-                </form>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Edit User Modal */}
-        {showEditModal && selectedUser && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-lg max-w-lg w-full shadow-lg">
-              <div className="bg-green-600 rounded-t-lg p-6">
-                <div className="flex justify-between items-center">
-                  <div className="flex items-center">
-                    <div className="bg-white bg-opacity-20 p-2 rounded-lg mr-3">
-                      <i className="fas fa-user-edit text-white text-lg"></i>
-                    </div>
-                    <div>
-                      <h3 className="text-xl font-bold text-white">Edit User</h3>
-                      <p className="text-green-100 text-sm">@{selectedUser.username}</p>
-                    </div>
-                  </div>
-                  <button 
-                    onClick={closeModals} 
-                    className="text-white hover:bg-white hover:bg-opacity-20 p-2 rounded-lg transition-all duration-200"
-                  >
-                    <i className="fas fa-times text-lg"></i>
-                  </button>
-                </div>
-                <p className="text-green-100 mt-2">Update user information and permissions</p>
-              </div>
-              
-              <div className="p-6">
-
-                <form onSubmit={handleUpdateUser} className="space-y-6">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div>
-                      <label className="block text-sm font-semibold text-gray-700 mb-3">
-                        <i className="fas fa-user mr-2 text-gray-600"></i>Username
-                      </label>
-                      <input
-                        type="text"
-                        value={formData.username}
-                        onChange={(e) => setFormData({ ...formData, username: e.target.value })}
-                        placeholder="Enter new username"
-                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-colors duration-200"
-                        minLength={3}
-                      />
-                      <p className="text-xs text-gray-500 mt-1">Leave unchanged if not updating</p>
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-semibold text-gray-700 mb-3">
-                        <i className="fas fa-shield-alt mr-2 text-gray-600"></i>Role
-                      </label>
-                      <select
-                        value={formData.role}
-                        onChange={(e) => setFormData({ ...formData, role: e.target.value })}
-                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-colors duration-200"
-                        disabled={selectedUser.username === 'admin'}
-                      >
-                        <option value="user">Standard User</option>
-                        <option value="admin">Administrator</option>
-                      </select>
-                      {selectedUser.username === 'admin' && (
-                        <div className="flex items-center mt-2 p-2 bg-yellow-50 border border-yellow-200 rounded-lg">
-                          <i className="fas fa-lock text-yellow-600 mr-2"></i>
-                          <p className="text-xs text-yellow-700">Admin user role cannot be changed</p>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-semibold text-gray-700 mb-3">
-                      <i className="fas fa-lock mr-2 text-gray-600"></i>New Password
-                    </label>
-                    <input
-                      type="password"
-                      value={formData.password}
-                      onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                      placeholder="Enter new password (optional)"
-                      className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-all duration-200"
-                      minLength={6}
-                    />
-                    <div className="flex items-center mt-2 p-3 bg-gray-50 border border-gray-200 rounded-lg">
-                      <i className="fas fa-info-circle text-gray-600 mr-2"></i>
-                      <p className="text-xs text-gray-700">Leave empty to keep current password</p>
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-semibold text-gray-700 mb-3">
-                      <i className="fas fa-list-ol mr-2 text-gray-600"></i>Session Limit
-                    </label>
-                    <input
-                      type="number"
-                      value={formData.session_limit}
-                      onChange={(e) => setFormData({ ...formData, session_limit: parseInt(e.target.value) || 5 })}
-                      placeholder="Enter session limit"
-                      className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-all duration-200"
-                      min="-1"
-                    />
-                    <div className="flex items-center mt-2 p-3 bg-gray-50 border border-gray-200 rounded-lg">
-                      <i className="fas fa-info-circle text-gray-600 mr-2"></i>
-                      <p className="text-xs text-gray-700">Use -1 for unlimited sessions</p>
-                    </div>
-                  </div>
-
-                  <div className="flex gap-4 pt-6 border-t border-gray-200">
-                    <button
-                      type="button"
-                      onClick={closeModals}
-                      className="flex-1 px-6 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors duration-200 font-medium"
-                    >
-                      Cancel
-                    </button>
-                    <button
-                      type="submit"
-                      disabled={loading}
-                      className="flex-1 bg-green-600 hover:bg-green-700 disabled:bg-gray-400 text-white px-6 py-3 rounded-lg font-medium transition-colors duration-200 disabled:cursor-not-allowed"
-                    >
-                      {loading ? (
-                        <>
-                          <i className="fas fa-spinner fa-spin mr-2"></i>
-                          Updating User...
-                        </>
-                      ) : (
-                        <>
-                          <i className="fas fa-save mr-2"></i>
-                          Update User
-                        </>
-                      )}
-                    </button>
-                  </div>
-                </form>
-              </div>
-            </div>
-          </div>
-        )}
+      )}
     </div>
   );
 };

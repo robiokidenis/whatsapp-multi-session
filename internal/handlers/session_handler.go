@@ -270,6 +270,47 @@ func (h *SessionHandler) SendMessage(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// SendLocation handles sending location messages
+func (h *SessionHandler) SendLocation(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	sessionID := vars["sessionId"]
+
+	var req models.SendLocationRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	// Validate input
+	if req.To == "" {
+		http.Error(w, "To field is required", http.StatusBadRequest)
+		return
+	}
+	
+	// Validate latitude and longitude ranges
+	if req.Latitude < -90 || req.Latitude > 90 {
+		http.Error(w, "Latitude must be between -90 and 90", http.StatusBadRequest)
+		return
+	}
+	
+	if req.Longitude < -180 || req.Longitude > 180 {
+		http.Error(w, "Longitude must be between -180 and 180", http.StatusBadRequest)
+		return
+	}
+
+	// Send location
+	messageID, err := h.whatsappService.SendLocation(sessionID, &req)
+	if err != nil {
+		h.logger.Error("Failed to send location from session %s: %v", sessionID, err)
+		HandleError(w, err)
+		return
+	}
+
+	WriteSuccessResponse(w, "Location sent successfully", map[string]interface{}{
+		"message_id": messageID,
+	})
+}
+
 // SendAttachment handles sending file attachments
 func (h *SessionHandler) SendAttachment(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)

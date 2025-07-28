@@ -155,6 +155,7 @@ func setupRoutes(
 
 	// Message routes
 	sessions.HandleFunc("/{sessionId}/send", sessionHandler.SendMessage).Methods("POST")
+	sessions.HandleFunc("/{sessionId}/send-location", sessionHandler.SendLocation).Methods("POST")
 	sessions.HandleFunc("/{sessionId}/send-attachment", sessionHandler.SendAttachment).Methods("POST")
 	sessions.HandleFunc("/{sessionId}/send-image", sessionHandler.SendImage).Methods("POST")
 	sessions.HandleFunc("/{sessionId}/send-file-url", sessionHandler.SendFileFromURL).Methods("POST")

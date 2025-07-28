@@ -32,6 +32,13 @@ type SendFileURLRequest struct {
 	Type     string `json:"type,omitempty"` // image, video, audio, document
 }
 
+// SendLocationRequest represents a location send request
+type SendLocationRequest struct {
+	To        string  `json:"to"`
+	Latitude  float64 `json:"latitude"`
+	Longitude float64 `json:"longitude"`
+}
+
 // MessageResponse represents a message response
 type MessageResponse struct {
 	Success bool   `json:"success"`

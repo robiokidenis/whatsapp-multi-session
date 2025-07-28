@@ -42,14 +42,80 @@ type WhatsAppService struct {
 	eventHandlers  map[string]func(*events.Message)
 }
 
+// UserAgentData contains browser and OS information for randomization
+type UserAgentData struct {
+	Browser   string
+	Version   string
+	OS        string
+	OSVersion string
+}
+
+// predefined user agents for randomization
+var userAgents = []UserAgentData{
+	{"Chrome", "120.0.6099.71", "Windows", "10.0"},
+	{"Chrome", "119.0.6045.159", "Windows", "11.0"}, 
+	{"Chrome", "120.0.6099.71", "macOS", "14.1"},
+	{"Chrome", "119.0.6045.199", "macOS", "13.6"},
+	{"Firefox", "121.0", "Windows", "10.0"},
+	{"Firefox", "120.0.1", "Windows", "11.0"},
+	{"Firefox", "121.0", "macOS", "14.1"},
+	{"Edge", "120.0.2210.61", "Windows", "10.0"},
+	{"Edge", "119.0.2151.97", "Windows", "11.0"},
+	{"Safari", "17.1", "macOS", "14.1"},
+	{"Safari", "16.6", "macOS", "13.6"},
+}
+
 func init() {
 	// Set up WhatsApp logging
 	waLog.Stdout("Main", "INFO", true)
 
-	// Set device properties to avoid client outdated error
+	// Set default device properties - will be randomized per session
 	store.DeviceProps.PlatformType = waCompanionReg.DeviceProps_CHROME.Enum()
 	store.DeviceProps.Os = proto.String("Windows")
 	store.DeviceProps.RequireFullSync = proto.Bool(false)
+}
+
+// getRandomUserAgent returns a random user agent configuration
+func (s *WhatsAppService) getRandomUserAgent() UserAgentData {
+	n, err := rand.Int(rand.Reader, big.NewInt(int64(len(userAgents))))
+	if err != nil {
+		// Fallback to first user agent if random fails
+		return userAgents[0]
+	}
+	return userAgents[n.Int64()]
+}
+
+// setRandomDeviceProps sets random device properties for a session
+func (s *WhatsAppService) setRandomDeviceProps(deviceStore *store.Device) {
+	ua := s.getRandomUserAgent()
+	
+	// Set browser type based on random selection
+	switch ua.Browser {
+	case "Chrome":
+		store.DeviceProps.PlatformType = waCompanionReg.DeviceProps_CHROME.Enum()
+	case "Firefox":
+		store.DeviceProps.PlatformType = waCompanionReg.DeviceProps_FIREFOX.Enum()
+	case "Edge":
+		store.DeviceProps.PlatformType = waCompanionReg.DeviceProps_EDGE.Enum()
+	case "Safari":
+		store.DeviceProps.PlatformType = waCompanionReg.DeviceProps_SAFARI.Enum()
+	default:
+		store.DeviceProps.PlatformType = waCompanionReg.DeviceProps_CHROME.Enum()
+	}
+	
+	// Set OS
+	switch ua.OS {
+	case "Windows":
+		store.DeviceProps.Os = proto.String("Windows")
+	case "macOS":
+		store.DeviceProps.Os = proto.String("Mac OS")
+	default:
+		store.DeviceProps.Os = proto.String("Windows")
+	}
+	
+	// Log the selected user agent for debugging
+	s.logger.Info("Using random user agent - Browser: %s %s, OS: %s %s", 
+		ua.Browser, ua.Version, ua.OS, ua.OSVersion)
 }
 
 // NewWhatsAppService creates a new WhatsApp service
@@ -120,6 +186,9 @@ func (s *WhatsAppService) CreateSession(req *models.CreateSessionRequest, userID
 
 	// Create device store
 	deviceStore := s.store.NewDevice()
+	
+	// Set random device properties for this session
+	s.setRandomDeviceProps(deviceStore)
 	
 	// Create WhatsApp client
 	clientLog := waLog.Stdout("Client", "INFO", true)
@@ -668,6 +737,66 @@ func (s *WhatsAppService) SendMessage(sessionID string, req *models.SendMessageR
 		return "", fmt.Errorf("failed to send message: %v", err)
 	}
 
+	return resp.ID, nil
+}
+
+// SendLocation sends a location message
+func (s *WhatsAppService) SendLocation(sessionID string, req *models.SendLocationRequest) (string, error) {
+	session, exists := s.GetSession(sessionID)
+	if !exists {
+		return "", models.NewNotFoundError("session not found")
+	}
+
+	// Check if session is connected
+	if !session.Connected {
+		return "", models.NewServiceUnavailableError("session is not connected. Please connect the session first")
+	}
+
+	// Check if session is logged in
+	if !session.LoggedIn {
+		return "", models.NewUnauthorizedError("session is not authenticated. Please scan QR code to login")
+	}
+
+	// Format recipient JID like original implementation
+	recipientJID := req.To
+	
+	// Check if it's a phone number (contains only digits and +)
+	if !strings.Contains(req.To, "@") {
+		phoneNumber := strings.ReplaceAll(req.To, "+", "")
+		phoneNumber = strings.ReplaceAll(phoneNumber, " ", "")
+		phoneNumber = strings.ReplaceAll(phoneNumber, "-", "")
+		
+		if len(phoneNumber) < 8 || len(phoneNumber) > 15 {
+			return "", fmt.Errorf("invalid phone number length. Should be 8-15 digits")
+		}
+		
+		// Add @s.whatsapp.net if not present
+		recipientJID = phoneNumber + "@s.whatsapp.net"
+	}
+	
+	s.logger.Debug("Formatted recipient JID for location: %s", recipientJID)
+
+	// Parse recipient JID
+	jid, err := types.ParseJID(recipientJID)
+	if err != nil {
+		return "", fmt.Errorf("invalid recipient JID: %v", err)
+	}
+
+	// Create location message
+	msg := &waProto.Message{
+		LocationMessage: &waProto.LocationMessage{
+			DegreesLatitude:  proto.Float64(req.Latitude),
+			DegreesLongitude: proto.Float64(req.Longitude),
+		},
+	}
+
+	// Send location message
+	resp, err := session.Client.SendMessage(context.Background(), jid, msg)
+	if err != nil {
+		return "", fmt.Errorf("failed to send location: %v", err)
+	}
+
+	s.logger.Info("Location sent to %s from session %s", recipientJID, sessionID)
 	return resp.ID, nil
 }
 
