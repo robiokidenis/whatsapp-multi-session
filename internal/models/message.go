@@ -23,6 +23,15 @@ type SendFileRequest struct {
 	Caption  string `json:"caption"`
 }
 
+// SendFileURLRequest represents a file send request from URL
+type SendFileURLRequest struct {
+	To       string `json:"to"`
+	URL      string `json:"url"`      // File URL to download
+	FileName string `json:"filename,omitempty"`
+	Caption  string `json:"caption,omitempty"`
+	Type     string `json:"type,omitempty"` // image, video, audio, document
+}
+
 // MessageResponse represents a message response
 type MessageResponse struct {
 	Success bool   `json:"success"`

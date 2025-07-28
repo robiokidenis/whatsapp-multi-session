@@ -28,8 +28,9 @@ type LoginRequest struct {
 
 // LoginResponse represents the response after successful login
 type LoginResponse struct {
-	Token string `json:"token"`
-	User  *User  `json:"user"`
+	Success bool   `json:"success"`
+	Token   string `json:"token"`
+	User    *User  `json:"user"`
 }
 
 // RegisterRequest represents user registration request

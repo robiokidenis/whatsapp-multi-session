@@ -62,8 +62,9 @@ func (s *UserService) Login(req *models.LoginRequest) (*models.LoginResponse, er
 	s.logger.Info("User %s logged in successfully", user.Username)
 
 	return &models.LoginResponse{
-		Token: token,
-		User:  user,
+		Success: true,
+		Token:   token,
+		User:    user,
 	}, nil
 }
 

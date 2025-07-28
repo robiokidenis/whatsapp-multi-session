@@ -1,11 +1,18 @@
 package handlers
 
 import (
+	"context"
+	"crypto/rand"
 	"encoding/json"
+	"fmt"
+	"math/big"
 	"net/http"
+	"time"
 
+	"github.com/golang-jwt/jwt/v5"
 	"github.com/gorilla/mux"
 	"github.com/gorilla/websocket"
+	"go.mau.fi/whatsmeow"
 
 	"whatsapp-multi-session/internal/models"
 	"whatsapp-multi-session/internal/services"
@@ -16,12 +23,14 @@ import (
 type SessionHandler struct {
 	whatsappService *services.WhatsAppService
 	logger          *logger.Logger
+	jwtSecret       string
 	upgrader        websocket.Upgrader
 }
 
 // NewSessionHandler creates a new session handler
 func NewSessionHandler(
 	whatsappService *services.WhatsAppService,
+	jwtSecret string,
 	log *logger.Logger,
 ) *SessionHandler {
 	upgrader := websocket.Upgrader{
@@ -47,6 +56,7 @@ func NewSessionHandler(
 	return &SessionHandler{
 		whatsappService: whatsappService,
 		logger:          log,
+		jwtSecret:       jwtSecret,
 		upgrader:        upgrader,
 	}
 }
@@ -59,14 +69,26 @@ func (h *SessionHandler) CreateSession(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Validate input
+	// Auto-generate name if empty
 	if req.Name == "" {
-		http.Error(w, "Session name is required", http.StatusBadRequest)
+		req.Name = "Session-" + generateSessionID()
+	}
+
+	// Get user info from context
+	userID, ok := r.Context().Value("user_id").(int)
+	if !ok {
+		http.Error(w, "User authentication required", http.StatusUnauthorized)
+		return
+	}
+
+	role, ok := r.Context().Value("role").(string)
+	if !ok {
+		http.Error(w, "User role required", http.StatusUnauthorized)
 		return
 	}
 
 	// Create session
-	session, err := h.whatsappService.CreateSession(&req)
+	session, err := h.whatsappService.CreateSession(&req, userID, role)
 	if err != nil {
 		h.logger.Error("Failed to create session: %v", err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -86,7 +108,10 @@ func (h *SessionHandler) CreateSession(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(response)
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"success": true,
+		"data":    response,
+	})
 }
 
 // GetSessions handles getting all sessions
@@ -109,7 +134,10 @@ func (h *SessionHandler) GetSessions(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(responses)
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"success": true,
+		"data":    responses,
+	})
 }
 
 // GetSession handles getting a specific session
@@ -135,7 +163,10 @@ func (h *SessionHandler) GetSession(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(response)
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"success": true,
+		"data":    response,
+	})
 }
 
 // ConnectSession handles session connection
@@ -249,14 +280,12 @@ func (h *SessionHandler) SendMessage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	response := &models.MessageResponse{
-		Success: true,
-		ID:      messageID,
-		Message: "Message sent successfully",
-	}
-
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(response)
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"success": true,
+		"id":      messageID,
+		"message": "Message sent successfully",
+	})
 }
 
 // SendAttachment handles sending file attachments
@@ -284,14 +313,78 @@ func (h *SessionHandler) SendAttachment(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	response := &models.MessageResponse{
-		Success: true,
-		ID:      messageID,
-		Message: "Attachment sent successfully",
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"success": true,
+		"id":      messageID,
+		"message": "Attachment sent successfully",
+	})
+}
+
+// SendFileFromURL handles sending files from URL
+func (h *SessionHandler) SendFileFromURL(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	sessionID := vars["sessionId"]
+
+	var req models.SendFileURLRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	// Validate input
+	if req.To == "" || req.URL == "" {
+		http.Error(w, "To and URL fields are required", http.StatusBadRequest)
+		return
+	}
+
+	// Send file from URL
+	messageID, err := h.whatsappService.SendFileFromURL(sessionID, &req)
+	if err != nil {
+		h.logger.Error("Failed to send file from URL for session %s: %v", sessionID, err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(response)
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"success": true,
+		"id":      messageID,
+		"message": "File sent successfully",
+	})
+}
+
+// SendImage handles sending images
+func (h *SessionHandler) SendImage(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	sessionID := vars["sessionId"]
+
+	var req models.SendImageRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	// Validate input
+	if req.To == "" || req.Image == "" {
+		http.Error(w, "To and image fields are required", http.StatusBadRequest)
+		return
+	}
+
+	// Send image
+	messageID, err := h.whatsappService.SendImage(sessionID, &req)
+	if err != nil {
+		h.logger.Error("Failed to send image from session %s: %v", sessionID, err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"success": true,
+		"id":      messageID,
+		"message": "Image sent successfully",
+	})
 }
 
 // CheckNumber handles checking if a number is on WhatsApp
@@ -403,7 +496,7 @@ func (h *SessionHandler) GetGroups(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]interface{}{
 		"success": true,
-		"groups":  groups,
+		"data":    groups,
 	})
 }
 
@@ -439,14 +532,12 @@ func (h *SessionHandler) SendMessageGeneral(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	response := &models.MessageResponse{
-		Success: true,
-		ID:      messageID,
-		Message: "Message sent successfully",
-	}
-
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(response)
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"success": true,
+		"id":      messageID,
+		"message": "Message sent successfully",
+	})
 }
 
 // WebSocketHandler handles WebSocket connections for real-time updates
@@ -454,8 +545,21 @@ func (h *SessionHandler) WebSocketHandler(w http.ResponseWriter, r *http.Request
 	vars := mux.Vars(r)
 	sessionID := vars["sessionId"]
 
+	// Authenticate via token query parameter
+	token := r.URL.Query().Get("token")
+	if token == "" {
+		http.Error(w, "Authentication token required", http.StatusUnauthorized)
+		return
+	}
+
+	// Validate JWT token
+	if err := h.validateJWT(token); err != nil {
+		http.Error(w, "Invalid token: "+err.Error(), http.StatusUnauthorized)
+		return
+	}
+
 	// Check if session exists
-	_, exists := h.whatsappService.GetSession(sessionID)
+	session, exists := h.whatsappService.GetSession(sessionID)
 	if !exists {
 		http.Error(w, "Session not found", http.StatusNotFound)
 		return
@@ -471,6 +575,48 @@ func (h *SessionHandler) WebSocketHandler(w http.ResponseWriter, r *http.Request
 
 	h.logger.Info("WebSocket connection established for session %s", sessionID)
 
+	// Start QR code streaming if not logged in
+	ctx, cancel := context.WithCancel(r.Context())
+	defer cancel()
+
+	if !session.LoggedIn {
+		// Disconnect if already connected but not logged in (like original implementation)
+		if session.Connected && session.Client.IsConnected() && !session.Client.IsLoggedIn() {
+			h.logger.Info("Disconnecting stale connection for session %s", sessionID)
+			session.Client.Disconnect()
+			// Give it a moment to disconnect cleanly  
+			time.Sleep(1 * time.Second)
+		}
+
+		// Get QR channel before connecting (like original implementation)
+		qrChan, err := session.Client.GetQRChannel(ctx)
+		if err != nil {
+			h.logger.Error("Failed to get QR channel for session %s: %v", sessionID, err)
+			conn.WriteJSON(models.WebSocketMessage{
+				Type: "error",
+				Data: map[string]string{"error": "Failed to get QR channel: " + err.Error()},
+			})
+			return
+		}
+
+		// Start QR code streaming
+		go h.streamQRUpdatesFromChannel(ctx, conn, qrChan, sessionID)
+
+		// Now connect after getting QR channel (only if not already connected)
+		if !session.Connected {
+			if err := h.whatsappService.ConnectSession(sessionID); err != nil {
+				h.logger.Error("Failed to connect session %s: %v", sessionID, err)
+				conn.WriteJSON(models.WebSocketMessage{
+					Type: "error", 
+					Data: map[string]string{"error": "Failed to connect: " + err.Error()},
+				})
+				return
+			}
+		} else {
+			h.logger.Info("Session %s already connected, starting QR generation", sessionID)
+		}
+	}
+
 	// Handle WebSocket messages
 	for {
 		var msg models.WebSocketMessage
@@ -483,10 +629,192 @@ func (h *SessionHandler) WebSocketHandler(w http.ResponseWriter, r *http.Request
 			break
 		}
 
-		// Echo message back (for now)
-		if err := conn.WriteJSON(msg); err != nil {
-			h.logger.Error("WebSocket write error for session %s: %v", sessionID, err)
-			break
+		// Handle different message types
+		switch msg.Type {
+		case "ping":
+			if err := conn.WriteJSON(models.WebSocketMessage{Type: "pong"}); err != nil {
+				h.logger.Error("WebSocket pong error for session %s: %v", sessionID, err)
+				return
+			}
+		default:
+			h.logger.Debug("Received WebSocket message type %s for session %s", msg.Type, sessionID)
+		}
+	}
+}
+
+
+// validateJWT validates a JWT token
+func (h *SessionHandler) validateJWT(tokenString string) error {
+	token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
+		return []byte(h.jwtSecret), nil
+	})
+
+	if err != nil {
+		return err
+	}
+
+	if !token.Valid {
+		return fmt.Errorf("invalid token")
+	}
+
+	return nil
+}
+
+// LoginSession handles session login (WhatsApp authentication)
+func (h *SessionHandler) LoginSession(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	sessionID := vars["sessionId"]
+
+	if err := h.whatsappService.LoginSession(sessionID); err != nil {
+		h.logger.Error("Failed to login session %s: %v", sessionID, err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]string{"message": "Login process initiated"})
+}
+
+// LogoutSession handles session logout (WhatsApp logout)
+func (h *SessionHandler) LogoutSession(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	sessionID := vars["sessionId"]
+
+	if err := h.whatsappService.LogoutSession(sessionID); err != nil {
+		h.logger.Error("Failed to logout session %s: %v", sessionID, err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]string{"message": "Session logged out"})
+}
+
+// UpdateSessionWebhook handles updating session webhook URL
+func (h *SessionHandler) UpdateSessionWebhook(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	sessionID := vars["sessionId"]
+
+	var req struct {
+		WebhookURL string `json:"webhook_url"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	updateReq := &models.UpdateSessionRequest{
+		WebhookURL: req.WebhookURL,
+	}
+
+	if err := h.whatsappService.UpdateSession(sessionID, updateReq); err != nil {
+		h.logger.Error("Failed to update session webhook %s: %v", sessionID, err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]string{"message": "Webhook updated successfully"})
+}
+
+// UpdateSessionName handles updating session name
+func (h *SessionHandler) UpdateSessionName(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	sessionID := vars["sessionId"]
+
+	var req struct {
+		Name string `json:"name"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	if req.Name == "" {
+		http.Error(w, "Name is required", http.StatusBadRequest)
+		return
+	}
+
+	updateReq := &models.UpdateSessionRequest{
+		Name: req.Name,
+	}
+
+	if err := h.whatsappService.UpdateSession(sessionID, updateReq); err != nil {
+		h.logger.Error("Failed to update session name %s: %v", sessionID, err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]string{"message": "Session name updated successfully"})
+}
+
+// generateSessionID generates a random 10-digit session ID
+func generateSessionID() string {
+	// Generate a random number between 1000000000 and 9999999999 (10 digits)
+	min := int64(1000000000)
+	max := int64(9999999999)
+
+	n, err := rand.Int(rand.Reader, big.NewInt(max-min))
+	if err != nil {
+		// Fallback to timestamp-based ID if random fails
+		return fmt.Sprintf("session_%d", time.Now().UnixNano()/1000000)
+	}
+
+	return fmt.Sprintf("%d", n.Int64()+min)
+}
+
+// streamQRUpdatesFromChannel streams QR code updates from a QR channel directly
+func (h *SessionHandler) streamQRUpdatesFromChannel(ctx context.Context, conn *websocket.Conn, qrChan <-chan whatsmeow.QRChannelItem, sessionID string) {
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case evt, ok := <-qrChan:
+			if !ok {
+				h.logger.Info("QR channel closed for session %s", sessionID)
+				return
+			}
+
+			h.logger.Debug("QR event for session %s: %s", sessionID, evt.Event)
+
+			var msgType string
+			var data interface{}
+
+			switch evt.Event {
+			case "code":
+				msgType = "qr"
+				data = map[string]interface{}{
+					"qr":      evt.Code,
+					"timeout": evt.Timeout,
+				}
+			case "success":
+				msgType = "success"
+				data = map[string]string{"message": "Login successful"}
+			case "timeout":
+				msgType = "qr_timeout"
+				data = map[string]string{"message": "QR code timeout"}
+			default:
+				h.logger.Debug("Unknown QR event: %s", evt.Event)
+				continue
+			}
+
+			wsMsg := models.WebSocketMessage{
+				Type: msgType,
+				Data: data,
+			}
+
+			if err := conn.WriteJSON(wsMsg); err != nil {
+				h.logger.Error("Failed to send QR update for session %s: %v", sessionID, err)
+				return
+			}
+
+			h.logger.Debug("Sent QR update (%s) for session %s", msgType, sessionID)
+
+			// Stop streaming on success or timeout
+			if evt.Event == "success" || evt.Event == "timeout" {
+				return
+			}
 		}
 	}
 }

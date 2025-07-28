@@ -36,6 +36,7 @@ type SessionMetadata struct {
 type CreateSessionRequest struct {
 	Phone      string `json:"phone,omitempty"`
 	Name       string `json:"name"`
+	Position   int    `json:"position,omitempty"`
 	WebhookURL string `json:"webhook_url,omitempty"`
 }
 
