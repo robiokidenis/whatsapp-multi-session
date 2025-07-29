@@ -52,6 +52,11 @@ func main() {
 	// Initialize repositories
 	userRepo := repository.NewUserRepository(db.DB())
 	sessionRepo := repository.NewSessionRepository(db.DB())
+	logRepo := repository.NewLogRepository(db)
+
+	// Setup database logging
+	dbWriter := logger.NewDatabaseWriter(logRepo)
+	log.AddWriter(dbWriter)
 
 	// Initialize services
 	userService := services.NewUserService(userRepo, cfg.JWTSecret, log)
@@ -74,9 +79,10 @@ func main() {
 	sessionHandler := handlers.NewSessionHandler(whatsappService, cfg.JWTSecret, log, cfg.CORSAllowedOrigins)
 	adminHandler := handlers.NewAdminHandler(userService, log)
 	mediaHandler := handlers.NewMediaHandler(log)
+	logHandler := handlers.NewLogHandler(logRepo, log)
 
 	// Setup routes
-	router := setupRoutes(authHandler, sessionHandler, adminHandler, mediaHandler, cfg)
+	router := setupRoutes(authHandler, sessionHandler, adminHandler, mediaHandler, logHandler, cfg)
 
 	// Setup CORS
 	corsHandler := middleware.NewCORS(cfg.CORSAllowedOrigins)
@@ -117,6 +123,7 @@ func setupRoutes(
 	sessionHandler *handlers.SessionHandler,
 	adminHandler *handlers.AdminHandler,
 	mediaHandler *handlers.MediaHandler,
+	logHandler *handlers.LogHandler,
 	cfg *config.Config,
 ) *mux.Router {
 	router := mux.NewRouter()
@@ -187,6 +194,13 @@ func setupRoutes(
 	admin.HandleFunc("/users/{id}", adminHandler.GetUser).Methods("GET")
 	admin.HandleFunc("/users/{id}", adminHandler.UpdateUser).Methods("PUT")
 	admin.HandleFunc("/users/{id}", adminHandler.DeleteUser).Methods("DELETE")
+	
+	// Log management routes (admin only)
+	admin.HandleFunc("/logs", logHandler.GetLogs).Methods("GET")
+	admin.HandleFunc("/logs/levels", logHandler.GetLogLevels).Methods("GET")
+	admin.HandleFunc("/logs/components", logHandler.GetLogComponents).Methods("GET")
+	admin.HandleFunc("/logs/cleanup/{days}", logHandler.DeleteOldLogs).Methods("DELETE")
+	admin.HandleFunc("/logs/clear", logHandler.ClearAllLogs).Methods("DELETE")
 	
 	// User registration (admin only)
 	auth_admin := api.PathPrefix("/auth").Subrouter()

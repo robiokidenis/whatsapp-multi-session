@@ -5,6 +5,7 @@ import ProtectedRoute from './components/ProtectedRoute';
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import UserManagement from './components/UserManagement';
+import Logs from './pages/Logs';
 import Layout from './components/Layout';
 
 function App() {
@@ -30,6 +31,16 @@ function App() {
                 <ProtectedRoute>
                   <Layout>
                     <UserManagement />
+                  </Layout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/logs"
+              element={
+                <ProtectedRoute>
+                  <Layout>
+                    <Logs />
                   </Layout>
                 </ProtectedRoute>
               }

@@ -91,6 +91,11 @@ func (d *Database) InitTables() error {
 		return fmt.Errorf("failed to create sessions table: %v", err)
 	}
 
+	// Logs table
+	if err := d.createLogsTable(); err != nil {
+		return fmt.Errorf("failed to create logs table: %v", err)
+	}
+
 	return nil
 }
 
@@ -162,6 +167,69 @@ func (d *Database) createSessionsTable() error {
 			webhook_url TEXT,
 			created_at INTEGER NOT NULL
 		)`
+	}
+
+	_, err := d.db.Exec(query)
+	return err
+}
+
+func (d *Database) createLogsTable() error {
+	// Check if we're using MySQL or SQLite
+	var query string
+	
+	// Get database driver name
+	driver := d.db.Driver()
+	driverName := fmt.Sprintf("%T", driver)
+	
+	if contains(driverName, "mysql") {
+		query = `
+		CREATE TABLE IF NOT EXISTS logs (
+			id INT AUTO_INCREMENT PRIMARY KEY,
+			level VARCHAR(10) NOT NULL,
+			message TEXT NOT NULL,
+			component VARCHAR(100),
+			session_id VARCHAR(255),
+			user_id INT,
+			metadata JSON,
+			created_at BIGINT NOT NULL,
+			INDEX idx_level (level),
+			INDEX idx_component (component),
+			INDEX idx_session_id (session_id),
+			INDEX idx_created_at (created_at)
+		) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`
+	} else {
+		query = `
+		CREATE TABLE IF NOT EXISTS logs (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			level TEXT NOT NULL,
+			message TEXT NOT NULL,
+			component TEXT,
+			session_id TEXT,
+			user_id INTEGER,
+			metadata TEXT,
+			created_at INTEGER NOT NULL
+		)`
+		
+		// Create indexes for SQLite
+		_, err := d.db.Exec(query)
+		if err != nil {
+			return err
+		}
+		
+		indexes := []string{
+			"CREATE INDEX IF NOT EXISTS idx_logs_level ON logs(level)",
+			"CREATE INDEX IF NOT EXISTS idx_logs_component ON logs(component)",
+			"CREATE INDEX IF NOT EXISTS idx_logs_session_id ON logs(session_id)",
+			"CREATE INDEX IF NOT EXISTS idx_logs_created_at ON logs(created_at)",
+		}
+		
+		for _, indexQuery := range indexes {
+			if _, err := d.db.Exec(indexQuery); err != nil {
+				return err
+			}
+		}
+		
+		return nil
 	}
 
 	_, err := d.db.Exec(query)
