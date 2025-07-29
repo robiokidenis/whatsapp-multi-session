@@ -1,0 +1,96 @@
+# MySQL Configuration for WhatsApp Multi-Session
+# This file provides optimized MySQL settings for the WhatsApp Multi-Session application
+
+[mysql]
+default-character-set = utf8mb4
+
+[mysqld]
+# Basic settings
+bind-address = 0.0.0.0
+port = 3306
+
+# Character set and collation
+character-set-server = utf8mb4
+collation-server = utf8mb4_unicode_ci
+init-connect = 'SET NAMES utf8mb4'
+
+# Performance optimization
+# InnoDB settings
+innodb_buffer_pool_size = 256M
+innodb_log_file_size = 64M
+innodb_file_per_table = 1
+innodb_flush_log_at_trx_commit = 2
+innodb_lock_wait_timeout = 50
+
+# Connection settings
+max_connections = 200
+max_connect_errors = 1000
+connect_timeout = 60
+wait_timeout = 28800
+interactive_timeout = 28800
+
+# Query cache (disabled in MySQL 8.0, but keeping for compatibility)
+# query_cache_type = ON
+# query_cache_size = 32M
+# query_cache_limit = 2M
+
+# Buffer sizes
+key_buffer_size = 32M
+max_allowed_packet = 64M
+table_open_cache = 256
+sort_buffer_size = 2M
+read_buffer_size = 2M
+read_rnd_buffer_size = 8M
+myisam_sort_buffer_size = 64M
+
+# Thread cache
+thread_cache_size = 8
+thread_stack = 256k
+
+# Temporary tables
+tmp_table_size = 32M
+max_heap_table_size = 32M
+
+# Logging
+log_error = /var/log/mysql/error.log
+slow_query_log = 1
+slow_query_log_file = /var/log/mysql/slow.log
+long_query_time = 2
+log_queries_not_using_indexes = 0
+
+# Binary logging (for replication if needed)
+server-id = 1
+log_bin = mysql-bin
+binlog_format = row
+expire_logs_days = 7
+max_binlog_size = 100M
+
+# Security settings
+local_infile = 0
+
+# Timezone
+default_time_zone = '+00:00'
+
+# SQL mode (strict mode for data integrity)
+sql_mode = STRICT_TRANS_TABLES,ERROR_FOR_DIVISION_BY_ZERO,NO_AUTO_CREATE_USER,NO_ENGINE_SUBSTITUTION
+
+# MySQL 8.0 specific settings
+authentication_policy = 'mysql_native_password,mysql_native_password,mysql_native_password'
+default_authentication_plugin = mysql_native_password
+
+# Disable DNS lookups for better performance
+skip-name-resolve
+
+# Performance schema (optional, consumes memory)
+performance_schema = ON
+performance_schema_max_table_instances = 400
+performance_schema_max_sql_text_length = 1024
+
+[mysqldump]
+quick
+quote-names
+max_allowed_packet = 64M
+
+[mysql_safe]
+log-error = /var/log/mysql/error.log
+pid-file = /var/run/mysqld/mysqld.pid
