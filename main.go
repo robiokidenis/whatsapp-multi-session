@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"os"
@@ -25,7 +26,7 @@ func main() {
 	// Initialize logger
 	log := logger.New(cfg.EnableLogging, cfg.LogLevel)
 	log.Info("Starting WhatsApp Multi-Session Manager")
-	log.Info("Configuration loaded - Port: %s, Log Level: %s", cfg.Port, cfg.LogLevel)
+	log.Info("Configuration loaded - Port: %s, Log Level: %s, Database Logging: %t", cfg.Port, cfg.LogLevel, cfg.EnableDatabaseLog)
 
 	// Initialize database
 	dbConfig := repository.DatabaseConfig{
@@ -52,11 +53,17 @@ func main() {
 	// Initialize repositories
 	userRepo := repository.NewUserRepository(db.DB())
 	sessionRepo := repository.NewSessionRepository(db.DB())
-	logRepo := repository.NewLogRepository(db)
-
-	// Setup database logging
-	dbWriter := logger.NewDatabaseWriter(logRepo)
-	log.AddWriter(dbWriter)
+	
+	var logRepo *repository.LogRepository
+	// Setup database logging only if enabled
+	if cfg.EnableDatabaseLog {
+		logRepo = repository.NewLogRepository(db)
+		dbWriter := logger.NewDatabaseWriter(logRepo)
+		log.AddWriter(dbWriter)
+		log.Info("Database logging enabled - logs will be stored in database")
+	} else {
+		log.Info("Database logging disabled - logs will only appear in console")
+	}
 
 	// Initialize services
 	userService := services.NewUserService(userRepo, cfg.JWTSecret, log)
@@ -79,7 +86,11 @@ func main() {
 	sessionHandler := handlers.NewSessionHandler(whatsappService, cfg.JWTSecret, log, cfg.CORSAllowedOrigins)
 	adminHandler := handlers.NewAdminHandler(userService, log)
 	mediaHandler := handlers.NewMediaHandler(log)
-	logHandler := handlers.NewLogHandler(logRepo, log)
+
+	var logHandler *handlers.LogHandler
+	if cfg.EnableDatabaseLog && logRepo != nil {
+		logHandler = handlers.NewLogHandler(logRepo, log)
+	}
 
 	// Setup routes
 	router := setupRoutes(authHandler, sessionHandler, adminHandler, mediaHandler, logHandler, cfg)
@@ -195,12 +206,25 @@ func setupRoutes(
 	admin.HandleFunc("/users/{id}", adminHandler.UpdateUser).Methods("PUT")
 	admin.HandleFunc("/users/{id}", adminHandler.DeleteUser).Methods("DELETE")
 	
-	// Log management routes (admin only)
-	admin.HandleFunc("/logs", logHandler.GetLogs).Methods("GET")
-	admin.HandleFunc("/logs/levels", logHandler.GetLogLevels).Methods("GET")
-	admin.HandleFunc("/logs/components", logHandler.GetLogComponents).Methods("GET")
-	admin.HandleFunc("/logs/cleanup/{days}", logHandler.DeleteOldLogs).Methods("DELETE")
-	admin.HandleFunc("/logs/clear", logHandler.ClearAllLogs).Methods("DELETE")
+	// Log status endpoint (always available)
+	admin.HandleFunc("/logs/status", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		status := map[string]interface{}{
+			"database_logging_enabled": cfg.EnableDatabaseLog,
+			"console_logging_enabled":  cfg.EnableLogging,
+			"log_level":               cfg.LogLevel,
+		}
+		json.NewEncoder(w).Encode(status)
+	}).Methods("GET")
+
+	// Log management routes (admin only) - only if database logging is enabled
+	if logHandler != nil {
+		admin.HandleFunc("/logs", logHandler.GetLogs).Methods("GET")
+		admin.HandleFunc("/logs/levels", logHandler.GetLogLevels).Methods("GET")
+		admin.HandleFunc("/logs/components", logHandler.GetLogComponents).Methods("GET")
+		admin.HandleFunc("/logs/cleanup/{days}", logHandler.DeleteOldLogs).Methods("DELETE")
+		admin.HandleFunc("/logs/clear", logHandler.ClearAllLogs).Methods("DELETE")
+	}
 	
 	// User registration (admin only)
 	auth_admin := api.PathPrefix("/auth").Subrouter()

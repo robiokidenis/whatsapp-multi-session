@@ -32,10 +32,11 @@ type Config struct {
 	AdminPassword string
 
 	// Application settings
-	EnableLogging  bool
-	LogLevel       string
-	MaxSessions    int
-	SessionTimeout time.Duration
+	EnableLogging       bool
+	EnableDatabaseLog   bool
+	LogLevel            string
+	MaxSessions         int
+	SessionTimeout      time.Duration
 
 	// WhatsApp settings
 	AutoConnect bool
@@ -79,10 +80,11 @@ func Load() *Config {
 		AdminPassword: getEnv("ADMIN_PASSWORD", "admin123"),
 
 		// Application
-		EnableLogging:  getBoolEnv("ENABLE_LOGGING", true),
-		LogLevel:       getEnv("LOG_LEVEL", "info"),
-		MaxSessions:    getIntEnv("MAX_SESSIONS", 10),
-		SessionTimeout: getDurationEnv("SESSION_TIMEOUT", 24*time.Hour),
+		EnableLogging:     getBoolEnv("ENABLE_LOGGING", true),
+		EnableDatabaseLog: getBoolEnv("ENABLE_DATABASE_LOG", true),
+		LogLevel:          getEnv("LOG_LEVEL", "info"),
+		MaxSessions:       getIntEnv("MAX_SESSIONS", 10),
+		SessionTimeout:    getDurationEnv("SESSION_TIMEOUT", 24*time.Hour),
 
 		// WhatsApp
 		AutoConnect: getBoolEnv("AUTO_CONNECT", true),

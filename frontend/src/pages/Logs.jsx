@@ -24,21 +24,32 @@ const LogsPage = () => {
   const [components, setComponents] = useState([]);
   const [autoRefresh, setAutoRefresh] = useState(false);
   const [refreshInterval, setRefreshInterval] = useState(null);
+  const [loggingStatus, setLoggingStatus] = useState(null);
+  const [statusError, setStatusError] = useState(null);
 
-  // Fetch available log levels and components on mount
+  // Fetch logging status and conditionally fetch other data
   useEffect(() => {
-    fetchLogLevels();
-    fetchComponents();
+    fetchLoggingStatus();
   }, []);
 
-  // Fetch logs when filters change
+  // Fetch logs data only if database logging is enabled
   useEffect(() => {
-    fetchLogs();
-  }, [filters]);
+    if (loggingStatus?.database_logging_enabled) {
+      fetchLogLevels();
+      fetchComponents();
+    }
+  }, [loggingStatus]);
 
-  // Auto-refresh functionality
+  // Fetch logs when filters change (only if database logging is enabled)
   useEffect(() => {
-    if (autoRefresh && filters.page === 1) { // Only auto-refresh on first page
+    if (loggingStatus?.database_logging_enabled) {
+      fetchLogs();
+    }
+  }, [filters, loggingStatus]);
+
+  // Auto-refresh functionality (only if database logging is enabled)
+  useEffect(() => {
+    if (autoRefresh && filters.page === 1 && loggingStatus?.database_logging_enabled) {
       const interval = setInterval(() => {
         fetchLogs();
       }, 5000); // Refresh every 5 seconds
@@ -48,7 +59,7 @@ const LogsPage = () => {
       clearInterval(refreshInterval);
       setRefreshInterval(null);
     }
-  }, [autoRefresh, filters.page]);
+  }, [autoRefresh, filters.page, loggingStatus]);
 
   // Cleanup interval on unmount
   useEffect(() => {
@@ -58,6 +69,27 @@ const LogsPage = () => {
       }
     };
   }, []);
+
+  const fetchLoggingStatus = async () => {
+    try {
+      const response = await fetch('/api/admin/logs/status', {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setLoggingStatus(data);
+        setStatusError(null);
+      } else {
+        setStatusError('Failed to fetch logging status');
+      }
+    } catch (error) {
+      console.error('Failed to fetch logging status:', error);
+      setStatusError('Failed to connect to server');
+    }
+  };
 
   const fetchLogLevels = async () => {
     try {
@@ -246,6 +278,85 @@ const LogsPage = () => {
     }
   };
 
+  // Show loading state while fetching status
+  if (loggingStatus === null && !statusError) {
+    return (
+      <div className="space-y-6">
+        <div className="bg-white shadow rounded-lg">
+          <div className="px-4 py-5 sm:p-6">
+            <div className="text-center py-8">
+              <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600"></div>
+              <p className="mt-2 text-sm text-gray-500">Loading logging status...</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Show error state
+  if (statusError) {
+    return (
+      <div className="space-y-6">
+        <div className="bg-white shadow rounded-lg">
+          <div className="px-4 py-5 sm:p-6">
+            <div className="text-center py-8">
+              <div className="text-red-500 text-lg">❌</div>
+              <h3 className="text-lg font-medium text-gray-900 mt-2">Error Loading Logs</h3>
+              <p className="text-sm text-gray-500 mt-1">{statusError}</p>
+              <button
+                onClick={fetchLoggingStatus}
+                className="mt-4 bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded text-sm"
+              >
+                Retry
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Show message when database logging is disabled
+  if (loggingStatus && !loggingStatus.database_logging_enabled) {
+    return (
+      <div className="space-y-6">
+        <div className="bg-white shadow rounded-lg">
+          <div className="px-4 py-5 sm:p-6">
+            <div className="text-center py-8">
+              <div className="text-yellow-500 text-6xl mb-4">📝</div>
+              <h3 className="text-xl font-medium text-gray-900 mb-2">Database Logging Disabled</h3>
+              <p className="text-gray-600 mb-4 max-w-md mx-auto">
+                Database logging is currently disabled in the application configuration. 
+                Logs are only being displayed in the console output.
+              </p>
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6 max-w-lg mx-auto">
+                <div className="flex items-start">
+                  <div className="text-blue-500 mr-3 mt-1">ℹ️</div>
+                  <div className="text-left">
+                    <h4 className="text-sm font-medium text-blue-900 mb-1">Current Configuration:</h4>
+                    <ul className="text-sm text-blue-800 space-y-1">
+                      <li>• Console Logging: <strong>{loggingStatus.console_logging_enabled ? 'Enabled' : 'Disabled'}</strong></li>
+                      <li>• Database Logging: <strong>Disabled</strong></li>
+                      <li>• Log Level: <strong>{loggingStatus.log_level?.toUpperCase()}</strong></li>
+                    </ul>
+                  </div>
+                </div>
+              </div>
+              <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 max-w-lg mx-auto">
+                <h4 className="text-sm font-medium text-gray-900 mb-2">To Enable Database Logging:</h4>
+                <p className="text-sm text-gray-600 text-left">
+                  Set the environment variable <code className="bg-gray-200 px-2 py-1 rounded">ENABLE_DATABASE_LOG=true</code> 
+                  and restart the application to store logs in the database and view them here.
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
       <div className="bg-white shadow rounded-lg">
@@ -255,7 +366,7 @@ const LogsPage = () => {
               <h3 className="text-lg leading-6 font-medium text-gray-900">
                 System Logs
               </h3>
-              <p className="text-sm text-gray-500">Latest logs displayed first</p>
+              <p className="text-sm text-gray-500">Latest logs displayed first • Database logging enabled</p>
             </div>
             <div className="flex space-x-2">
               <button
@@ -270,10 +381,10 @@ const LogsPage = () => {
                   checked={autoRefresh}
                   onChange={(e) => setAutoRefresh(e.target.checked)}
                   className="rounded border-gray-300 text-blue-600 focus:border-blue-500 focus:ring-blue-500"
-                  disabled={filters.page > 1}
+                  disabled={filters.page > 1 || !loggingStatus?.database_logging_enabled}
                 />
-                <span className={filters.page > 1 ? 'text-gray-400' : 'text-gray-700'}>
-                  Auto-refresh {autoRefresh && filters.page === 1 ? '(5s)' : ''}
+                <span className={(filters.page > 1 || !loggingStatus?.database_logging_enabled) ? 'text-gray-400' : 'text-gray-700'}>
+                  Auto-refresh {autoRefresh && filters.page === 1 && loggingStatus?.database_logging_enabled ? '(5s)' : ''}
                 </span>
               </label>
             </div>
