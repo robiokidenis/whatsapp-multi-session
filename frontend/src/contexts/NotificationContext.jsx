@@ -69,6 +69,15 @@ export const NotificationProvider = ({ children }) => {
     });
   }, [addNotification]);
 
+  // Generic showNotification function for backward compatibility
+  const showNotification = useCallback((message, type = 'info', options = {}) => {
+    return addNotification({
+      type,
+      message,
+      ...options,
+    });
+  }, [addNotification]);
+
   const value = {
     notifications,
     addNotification,
@@ -78,6 +87,7 @@ export const NotificationProvider = ({ children }) => {
     showError,
     showWarning,
     showInfo,
+    showNotification,
   };
 
   return (

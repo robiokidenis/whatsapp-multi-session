@@ -6,6 +6,7 @@ import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import UserManagement from './components/UserManagement';
 import Logs from './pages/Logs';
+import Contacts from './pages/Contacts';
 import Layout from './components/Layout';
 
 function App() {
@@ -41,6 +42,16 @@ function App() {
                 <ProtectedRoute>
                   <Layout>
                     <Logs />
+                  </Layout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/contacts"
+              element={
+                <ProtectedRoute>
+                  <Layout>
+                    <Contacts />
                   </Layout>
                 </ProtectedRoute>
               }

@@ -53,6 +53,10 @@ func main() {
 	// Initialize repositories
 	userRepo := repository.NewUserRepository(db.DB())
 	sessionRepo := repository.NewSessionRepository(db.DB())
+	contactRepo := repository.NewContactRepository(db.DB())
+	contactGroupRepo := repository.NewContactGroupRepository(db.DB())
+	//templateRepo := repository.NewTemplateRepository(db.DB()) // Temporarily disabled
+	autoReplyRepo := repository.NewAutoReplyRepository(db.DB())
 	
 	var logRepo *repository.LogRepository
 	// Setup database logging only if enabled
@@ -73,6 +77,10 @@ func main() {
 	}
 	defer whatsappService.Close()
 
+	// Initialize CRM services
+	contactDetectionService := services.NewContactDetectionService(*log)
+	bulkMessagingService := services.NewBulkMessagingService(whatsappService, *log)
+
 	// Ensure default admin user exists
 	if err := userService.EnsureDefaultAdmin(cfg.AdminUsername, cfg.AdminPassword); err != nil {
 		log.Fatalf("Failed to ensure default admin: %v", err)
@@ -87,13 +95,32 @@ func main() {
 	adminHandler := handlers.NewAdminHandler(userService, log)
 	mediaHandler := handlers.NewMediaHandler(log)
 
+	// Initialize CRM handlers
+	contactHandler := handlers.NewContactHandler(contactRepo, contactGroupRepo, contactDetectionService, log)
+	contactGroupHandler := handlers.NewContactGroupHandler(contactGroupRepo, log)
+	//templateHandler := handlers.NewTemplateHandler(templateRepo, contactRepo, log)
+	bulkMessagingHandler := handlers.NewBulkMessagingHandler(bulkMessagingService, log)
+	autoReplyHandler := handlers.NewAutoReplyHandler(autoReplyRepo, log)
+
 	var logHandler *handlers.LogHandler
 	if cfg.EnableDatabaseLog && logRepo != nil {
 		logHandler = handlers.NewLogHandler(logRepo, log)
 	}
 
 	// Setup routes
-	router := setupRoutes(authHandler, sessionHandler, adminHandler, mediaHandler, logHandler, cfg)
+	router := setupRoutes(
+		authHandler, 
+		sessionHandler, 
+		adminHandler, 
+		mediaHandler, 
+		logHandler, 
+		contactHandler,
+		contactGroupHandler,
+		nil, // templateHandler temporarily disabled
+		bulkMessagingHandler,
+		autoReplyHandler,
+		cfg,
+	)
 
 	// Setup CORS
 	corsHandler := middleware.NewCORS(cfg.CORSAllowedOrigins)
@@ -135,6 +162,11 @@ func setupRoutes(
 	adminHandler *handlers.AdminHandler,
 	mediaHandler *handlers.MediaHandler,
 	logHandler *handlers.LogHandler,
+	contactHandler *handlers.ContactHandler,
+	contactGroupHandler *handlers.ContactGroupHandler,
+	templateHandler interface{},
+	bulkMessagingHandler *handlers.BulkMessagingHandler,
+	autoReplyHandler *handlers.AutoReplyHandler,
 	cfg *config.Config,
 ) *mux.Router {
 	router := mux.NewRouter()
@@ -196,6 +228,36 @@ func setupRoutes(
 
 	// WebSocket endpoint with token-based authentication (no middleware needed as it authenticates via query params)
 	api.HandleFunc("/ws/{sessionId}", sessionHandler.WebSocketHandler).Methods("GET")
+
+	// CRM routes (authentication required)
+	// Contact management
+	protected.HandleFunc("/contacts", contactHandler.GetContacts).Methods("GET")
+	protected.HandleFunc("/contacts", contactHandler.CreateContact).Methods("POST")
+	protected.HandleFunc("/contacts/{id}", contactHandler.UpdateContact).Methods("PUT")
+	protected.HandleFunc("/contacts/{id}", contactHandler.DeleteContact).Methods("DELETE")
+	protected.HandleFunc("/contacts/bulk", contactHandler.BulkActions).Methods("POST")
+	protected.HandleFunc("/contacts/detect", contactHandler.DetectContacts).Methods("POST")
+	protected.HandleFunc("/contacts/import", contactHandler.ImportContacts).Methods("POST")
+
+	// Contact groups management
+	protected.HandleFunc("/contact-groups", contactGroupHandler.GetContactGroups).Methods("GET")
+	protected.HandleFunc("/contact-groups", contactGroupHandler.CreateContactGroup).Methods("POST")
+	protected.HandleFunc("/contact-groups/{id}", contactGroupHandler.UpdateContactGroup).Methods("PUT")
+	protected.HandleFunc("/contact-groups/{id}", contactGroupHandler.DeleteContactGroup).Methods("DELETE")
+
+	// Message templates management - temporarily disabled
+
+	// Bulk messaging
+	protected.HandleFunc("/bulk-messages", bulkMessagingHandler.GetBulkMessagingJobs).Methods("GET")
+	protected.HandleFunc("/bulk-messages", bulkMessagingHandler.StartBulkMessaging).Methods("POST")
+	protected.HandleFunc("/bulk-messages/{jobId}", bulkMessagingHandler.GetBulkMessagingJob).Methods("GET")
+	protected.HandleFunc("/bulk-messages/{jobId}", bulkMessagingHandler.CancelBulkMessagingJob).Methods("DELETE")
+
+	// Auto-reply management
+	protected.HandleFunc("/auto-replies", autoReplyHandler.GetAutoReplies).Methods("GET")
+	protected.HandleFunc("/auto-replies", autoReplyHandler.CreateAutoReply).Methods("POST")
+	protected.HandleFunc("/auto-replies/{id}", autoReplyHandler.UpdateAutoReply).Methods("PUT")
+	protected.HandleFunc("/auto-replies/{id}", autoReplyHandler.DeleteAutoReply).Methods("DELETE")
 
 	// User management routes (admin only)
 	admin := protected.PathPrefix("/admin").Subrouter()
