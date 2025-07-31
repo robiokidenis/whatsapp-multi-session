@@ -13,15 +13,35 @@ const MessageQueue = () => {
   const [showPreviewModal, setShowPreviewModal] = useState(false);
   const [jobDetails, setJobDetails] = useState(null);
   const [refreshInterval, setRefreshInterval] = useState(null);
+  const [contacts, setContacts] = useState([]);
   
   // Filters
   const [statusFilter, setStatusFilter] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
 
-  // Fetch bulk messaging jobs
+  // Fetch contacts for resolving contact IDs to phone numbers
+  const fetchContacts = useCallback(async () => {
+    try {
+      const response = await fetch('/api/contacts', {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        setContacts(Array.isArray(data) ? data : []);
+      }
+    } catch (error) {
+      console.error('Error fetching contacts:', error);
+      // Don't show error as contacts are optional for display
+    }
+  }, [token]);
+
+  // Fetch messaging jobs from job queue
   const fetchJobs = useCallback(async () => {
     try {
-      const response = await fetch('/api/bulk-messages', {
+      const response = await fetch('/api/job-queue?type=bulk_message', {
         headers: {
           'Authorization': `Bearer ${token}`
         }
@@ -30,7 +50,7 @@ const MessageQueue = () => {
       if (!response.ok) throw new Error('Failed to fetch jobs');
       
       const data = await response.json();
-      setJobs(Array.isArray(data) ? data : []);
+      setJobs(data.jobs || []);
     } catch (error) {
       console.error('Error fetching jobs:', error);
       showError('Failed to load message queue');
@@ -42,7 +62,7 @@ const MessageQueue = () => {
   // Fetch job details
   const fetchJobDetails = useCallback(async (jobId) => {
     try {
-      const response = await fetch(`/api/bulk-messages/${jobId}`, {
+      const response = await fetch(`/api/job-queue/${jobId}`, {
         headers: {
           'Authorization': `Bearer ${token}`
         }
@@ -65,7 +85,7 @@ const MessageQueue = () => {
     }
 
     try {
-      const response = await fetch(`/api/bulk-messages/${jobId}`, {
+      const response = await fetch(`/api/job-queue/${jobId}`, {
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${token}`
@@ -84,6 +104,7 @@ const MessageQueue = () => {
 
   // Initial load and auto-refresh
   useEffect(() => {
+    fetchContacts();
     fetchJobs();
     
     // Set up auto-refresh every 5 seconds for active jobs
@@ -94,6 +115,40 @@ const MessageQueue = () => {
       if (interval) clearInterval(interval);
     };
   }, []); // Empty dependency array to run only once
+
+  // Get recipients from job payload
+  const getJobRecipients = (job) => {
+    if (!job.payload) return [];
+    
+    const payload = job.payload;
+    
+    // For bulk message jobs
+    if (job.type === 'bulk_message' && payload.contact_ids) {
+      return payload.contact_ids.map(contactId => {
+        const contact = contacts.find(c => c.id === contactId);
+        return {
+          phone: contact?.phone || `Contact ID: ${contactId}`,
+          name: contact?.name || 'Unknown Contact'
+        };
+      });
+    }
+    
+    // For scheduled message jobs
+    if (job.type === 'scheduled_message' && payload.phone) {
+      return [{
+        phone: payload.phone,
+        name: 'Direct Message'
+      }];
+    }
+    
+    return [];
+  };
+
+  // Get total recipients count
+  const getTotalRecipients = (job) => {
+    const recipients = getJobRecipients(job);
+    return recipients.length;
+  };
 
   // Handle job preview
   const handlePreview = (job) => {
@@ -126,12 +181,23 @@ const MessageQueue = () => {
 
   // Get progress percentage
   const getProgressPercentage = (job) => {
-    const total = job.total_contacts || 0;
-    const sent = job.sent_count || 0;
-    const failed = job.failed_count || 0;
-    const processed = sent + failed;
+    // For job queue data structure, check if it's completed
+    if (job.status === 'completed') return 100;
+    if (job.status === 'failed') return 100;
+    if (job.status === 'pending' || job.status === 'scheduled') return 0;
+    if (job.status === 'running') return 50; // Assume 50% for running jobs
     
-    return total > 0 ? Math.round((processed / total) * 100) : 0;
+    // Fallback to result data if available
+    if (job.result) {
+      const total = job.result.total_contacts || getTotalRecipients(job);
+      const sent = job.result.sent_count || 0;
+      const failed = job.result.failed_count || 0;
+      const processed = sent + failed;
+      
+      return total > 0 ? Math.round((processed / total) * 100) : 0;
+    }
+    
+    return 0;
   };
 
   // Format date
@@ -225,6 +291,9 @@ const MessageQueue = () => {
                     Recipients
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Receiver Numbers
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Started
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -240,10 +309,10 @@ const MessageQueue = () => {
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div>
                           <div className="text-sm font-medium text-gray-900">
-                            {job.job_id || job.id || 'Unknown'}
+                            {job.job_id || 'Unknown'}
                           </div>
                           <div className="text-sm text-gray-500">
-                            {job.template_name || 'Template N/A'}
+                            {job.type || 'Unknown Type'}
                           </div>
                         </div>
                       </td>
@@ -258,7 +327,7 @@ const MessageQueue = () => {
                             <div className="flex justify-between text-sm mb-1">
                               <span className="text-gray-600">{progress}%</span>
                               <span className="text-gray-500">
-                                {job.sent_count || 0}/{job.total_contacts || 0}
+                                {job.result?.sent_count || 0}/{getTotalRecipients(job)}
                               </span>
                             </div>
                             <div className="w-full bg-gray-200 rounded-full h-2">
@@ -277,13 +346,41 @@ const MessageQueue = () => {
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                         <div>
-                          <div className="text-green-600">✓ {job.sent_count || 0} sent</div>
-                          {(job.failed_count || 0) > 0 && (
-                            <div className="text-red-600">✗ {job.failed_count} failed</div>
+                          <div className="text-green-600">✓ {job.result?.sent_count || 0} sent</div>
+                          {(job.result?.failed_count || 0) > 0 && (
+                            <div className="text-red-600">✗ {job.result.failed_count} failed</div>
                           )}
-                          {(job.pending_count || 0) > 0 && (
-                            <div className="text-yellow-600">⏳ {job.pending_count} pending</div>
-                          )}
+                          <div className="text-gray-600">👥 {getTotalRecipients(job)} total</div>
+                        </div>
+                      </td>
+                      <td className="px-6 py-4">
+                        <div className="max-w-xs">
+                          {(() => {
+                            const recipients = getJobRecipients(job);
+                            const displayCount = 3;
+                            
+                            if (recipients.length === 0) {
+                              return <span className="text-gray-400 text-sm">No recipients</span>;
+                            }
+                            
+                            return (
+                              <div className="space-y-1">
+                                {recipients.slice(0, displayCount).map((recipient, index) => (
+                                  <div key={index} className="text-xs">
+                                    <span className="font-medium text-gray-900">{recipient.phone}</span>
+                                    {recipient.name !== 'Unknown Contact' && recipient.name !== 'Direct Message' && (
+                                      <span className="text-gray-500 ml-1">({recipient.name})</span>
+                                    )}
+                                  </div>
+                                ))}
+                                {recipients.length > displayCount && (
+                                  <div className="text-xs text-gray-500 font-medium">
+                                    +{recipients.length - displayCount} more
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })()}
                         </div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
@@ -377,40 +474,95 @@ const MessageQueue = () => {
                     </div>
                   )}
 
-                  {/* Recipients Details */}
-                  {jobDetails.messages && jobDetails.messages.length > 0 && (
-                    <div>
-                      <h4 className="font-medium text-gray-900 mb-3">Recipients Status</h4>
-                      <div className="bg-gray-50 rounded-lg max-h-64 overflow-y-auto">
-                        <table className="min-w-full">
-                          <thead className="bg-gray-100 sticky top-0">
-                            <tr>
-                              <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Contact</th>
-                              <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
-                              <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Sent At</th>
-                            </tr>
-                          </thead>
-                          <tbody className="divide-y divide-gray-200">
-                            {jobDetails.messages.map((message, index) => (
-                              <tr key={index}>
-                                <td className="px-4 py-2 text-sm">
-                                  <div>
-                                    <div className="font-medium">{message.contact_name || 'Unknown'}</div>
-                                    <div className="text-gray-500">{message.contact_phone}</div>
-                                  </div>
-                                </td>
-                                <td className="px-4 py-2">
-                                  <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getStatusColor(message.status)}`}>
-                                    {message.status}
-                                  </span>
-                                </td>
-                                <td className="px-4 py-2 text-sm text-gray-500">
-                                  {formatDate(message.sent_at)}
-                                </td>
+                  {/* Recipients List */}
+                  <div>
+                    <h4 className="font-medium text-gray-900 mb-3">Recipients ({getJobRecipients(jobDetails).length})</h4>
+                    <div className="bg-gray-50 rounded-lg max-h-64 overflow-y-auto">
+                      {(() => {
+                        const recipients = getJobRecipients(jobDetails);
+                        
+                        if (recipients.length === 0) {
+                          return (
+                            <div className="p-4 text-center text-gray-500 text-sm">
+                              No recipients found
+                            </div>
+                          );
+                        }
+                        
+                        return (
+                          <table className="min-w-full">
+                            <thead className="bg-gray-100 sticky top-0">
+                              <tr>
+                                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Phone Number</th>
+                                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Contact Name</th>
+                                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
                               </tr>
-                            ))}
-                          </tbody>
-                        </table>
+                            </thead>
+                            <tbody className="divide-y divide-gray-200">
+                              {recipients.map((recipient, index) => (
+                                <tr key={index}>
+                                  <td className="px-4 py-2 text-sm font-medium text-gray-900">
+                                    {recipient.phone}
+                                  </td>
+                                  <td className="px-4 py-2 text-sm text-gray-600">
+                                    {recipient.name}
+                                  </td>
+                                  <td className="px-4 py-2">
+                                    <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+                                      jobDetails.status === 'completed' ? 'bg-green-100 text-green-800' :
+                                      jobDetails.status === 'failed' ? 'bg-red-100 text-red-800' :
+                                      jobDetails.status === 'running' ? 'bg-blue-100 text-blue-800' :
+                                      'bg-yellow-100 text-yellow-800'
+                                    }`}>
+                                      {jobDetails.status === 'completed' ? 'Sent' :
+                                       jobDetails.status === 'failed' ? 'Failed' :
+                                       jobDetails.status === 'running' ? 'Processing' : 'Pending'}
+                                    </span>
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        );
+                      })()}
+                    </div>
+                  </div>
+
+                  {/* Job Payload Info */}
+                  {jobDetails.payload && (
+                    <div>
+                      <h4 className="font-medium text-gray-900 mb-3">Job Information</h4>
+                      <div className="bg-gray-50 p-4 rounded-lg space-y-2">
+                        <div className="text-sm">
+                          <span className="font-medium text-gray-700">Job Type:</span>
+                          <span className="ml-2 text-gray-900">{jobDetails.type}</span>
+                        </div>
+                        <div className="text-sm">
+                          <span className="font-medium text-gray-700">Priority:</span>
+                          <span className="ml-2 text-gray-900">{jobDetails.priority}</span>
+                        </div>
+                        <div className="text-sm">
+                          <span className="font-medium text-gray-700">Attempts:</span>
+                          <span className="ml-2 text-gray-900">{jobDetails.attempts}/{jobDetails.max_attempts}</span>
+                        </div>
+                        {jobDetails.payload.session_id && (
+                          <div className="text-sm">
+                            <span className="font-medium text-gray-700">Session ID:</span>
+                            <span className="ml-2 text-gray-900">{jobDetails.payload.session_id}</span>
+                          </div>
+                        )}
+                        {jobDetails.payload.template_id && (
+                          <div className="text-sm">
+                            <span className="font-medium text-gray-700">Template ID:</span>
+                            <span className="ml-2 text-gray-900">{jobDetails.payload.template_id}</span>
+                          </div>
+                        )}
+                        {jobDetails.error && (
+                          <div className="text-sm">
+                            <span className="font-medium text-red-700">Error:</span>
+                            <span className="ml-2 text-red-900">{jobDetails.error}</span>
+                          </div>
+                        )}
                       </div>
                     </div>
                   )}

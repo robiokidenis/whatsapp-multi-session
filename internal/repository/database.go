@@ -855,3 +855,81 @@ func (d *Database) createUserSettingsTable() error {
 	_, err := d.db.Exec(query)
 	return err
 }
+
+
+func (d *Database) createJobQueueTable() error {
+	var query string
+	driver := d.db.Driver()
+	driverName := fmt.Sprintf("%T", driver)
+	
+	if contains(driverName, "mysql") {
+		query = `
+		CREATE TABLE IF NOT EXISTS job_queue (
+			id INT AUTO_INCREMENT PRIMARY KEY,
+			job_id VARCHAR(255) NOT NULL UNIQUE,
+			type VARCHAR(100) NOT NULL,
+			status VARCHAR(50) NOT NULL DEFAULT 'pending',
+			priority INT NOT NULL DEFAULT 5,
+			payload JSON NOT NULL,
+			result JSON,
+			error TEXT,
+			attempts INT NOT NULL DEFAULT 0,
+			max_attempts INT NOT NULL DEFAULT 3,
+			scheduled_at BIGINT,
+			started_at BIGINT,
+			completed_at BIGINT,
+			created_at BIGINT NOT NULL,
+			updated_at BIGINT,
+			INDEX idx_job_id (job_id),
+			INDEX idx_type (type),
+			INDEX idx_status (status),
+			INDEX idx_priority (priority),
+			INDEX idx_scheduled_at (scheduled_at),
+			INDEX idx_created_at (created_at)
+		) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`
+	} else {
+		query = `
+		CREATE TABLE IF NOT EXISTS job_queue (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			job_id TEXT NOT NULL UNIQUE,
+			type TEXT NOT NULL,
+			status TEXT NOT NULL DEFAULT 'pending',
+			priority INTEGER NOT NULL DEFAULT 5,
+			payload TEXT NOT NULL,
+			result TEXT,
+			error TEXT,
+			attempts INTEGER NOT NULL DEFAULT 0,
+			max_attempts INTEGER NOT NULL DEFAULT 3,
+			scheduled_at INTEGER,
+			started_at INTEGER,
+			completed_at INTEGER,
+			created_at INTEGER NOT NULL,
+			updated_at INTEGER
+		)`
+		
+		_, err := d.db.Exec(query)
+		if err != nil {
+			return err
+		}
+		
+		indexes := []string{
+			"CREATE INDEX IF NOT EXISTS idx_job_queue_job_id ON job_queue(job_id)",
+			"CREATE INDEX IF NOT EXISTS idx_job_queue_type ON job_queue(type)",
+			"CREATE INDEX IF NOT EXISTS idx_job_queue_status ON job_queue(status)",
+			"CREATE INDEX IF NOT EXISTS idx_job_queue_priority ON job_queue(priority)",
+			"CREATE INDEX IF NOT EXISTS idx_job_queue_scheduled_at ON job_queue(scheduled_at)",
+			"CREATE INDEX IF NOT EXISTS idx_job_queue_created_at ON job_queue(created_at)",
+		}
+		
+		for _, indexQuery := range indexes {
+			if _, err := d.db.Exec(indexQuery); err != nil {
+				return err
+			}
+		}
+		
+		return nil
+	}
+
+	_, err := d.db.Exec(query)
+	return err
+}

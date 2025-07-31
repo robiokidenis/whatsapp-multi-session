@@ -58,6 +58,7 @@ func main() {
 	templateRepo := repository.NewTemplateRepository(db.DB())
 	autoReplyRepo := repository.NewAutoReplyRepository(db.DB())
 	userSettingsRepo := repository.NewUserSettingsRepository(db.DB())
+	jobQueueRepo := repository.NewJobQueueRepository(db.DB())
 	
 	var logRepo *repository.LogRepository
 	// Setup database logging only if enabled
@@ -81,6 +82,15 @@ func main() {
 	// Initialize CRM services
 	contactDetectionService := services.NewContactDetectionService(*log)
 	bulkMessagingService := services.NewBulkMessagingService(whatsappService, *log)
+	
+	// Initialize job queue service
+	jobQueueService := services.NewJobQueueService(jobQueueRepo, bulkMessagingService, log)
+	
+	// Start job queue service
+	if err := jobQueueService.Start(); err != nil {
+		log.Fatalf("Failed to start job queue service: %v", err)
+	}
+	defer jobQueueService.Stop()
 
 	// Ensure default admin user exists
 	if err := userService.EnsureDefaultAdmin(cfg.AdminUsername, cfg.AdminPassword); err != nil {
@@ -100,9 +110,10 @@ func main() {
 	contactHandler := handlers.NewContactHandler(contactRepo, contactGroupRepo, contactDetectionService, log)
 	contactGroupHandler := handlers.NewContactGroupHandler(contactGroupRepo, log)
 	templateHandler := handlers.NewTemplateHandler(templateRepo, contactRepo, log)
-	bulkMessagingHandler := handlers.NewBulkMessagingHandler(bulkMessagingService, log)
+	bulkMessagingHandler := handlers.NewBulkMessagingHandler(jobQueueService, log)
 	autoReplyHandler := handlers.NewAutoReplyHandler(autoReplyRepo, log)
 	userSettingsHandler := handlers.NewUserSettingsHandler(userSettingsRepo, log)
+	jobQueueHandler := handlers.NewJobQueueHandler(jobQueueService, log)
 
 	var logHandler *handlers.LogHandler
 	if cfg.EnableDatabaseLog && logRepo != nil {
@@ -122,6 +133,7 @@ func main() {
 		bulkMessagingHandler,
 		autoReplyHandler,
 		userSettingsHandler,
+		jobQueueHandler,
 		cfg,
 	)
 
@@ -171,6 +183,7 @@ func setupRoutes(
 	bulkMessagingHandler *handlers.BulkMessagingHandler,
 	autoReplyHandler *handlers.AutoReplyHandler,
 	userSettingsHandler *handlers.UserSettingsHandler,
+	jobQueueHandler *handlers.JobQueueHandler,
 	cfg *config.Config,
 ) *mux.Router {
 	router := mux.NewRouter()
@@ -276,6 +289,23 @@ func setupRoutes(
 	protected.HandleFunc("/user/settings", userSettingsHandler.UpdateUserSettings).Methods("PUT")
 	protected.HandleFunc("/user/settings", userSettingsHandler.PatchUserSettings).Methods("PATCH")
 	protected.HandleFunc("/user/settings", userSettingsHandler.DeleteUserSettings).Methods("DELETE")
+
+	// Job queue management - specific routes first, then general ones
+	protected.HandleFunc("/job-queue/statistics", jobQueueHandler.GetStatistics).Methods("GET")
+	protected.HandleFunc("/job-queue/cleanup", jobQueueHandler.CleanupJobs).Methods("POST")
+	protected.HandleFunc("/job-queue/bulk-message", jobQueueHandler.CreateBulkMessageJob).Methods("POST")
+	protected.HandleFunc("/job-queue/scheduled-message", jobQueueHandler.CreateScheduledMessageJob).Methods("POST")
+	protected.HandleFunc("/job-queue", jobQueueHandler.GetJobs).Methods("GET")
+	protected.HandleFunc("/job-queue", jobQueueHandler.CreateJob).Methods("POST")
+	protected.HandleFunc("/job-queue/{jobId}", jobQueueHandler.GetJob).Methods("GET")
+	protected.HandleFunc("/job-queue/{jobId}", jobQueueHandler.CancelJob).Methods("DELETE")
+	protected.HandleFunc("/job-queue/{jobId}/retry", jobQueueHandler.RetryJob).Methods("POST")
+	
+	// Debug endpoint
+	protected.HandleFunc("/job-queue-test", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprintf(w, `{"message":"job-queue handler is working","handler_exists":%t}`, jobQueueHandler != nil)
+	}).Methods("GET")
 
 	// User management routes (admin only)
 	admin := protected.PathPrefix("/admin").Subrouter()

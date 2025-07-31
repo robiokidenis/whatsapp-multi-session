@@ -11,17 +11,17 @@ import (
 )
 
 type BulkMessagingHandler struct {
-	bulkService *services.BulkMessagingService
-	logger      *logger.Logger
+	jobQueueService *services.JobQueueService
+	logger          *logger.Logger
 }
 
 func NewBulkMessagingHandler(
-	bulkService *services.BulkMessagingService,
+	jobQueueService *services.JobQueueService,
 	logger *logger.Logger,
 ) *BulkMessagingHandler {
 	return &BulkMessagingHandler{
-		bulkService: bulkService,
-		logger:      logger,
+		jobQueueService: jobQueueService,
+		logger:          logger,
 	}
 }
 
@@ -33,22 +33,23 @@ func (h *BulkMessagingHandler) StartBulkMessaging(w http.ResponseWriter, r *http
 		return
 	}
 	
-	// For now, we'll use the direct bulk message service
-	// TODO: Get template and contacts from database based on request
-	var template *models.MessageTemplate
-	var contacts []models.Contact
-	
-	// Start bulk messaging
-	job, err := h.bulkService.StartBulkMessage(bulkReq, template, contacts)
+	// Create bulk message job using job queue service
+	job, err := h.jobQueueService.EnqueueBulkMessage(&bulkReq, nil)
 	if err != nil {
-		h.logger.Error("Failed to start bulk messaging: %v", err)
+		h.logger.Error("Failed to enqueue bulk messaging job: %v", err)
 		http.Error(w, "Failed to start bulk messaging", http.StatusInternalServerError)
 		return
 	}
 	
+	response := models.JobQueueResponse{
+		JobID:   job.JobID,
+		Status:  job.Status,
+		Message: "Bulk messaging job created successfully",
+	}
+	
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
-	json.NewEncoder(w).Encode(job)
+	json.NewEncoder(w).Encode(response)
 }
 
 // GetBulkMessagingJob handles GET /api/bulk-messages/{jobId}
@@ -56,7 +57,7 @@ func (h *BulkMessagingHandler) GetBulkMessagingJob(w http.ResponseWriter, r *htt
 	vars := mux.Vars(r)
 	jobID := vars["jobId"]
 	
-	job, err := h.bulkService.GetJob(jobID)
+	job, err := h.jobQueueService.GetJob(jobID)
 	if err != nil {
 		h.logger.Error("Failed to get bulk messaging job: %v", err)
 		http.Error(w, "Failed to get bulk messaging job", http.StatusInternalServerError)
@@ -74,10 +75,29 @@ func (h *BulkMessagingHandler) GetBulkMessagingJob(w http.ResponseWriter, r *htt
 
 // GetBulkMessagingJobs handles GET /api/bulk-messages
 func (h *BulkMessagingHandler) GetBulkMessagingJobs(w http.ResponseWriter, r *http.Request) {
-	jobs := h.bulkService.GetJobs()
+	// Get only bulk_message jobs from the queue
+	jobs, total, err := h.jobQueueService.GetJobs("all", "bulk_message", 50, 0)
+	if err != nil {
+		h.logger.Error("Failed to get bulk messaging jobs: %v", err)
+		http.Error(w, "Failed to get bulk messaging jobs", http.StatusInternalServerError)
+		return
+	}
+	
+	response := models.JobQueueListResponse{
+		Jobs:  make([]models.JobQueue, len(jobs)),
+		Total: total,
+		Page:  1,
+		Limit: 50,
+		Pages: (total + 49) / 50,
+	}
+	
+	// Convert pointers to values
+	for i, job := range jobs {
+		response.Jobs[i] = *job
+	}
 	
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(jobs)
+	json.NewEncoder(w).Encode(response)
 }
 
 // CancelBulkMessagingJob handles DELETE /api/bulk-messages/{jobId}
@@ -85,11 +105,30 @@ func (h *BulkMessagingHandler) CancelBulkMessagingJob(w http.ResponseWriter, r *
 	vars := mux.Vars(r)
 	jobID := vars["jobId"]
 	
-	if err := h.bulkService.CancelJob(jobID); err != nil {
+	if err := h.jobQueueService.CancelJob(jobID); err != nil {
 		h.logger.Error("Failed to cancel bulk messaging job: %v", err)
+		
+		// Check for specific error types
+		if err.Error() == "job not found" {
+			http.Error(w, "Job not found", http.StatusNotFound)
+			return
+		}
+		
+		if err.Error() == "job cannot be cancelled" {
+			http.Error(w, "Job cannot be cancelled", http.StatusBadRequest)
+			return
+		}
+		
 		http.Error(w, "Failed to cancel bulk messaging job", http.StatusInternalServerError)
 		return
 	}
 	
-	w.WriteHeader(http.StatusNoContent)
+	response := models.JobQueueResponse{
+		JobID:   jobID,
+		Status:  "cancelled",
+		Message: "Bulk messaging job cancelled successfully",
+	}
+	
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(response)
 }
