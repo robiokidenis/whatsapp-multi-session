@@ -1,0 +1,2512 @@
+{
+	"info": {
+		"_postman_id": "whatsapp-multi-session-api",
+		"name": "WhatsApp Multi-Session API",
+		"description": "Complete API collection for WhatsApp Multi-Session Manager - A comprehensive WhatsApp multi-device REST API with CRM features",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+		"_exporter_id": "whatsapp-multi-session"
+	},
+	"item": [
+		{
+			"name": "Authentication",
+			"item": [
+				{
+					"name": "Login",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"username\": \"admin\",\n    \"password\": \"admin123\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/auth/login",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"auth",
+								"login"
+							]
+						},
+						"description": "Authenticate user and get JWT token"
+					},
+					"response": [
+						{
+							"name": "Success Response",
+							"originalRequest": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"username\": \"admin\",\n    \"password\": \"admin123\"\n}"
+								},
+								"url": {
+									"raw": "{{baseUrl}}/api/auth/login",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"api",
+										"auth",
+										"login"
+									]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [],
+							"cookie": [],
+							"body": "{\n    \"success\": true,\n    \"data\": {\n        \"token\": \"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...\",\n        \"user\": {\n            \"id\": 1,\n            \"username\": \"admin\",\n            \"role\": \"admin\"\n        }\n    }\n}"
+						}
+					]
+				},
+				{
+					"name": "Register User (Admin Only)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"username\": \"newuser\",\n    \"password\": \"password123\",\n    \"role\": \"user\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/auth/register",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"auth",
+								"register"
+							]
+						},
+						"description": "Register new user (admin access required)"
+					}
+				}
+			],
+			"description": "Authentication endpoints for login and user registration"
+		},
+		{
+			"name": "Health Check",
+			"item": [
+				{
+					"name": "Health Status",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/health",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"health"
+							]
+						},
+						"description": "Check API health status"
+					},
+					"response": [
+						{
+							"name": "Health Check Response",
+							"originalRequest": {
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{baseUrl}}/api/health",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"api",
+										"health"
+									]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [],
+							"cookie": [],
+							"body": "{\n    \"status\": \"ok\",\n    \"service\": \"whatsapp-multi-session\"\n}"
+						}
+					]
+				}
+			],
+			"description": "Health check endpoints"
+		},
+		{
+			"name": "Session Management",
+			"item": [
+				{
+					"name": "Get All Sessions",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/sessions",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"sessions"
+							]
+						},
+						"description": "Get list of all WhatsApp sessions"
+					}
+				},
+				{
+					"name": "Create Session",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"name\": \"My WhatsApp Session\",\n    \"webhook\": \"https://your-webhook-url.com/webhook\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/sessions",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"sessions"
+							]
+						},
+						"description": "Create new WhatsApp session"
+					}
+				},
+				{
+					"name": "Get Session Details",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/sessions/{{sessionId}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"sessions",
+								"{{sessionId}}"
+							]
+						},
+						"description": "Get details of specific session"
+					}
+				},
+				{
+					"name": "Update Session",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"name\": \"Updated Session Name\",\n    \"webhook\": \"https://new-webhook-url.com/webhook\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/sessions/{{sessionId}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"sessions",
+								"{{sessionId}}"
+							]
+						},
+						"description": "Update session details"
+					}
+				},
+				{
+					"name": "Delete Session",
+					"request": {
+						"method": "DELETE",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/sessions/{{sessionId}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"sessions",
+								"{{sessionId}}"
+							]
+						},
+						"description": "Delete session"
+					}
+				}
+			],
+			"description": "Session management endpoints"
+		},
+		{
+			"name": "Connection Management",
+			"item": [
+				{
+					"name": "Connect Session",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/sessions/{{sessionId}}/connect",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"sessions",
+								"{{sessionId}}",
+								"connect"
+							]
+						},
+						"description": "Connect WhatsApp session"
+					}
+				},
+				{
+					"name": "Disconnect Session",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/sessions/{{sessionId}}/disconnect",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"sessions",
+								"{{sessionId}}",
+								"disconnect"
+							]
+						},
+						"description": "Disconnect WhatsApp session"
+					}
+				},
+				{
+					"name": "Login Session",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/sessions/{{sessionId}}/login",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"sessions",
+								"{{sessionId}}",
+								"login"
+							]
+						},
+						"description": "Login WhatsApp session"
+					}
+				},
+				{
+					"name": "Logout Session",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/sessions/{{sessionId}}/logout",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"sessions",
+								"{{sessionId}}",
+								"logout"
+							]
+						},
+						"description": "Logout WhatsApp session"
+					}
+				},
+				{
+					"name": "Get QR Code",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/sessions/{{sessionId}}/qr",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"sessions",
+								"{{sessionId}}",
+								"qr"
+							]
+						},
+						"description": "Get QR code for session login"
+					}
+				}
+			],
+			"description": "Connection management for WhatsApp sessions"
+		},
+		{
+			"name": "Session Configuration",
+			"item": [
+				{
+					"name": "Update Session Webhook",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"webhook\": \"https://new-webhook-url.com/webhook\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/sessions/{{sessionId}}/webhook",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"sessions",
+								"{{sessionId}}",
+								"webhook"
+							]
+						},
+						"description": "Update session webhook URL"
+					}
+				},
+				{
+					"name": "Update Session Name",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"name\": \"New Session Name\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/sessions/{{sessionId}}/name",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"sessions",
+								"{{sessionId}}",
+								"name"
+							]
+						},
+						"description": "Update session name"
+					}
+				}
+			],
+			"description": "Session configuration endpoints"
+		},
+		{
+			"name": "Messaging",
+			"item": [
+				{
+					"name": "Send Text Message",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"to\": \"6281234567890\",\n    \"message\": \"Hello from WhatsApp Multi-Session API!\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/sessions/{{sessionId}}/send",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"sessions",
+								"{{sessionId}}",
+								"send"
+							]
+						},
+						"description": "Send text message"
+					}
+				},
+				{
+					"name": "Send Location",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"to\": \"6281234567890\",\n    \"latitude\": -6.2088,\n    \"longitude\": 106.8456,\n    \"name\": \"Jakarta\",\n    \"address\": \"Jakarta, Indonesia\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/sessions/{{sessionId}}/send-location",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"sessions",
+								"{{sessionId}}",
+								"send-location"
+							]
+						},
+						"description": "Send location message"
+					}
+				},
+				{
+					"name": "Send Image",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token}}"
+							}
+						],
+						"body": {
+							"mode": "formdata",
+							"formdata": [
+								{
+									"key": "to",
+									"value": "6281234567890",
+									"type": "text"
+								},
+								{
+									"key": "caption",
+									"value": "Image caption",
+									"type": "text"
+								},
+								{
+									"key": "file",
+									"type": "file",
+									"src": []
+								}
+							]
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/sessions/{{sessionId}}/send-image",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"sessions",
+								"{{sessionId}}",
+								"send-image"
+							]
+						},
+						"description": "Send image with optional caption"
+					}
+				},
+				{
+					"name": "Send Attachment",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token}}"
+							}
+						],
+						"body": {
+							"mode": "formdata",
+							"formdata": [
+								{
+									"key": "to",
+									"value": "6281234567890",
+									"type": "text"
+								},
+								{
+									"key": "file",
+									"type": "file",
+									"src": []
+								}
+							]
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/sessions/{{sessionId}}/send-attachment",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"sessions",
+								"{{sessionId}}",
+								"send-attachment"
+							]
+						},
+						"description": "Send file attachment"
+					}
+				},
+				{
+					"name": "Send File from URL",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"to\": \"6281234567890\",\n    \"url\": \"https://example.com/image.jpg\",\n    \"caption\": \"Image from URL\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/sessions/{{sessionId}}/send-file-url",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"sessions",
+								"{{sessionId}}",
+								"send-file-url"
+							]
+						},
+						"description": "Send file from URL"
+					}
+				},
+				{
+					"name": "General Send (Legacy)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"session_id\": \"{{sessionId}}\",\n    \"to\": \"6281234567890\",\n    \"message\": \"Hello from general send endpoint!\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/send",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"send"
+							]
+						},
+						"description": "General send endpoint for backward compatibility"
+					}
+				}
+			],
+			"description": "Messaging endpoints for sending various types of messages"
+		},
+		{
+			"name": "Messaging Utilities",
+			"item": [
+				{
+					"name": "Check Number",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"phone\": \"6281234567890\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/sessions/{{sessionId}}/check-number",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"sessions",
+								"{{sessionId}}",
+								"check-number"
+							]
+						},
+						"description": "Check if phone number is registered on WhatsApp"
+					}
+				},
+				{
+					"name": "Send Typing Indicator",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"to\": \"6281234567890\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/sessions/{{sessionId}}/typing",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"sessions",
+								"{{sessionId}}",
+								"typing"
+							]
+						},
+						"description": "Send typing indicator"
+					}
+				},
+				{
+					"name": "Stop Typing Indicator",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"to\": \"6281234567890\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/sessions/{{sessionId}}/stop-typing",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"sessions",
+								"{{sessionId}}",
+								"stop-typing"
+							]
+						},
+						"description": "Stop typing indicator"
+					}
+				},
+				{
+					"name": "Get Groups",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/sessions/{{sessionId}}/groups",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"sessions",
+								"{{sessionId}}",
+								"groups"
+							]
+						},
+						"description": "Get WhatsApp groups for session"
+					}
+				}
+			],
+			"description": "Messaging utility endpoints"
+		},
+		{
+			"name": "CRM - Contacts",
+			"item": [
+				{
+					"name": "Get Contacts",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/contacts?query=&group_id=&page=1&limit=50",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"contacts"
+							],
+							"query": [
+								{
+									"key": "query",
+									"value": "",
+									"description": "Search query"
+								},
+								{
+									"key": "group_id",
+									"value": "",
+									"description": "Filter by group ID"
+								},
+								{
+									"key": "page",
+									"value": "1",
+									"description": "Page number"
+								},
+								{
+									"key": "limit",
+									"value": "50",
+									"description": "Items per page"
+								}
+							]
+						},
+						"description": "Get contacts with optional filtering and pagination"
+					}
+				},
+				{
+					"name": "Create Contact",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"name\": \"John Doe\",\n    \"phone\": \"6281234567890\",\n    \"email\": \"john@example.com\",\n    \"tags\": [\"customer\", \"vip\"],\n    \"notes\": \"Important customer\",\n    \"group_ids\": [1, 2]\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/contacts",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"contacts"
+							]
+						},
+						"description": "Create new contact"
+					}
+				},
+				{
+					"name": "Update Contact",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"name\": \"John Smith\",\n    \"phone\": \"6281234567890\",\n    \"email\": \"johnsmith@example.com\",\n    \"tags\": [\"customer\", \"premium\"],\n    \"notes\": \"Updated notes\",\n    \"group_ids\": [1]\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/contacts/{{contactId}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"contacts",
+								"{{contactId}}"
+							]
+						},
+						"description": "Update existing contact"
+					}
+				},
+				{
+					"name": "Delete Contact",
+					"request": {
+						"method": "DELETE",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/contacts/{{contactId}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"contacts",
+								"{{contactId}}"
+							]
+						},
+						"description": "Delete contact"
+					}
+				},
+				{
+					"name": "Bulk Contact Actions",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"action\": \"delete\",\n    \"contact_ids\": [1, 2, 3]\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/contacts/bulk",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"contacts",
+								"bulk"
+							]
+						},
+						"description": "Perform bulk actions on contacts"
+					}
+				},
+				{
+					"name": "Detect Contacts",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"session_id\": \"{{sessionId}}\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/contacts/detect",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"contacts",
+								"detect"
+							]
+						},
+						"description": "Detect contacts from WhatsApp session"
+					}
+				},
+				{
+					"name": "Import Contacts",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token}}"
+							}
+						],
+						"body": {
+							"mode": "formdata",
+							"formdata": [
+								{
+									"key": "file",
+									"type": "file",
+									"src": [],
+									"description": "CSV file with contacts"
+								}
+							]
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/contacts/import",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"contacts",
+								"import"
+							]
+						},
+						"description": "Import contacts from CSV file"
+					}
+				}
+			],
+			"description": "CRM contact management endpoints"
+		},
+		{
+			"name": "CRM - Contact Groups",
+			"item": [
+				{
+					"name": "Get Contact Groups",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/contact-groups",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"contact-groups"
+							]
+						},
+						"description": "Get all contact groups"
+					}
+				},
+				{
+					"name": "Create Contact Group",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"name\": \"VIP Customers\",\n    \"description\": \"High-value customers\",\n    \"color\": \"#FF5733\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/contact-groups",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"contact-groups"
+							]
+						},
+						"description": "Create new contact group"
+					}
+				},
+				{
+					"name": "Update Contact Group",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"name\": \"Premium Customers\",\n    \"description\": \"Premium tier customers\",\n    \"color\": \"#33FF57\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/contact-groups/{{groupId}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"contact-groups",
+								"{{groupId}}"
+							]
+						},
+						"description": "Update contact group"
+					}
+				},
+				{
+					"name": "Delete Contact Group",
+					"request": {
+						"method": "DELETE",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/contact-groups/{{groupId}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"contact-groups",
+								"{{groupId}}"
+							]
+						},
+						"description": "Delete contact group"
+					}
+				}
+			],
+			"description": "Contact group management endpoints"
+		},
+		{
+			"name": "CRM - Message Templates",
+			"item": [
+				{
+					"name": "Get Message Templates",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/message-templates",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"message-templates"
+							]
+						},
+						"description": "Get all message templates"
+					}
+				},
+				{
+					"name": "Create Message Template",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"name\": \"Welcome Message\",\n    \"content\": \"Hello {{name}}, welcome to our service!\",\n    \"category\": \"greeting\",\n    \"variables\": [\"name\"]\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/message-templates",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"message-templates"
+							]
+						},
+						"description": "Create new message template"
+					}
+				},
+				{
+					"name": "Update Message Template",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"name\": \"Updated Welcome Message\",\n    \"content\": \"Hi {{name}}, thank you for joining us!\",\n    \"category\": \"greeting\",\n    \"variables\": [\"name\"]\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/message-templates/{{templateId}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"message-templates",
+								"{{templateId}}"
+							]
+						},
+						"description": "Update message template"
+					}
+				},
+				{
+					"name": "Delete Message Template",
+					"request": {
+						"method": "DELETE",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/message-templates/{{templateId}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"message-templates",
+								"{{templateId}}"
+							]
+						},
+						"description": "Delete message template"
+					}
+				},
+				{
+					"name": "Get Template Categories",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/message-templates/categories",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"message-templates",
+								"categories"
+							]
+						},
+						"description": "Get available template categories"
+					}
+				},
+				{
+					"name": "Preview Message Template",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"template_id\": 1,\n    \"variables\": {\n        \"name\": \"John Doe\"\n    }\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/message-templates/preview",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"message-templates",
+								"preview"
+							]
+						},
+						"description": "Preview message template with variables"
+					}
+				}
+			],
+			"description": "Message template management endpoints"
+		},
+		{
+			"name": "CRM - Bulk Messaging",
+			"item": [
+				{
+					"name": "Get Bulk Messaging Jobs",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/bulk-messages",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"bulk-messages"
+							]
+						},
+						"description": "Get all bulk messaging jobs"
+					}
+				},
+				{
+					"name": "Start Bulk Messaging",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"session_id\": \"{{sessionId}}\",\n    \"template_id\": 1,\n    \"contact_group_ids\": [1, 2],\n    \"contact_ids\": [1, 2, 3],\n    \"delay_seconds\": 30\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/bulk-messages",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"bulk-messages"
+							]
+						},
+						"description": "Start bulk messaging campaign"
+					}
+				},
+				{
+					"name": "Get Bulk Messaging Job",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/bulk-messages/{{jobId}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"bulk-messages",
+								"{{jobId}}"
+							]
+						},
+						"description": "Get specific bulk messaging job details"
+					}
+				},
+				{
+					"name": "Cancel Bulk Messaging Job",
+					"request": {
+						"method": "DELETE",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/bulk-messages/{{jobId}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"bulk-messages",
+								"{{jobId}}"
+							]
+						},
+						"description": "Cancel bulk messaging job"
+					}
+				}
+			],
+			"description": "Bulk messaging management endpoints"
+		},
+		{
+			"name": "CRM - Auto Replies",
+			"item": [
+				{
+					"name": "Get Auto Replies",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/auto-replies",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"auto-replies"
+							]
+						},
+						"description": "Get all auto reply rules"
+					}
+				},
+				{
+					"name": "Create Auto Reply",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"name\": \"Welcome Auto Reply\",\n    \"trigger\": \"hello\",\n    \"response\": \"Hello! Thank you for contacting us.\",\n    \"session_id\": \"{{sessionId}}\",\n    \"is_active\": true\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/auto-replies",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"auto-replies"
+							]
+						},
+						"description": "Create new auto reply rule"
+					}
+				},
+				{
+					"name": "Update Auto Reply",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"name\": \"Updated Auto Reply\",\n    \"trigger\": \"hi\",\n    \"response\": \"Hi there! How can we help you?\",\n    \"session_id\": \"{{sessionId}}\",\n    \"is_active\": true\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/auto-replies/{{autoReplyId}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"auto-replies",
+								"{{autoReplyId}}"
+							]
+						},
+						"description": "Update auto reply rule"
+					}
+				},
+				{
+					"name": "Delete Auto Reply",
+					"request": {
+						"method": "DELETE",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/auto-replies/{{autoReplyId}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"auto-replies",
+								"{{autoReplyId}}"
+							]
+						},
+						"description": "Delete auto reply rule"
+					}
+				}
+			],
+			"description": "Auto reply management endpoints"
+		},
+		{
+			"name": "User Settings",
+			"item": [
+				{
+					"name": "Get User Settings",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/user/settings",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"user",
+								"settings"
+							]
+						},
+						"description": "Get current user settings"
+					}
+				},
+				{
+					"name": "Update User Settings",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"theme\": \"dark\",\n    \"language\": \"en\",\n    \"notifications_enabled\": true,\n    \"auto_reply_enabled\": false\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/user/settings",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"user",
+								"settings"
+							]
+						},
+						"description": "Update user settings (full update)"
+					}
+				},
+				{
+					"name": "Patch User Settings",
+					"request": {
+						"method": "PATCH",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"theme\": \"light\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/user/settings",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"user",
+								"settings"
+							]
+						},
+						"description": "Partially update user settings"
+					}
+				},
+				{
+					"name": "Delete User Settings",
+					"request": {
+						"method": "DELETE",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/user/settings",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"user",
+								"settings"
+							]
+						},
+						"description": "Reset user settings to defaults"
+					}
+				}
+			],
+			"description": "User settings management"
+		},
+		{
+			"name": "Job Queue Management",
+			"item": [
+				{
+					"name": "Get Jobs",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/job-queue?status=&type=&page=1&limit=50",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"job-queue"
+							],
+							"query": [
+								{
+									"key": "status",
+									"value": "",
+									"description": "Filter by status"
+								},
+								{
+									"key": "type",
+									"value": "",
+									"description": "Filter by job type"
+								},
+								{
+									"key": "page",
+									"value": "1"
+								},
+								{
+									"key": "limit",
+									"value": "50"
+								}
+							]
+						},
+						"description": "Get job queue with filtering"
+					}
+				},
+				{
+					"name": "Create Job",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"type\": \"send_message\",\n    \"data\": {\n        \"session_id\": \"{{sessionId}}\",\n        \"to\": \"6281234567890\",\n        \"message\": \"Hello from job queue!\"\n    },\n    \"scheduled_at\": \"2024-12-31T23:59:59Z\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/job-queue",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"job-queue"
+							]
+						},
+						"description": "Create new job"
+					}
+				},
+				{
+					"name": "Get Job Details",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/job-queue/{{jobId}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"job-queue",
+								"{{jobId}}"
+							]
+						},
+						"description": "Get specific job details"
+					}
+				},
+				{
+					"name": "Cancel Job",
+					"request": {
+						"method": "DELETE",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/job-queue/{{jobId}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"job-queue",
+								"{{jobId}}"
+							]
+						},
+						"description": "Cancel job"
+					}
+				},
+				{
+					"name": "Retry Job",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/job-queue/{{jobId}}/retry",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"job-queue",
+								"{{jobId}}",
+								"retry"
+							]
+						},
+						"description": "Retry failed job"
+					}
+				},
+				{
+					"name": "Get Job Statistics",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/job-queue/statistics",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"job-queue",
+								"statistics"
+							]
+						},
+						"description": "Get job queue statistics"
+					}
+				},
+				{
+					"name": "Cleanup Jobs",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"older_than_days\": 30,\n    \"status\": \"completed\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/job-queue/cleanup",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"job-queue",
+								"cleanup"
+							]
+						},
+						"description": "Cleanup old jobs"
+					}
+				},
+				{
+					"name": "Create Bulk Message Job",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"session_id\": \"{{sessionId}}\",\n    \"template_id\": 1,\n    \"contact_group_ids\": [1],\n    \"delay_seconds\": 60\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/job-queue/bulk-message",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"job-queue",
+								"bulk-message"
+							]
+						},
+						"description": "Create bulk message job"
+					}
+				},
+				{
+					"name": "Create Scheduled Message Job",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"session_id\": \"{{sessionId}}\",\n    \"to\": \"6281234567890\",\n    \"message\": \"Scheduled message\",\n    \"scheduled_at\": \"2024-12-31T12:00:00Z\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/job-queue/scheduled-message",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"job-queue",
+								"scheduled-message"
+							]
+						},
+						"description": "Create scheduled message job"
+					}
+				}
+			],
+			"description": "Job queue management endpoints"
+		},
+		{
+			"name": "Admin - User Management",
+			"item": [
+				{
+					"name": "Get All Users",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/admin/users",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"admin",
+								"users"
+							]
+						},
+						"description": "Get all users (admin only)"
+					}
+				},
+				{
+					"name": "Create User",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"username\": \"newuser\",\n    \"password\": \"password123\",\n    \"role\": \"user\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/admin/users",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"admin",
+								"users"
+							]
+						},
+						"description": "Create new user (admin only)"
+					}
+				},
+				{
+					"name": "Get User Details",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/admin/users/{{userId}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"admin",
+								"users",
+								"{{userId}}"
+							]
+						},
+						"description": "Get specific user details (admin only)"
+					}
+				},
+				{
+					"name": "Update User",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"username\": \"updateduser\",\n    \"role\": \"admin\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/admin/users/{{userId}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"admin",
+								"users",
+								"{{userId}}"
+							]
+						},
+						"description": "Update user (admin only)"
+					}
+				},
+				{
+					"name": "Delete User",
+					"request": {
+						"method": "DELETE",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/admin/users/{{userId}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"admin",
+								"users",
+								"{{userId}}"
+							]
+						},
+						"description": "Delete user (admin only)"
+					}
+				},
+				{
+					"name": "Get User Settings by ID",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/admin/user-settings?user_id={{userId}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"admin",
+								"user-settings"
+							],
+							"query": [
+								{
+									"key": "user_id",
+									"value": "{{userId}}"
+								}
+							]
+						},
+						"description": "Get user settings by ID (admin only)"
+					}
+				}
+			],
+			"description": "Admin user management endpoints"
+		},
+		{
+			"name": "Admin - Logging",
+			"item": [
+				{
+					"name": "Get Log Status",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/admin/logs/status",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"admin",
+								"logs",
+								"status"
+							]
+						},
+						"description": "Get logging configuration status"
+					}
+				},
+				{
+					"name": "Get Logs",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/admin/logs?level=&component=&page=1&limit=100",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"admin",
+								"logs"
+							],
+							"query": [
+								{
+									"key": "level",
+									"value": "",
+									"description": "Filter by log level"
+								},
+								{
+									"key": "component",
+									"value": "",
+									"description": "Filter by component"
+								},
+								{
+									"key": "page",
+									"value": "1"
+								},
+								{
+									"key": "limit",
+									"value": "100"
+								}
+							]
+						},
+						"description": "Get application logs (admin only, requires database logging)"
+					}
+				},
+				{
+					"name": "Get Log Levels",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/admin/logs/levels",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"admin",
+								"logs",
+								"levels"
+							]
+						},
+						"description": "Get available log levels"
+					}
+				},
+				{
+					"name": "Get Log Components",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/admin/logs/components",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"admin",
+								"logs",
+								"components"
+							]
+						},
+						"description": "Get available log components"
+					}
+				},
+				{
+					"name": "Delete Old Logs",
+					"request": {
+						"method": "DELETE",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/admin/logs/cleanup/{{days}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"admin",
+								"logs",
+								"cleanup",
+								"{{days}}"
+							]
+						},
+						"description": "Delete logs older than specified days"
+					}
+				},
+				{
+					"name": "Clear All Logs",
+					"request": {
+						"method": "DELETE",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/admin/logs/clear",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"admin",
+								"logs",
+								"clear"
+							]
+						},
+						"description": "Clear all logs (admin only)"
+					}
+				}
+			],
+			"description": "Admin logging management endpoints"
+		},
+		{
+			"name": "Media",
+			"item": [
+				{
+					"name": "Serve Temp Media",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/media/temp/{{filename}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"media",
+								"temp",
+								"{{filename}}"
+							]
+						},
+						"description": "Serve temporary media files"
+					}
+				}
+			],
+			"description": "Media file serving endpoints"
+		},
+		{
+			"name": "WebSocket",
+			"item": [
+				{
+					"name": "WebSocket Connection",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "ws://{{baseUrl}}/api/ws/{{sessionId}}?token={{token}}",
+							"protocol": "ws",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"ws",
+								"{{sessionId}}"
+							],
+							"query": [
+								{
+									"key": "token",
+									"value": "{{token}}"
+								}
+							]
+						},
+						"description": "WebSocket connection for real-time updates"
+					}
+				},
+				{
+					"name": "Session WebSocket",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token}}"
+							}
+						],
+						"url": {
+							"raw": "ws://{{baseUrl}}/api/sessions/{{sessionId}}/ws",
+							"protocol": "ws",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"sessions",
+								"{{sessionId}}",
+								"ws"
+							]
+						},
+						"description": "Session-specific WebSocket connection"
+					}
+				}
+			],
+			"description": "WebSocket endpoints for real-time communication"
+		}
+	],
+	"event": [
+		{
+			"listen": "prerequest",
+			"script": {
+				"type": "text/javascript",
+				"exec": [
+					""
+				]
+			}
+		},
+		{
+			"listen": "test",
+			"script": {
+				"type": "text/javascript",
+				"exec": [
+					""
+				]
+			}
+		}
+	],
+	"variable": [
+		{
+			"key": "baseUrl",
+			"value": "http://localhost:8080",
+			"type": "string"
+		},
+		{
+			"key": "token",
+			"value": "",
+			"type": "string"
+		},
+		{
+			"key": "sessionId",
+			"value": "",
+			"type": "string"
+		},
+		{
+			"key": "contactId",
+			"value": "",
+			"type": "string"
+		},
+		{
+			"key": "groupId",
+			"value": "",
+			"type": "string"
+		},
+		{
+			"key": "templateId",
+			"value": "",
+			"type": "string"
+		},
+		{
+			"key": "autoReplyId",
+			"value": "",
+			"type": "string"
+		},
+		{
+			"key": "jobId",
+			"value": "",
+			"type": "string"
+		},
+		{
+			"key": "userId",
+			"value": "",
+			"type": "string"
+		},
+		{
+			"key": "filename",
+			"value": "",
+			"type": "string"
+		},
+		{
+			"key": "days",
+			"value": "30",
+			"type": "string"
+		}
+	]
+}
