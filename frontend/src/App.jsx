@@ -7,6 +7,11 @@ import Dashboard from './pages/Dashboard';
 import UserManagement from './components/UserManagement';
 import Logs from './pages/Logs';
 import Contacts from './pages/Contacts';
+import Messaging from './pages/Messaging';
+import MessageQueue from './pages/MessageQueue';
+import Templates from './pages/Templates';
+import TemplateEditor from './pages/TemplateEditor';
+import Settings from './pages/Settings';
 import Layout from './components/Layout';
 
 function App() {
@@ -52,6 +57,66 @@ function App() {
                 <ProtectedRoute>
                   <Layout>
                     <Contacts />
+                  </Layout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/messaging"
+              element={
+                <ProtectedRoute>
+                  <Layout>
+                    <Messaging />
+                  </Layout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/message-queue"
+              element={
+                <ProtectedRoute>
+                  <Layout>
+                    <MessageQueue />
+                  </Layout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/templates"
+              element={
+                <ProtectedRoute>
+                  <Layout>
+                    <Templates />
+                  </Layout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/templates/new"
+              element={
+                <ProtectedRoute>
+                  <Layout>
+                    <TemplateEditor />
+                  </Layout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/templates/edit/:id"
+              element={
+                <ProtectedRoute>
+                  <Layout>
+                    <TemplateEditor />
+                  </Layout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/settings"
+              element={
+                <ProtectedRoute>
+                  <Layout>
+                    <Settings />
                   </Layout>
                 </ProtectedRoute>
               }

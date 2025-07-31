@@ -55,8 +55,9 @@ func main() {
 	sessionRepo := repository.NewSessionRepository(db.DB())
 	contactRepo := repository.NewContactRepository(db.DB())
 	contactGroupRepo := repository.NewContactGroupRepository(db.DB())
-	//templateRepo := repository.NewTemplateRepository(db.DB()) // Temporarily disabled
+	templateRepo := repository.NewTemplateRepository(db.DB())
 	autoReplyRepo := repository.NewAutoReplyRepository(db.DB())
+	userSettingsRepo := repository.NewUserSettingsRepository(db.DB())
 	
 	var logRepo *repository.LogRepository
 	// Setup database logging only if enabled
@@ -98,9 +99,10 @@ func main() {
 	// Initialize CRM handlers
 	contactHandler := handlers.NewContactHandler(contactRepo, contactGroupRepo, contactDetectionService, log)
 	contactGroupHandler := handlers.NewContactGroupHandler(contactGroupRepo, log)
-	//templateHandler := handlers.NewTemplateHandler(templateRepo, contactRepo, log)
+	templateHandler := handlers.NewTemplateHandler(templateRepo, contactRepo, log)
 	bulkMessagingHandler := handlers.NewBulkMessagingHandler(bulkMessagingService, log)
 	autoReplyHandler := handlers.NewAutoReplyHandler(autoReplyRepo, log)
+	userSettingsHandler := handlers.NewUserSettingsHandler(userSettingsRepo, log)
 
 	var logHandler *handlers.LogHandler
 	if cfg.EnableDatabaseLog && logRepo != nil {
@@ -116,9 +118,10 @@ func main() {
 		logHandler, 
 		contactHandler,
 		contactGroupHandler,
-		nil, // templateHandler temporarily disabled
+		templateHandler,
 		bulkMessagingHandler,
 		autoReplyHandler,
+		userSettingsHandler,
 		cfg,
 	)
 
@@ -164,9 +167,10 @@ func setupRoutes(
 	logHandler *handlers.LogHandler,
 	contactHandler *handlers.ContactHandler,
 	contactGroupHandler *handlers.ContactGroupHandler,
-	templateHandler interface{},
+	templateHandler *handlers.TemplateHandler,
 	bulkMessagingHandler *handlers.BulkMessagingHandler,
 	autoReplyHandler *handlers.AutoReplyHandler,
+	userSettingsHandler *handlers.UserSettingsHandler,
 	cfg *config.Config,
 ) *mux.Router {
 	router := mux.NewRouter()
@@ -245,7 +249,15 @@ func setupRoutes(
 	protected.HandleFunc("/contact-groups/{id}", contactGroupHandler.UpdateContactGroup).Methods("PUT")
 	protected.HandleFunc("/contact-groups/{id}", contactGroupHandler.DeleteContactGroup).Methods("DELETE")
 
-	// Message templates management - temporarily disabled
+	// Message templates management
+	if templateHandler != nil {
+		protected.HandleFunc("/message-templates", templateHandler.GetMessageTemplates).Methods("GET")
+		protected.HandleFunc("/message-templates", templateHandler.CreateMessageTemplate).Methods("POST")
+		protected.HandleFunc("/message-templates/{id}", templateHandler.UpdateMessageTemplate).Methods("PUT")
+		protected.HandleFunc("/message-templates/{id}", templateHandler.DeleteMessageTemplate).Methods("DELETE")
+		protected.HandleFunc("/message-templates/categories", templateHandler.GetMessageTemplateCategories).Methods("GET")
+		protected.HandleFunc("/message-templates/preview", templateHandler.PreviewMessageTemplate).Methods("POST")
+	}
 
 	// Bulk messaging
 	protected.HandleFunc("/bulk-messages", bulkMessagingHandler.GetBulkMessagingJobs).Methods("GET")
@@ -259,6 +271,12 @@ func setupRoutes(
 	protected.HandleFunc("/auto-replies/{id}", autoReplyHandler.UpdateAutoReply).Methods("PUT")
 	protected.HandleFunc("/auto-replies/{id}", autoReplyHandler.DeleteAutoReply).Methods("DELETE")
 
+	// User settings management
+	protected.HandleFunc("/user/settings", userSettingsHandler.GetUserSettings).Methods("GET")
+	protected.HandleFunc("/user/settings", userSettingsHandler.UpdateUserSettings).Methods("PUT")
+	protected.HandleFunc("/user/settings", userSettingsHandler.PatchUserSettings).Methods("PATCH")
+	protected.HandleFunc("/user/settings", userSettingsHandler.DeleteUserSettings).Methods("DELETE")
+
 	// User management routes (admin only)
 	admin := protected.PathPrefix("/admin").Subrouter()
 	admin.Use(middleware.RequireRole("admin"))
@@ -267,6 +285,9 @@ func setupRoutes(
 	admin.HandleFunc("/users/{id}", adminHandler.GetUser).Methods("GET")
 	admin.HandleFunc("/users/{id}", adminHandler.UpdateUser).Methods("PUT")
 	admin.HandleFunc("/users/{id}", adminHandler.DeleteUser).Methods("DELETE")
+	
+	// Admin user settings management
+	admin.HandleFunc("/user-settings", userSettingsHandler.GetUserSettingsByID).Methods("GET")
 	
 	// Log status endpoint (always available)
 	admin.HandleFunc("/logs/status", func(w http.ResponseWriter, r *http.Request) {

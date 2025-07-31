@@ -125,6 +125,16 @@ func (d *Database) InitTables() error {
 		return fmt.Errorf("failed to create auto_reply_logs table: %v", err)
 	}
 
+	// User settings table
+	if err := d.createUserSettingsTable(); err != nil {
+		return fmt.Errorf("failed to create user_settings table: %v", err)
+	}
+
+	// Job queue table
+	if err := d.createJobQueueTable(); err != nil {
+		return fmt.Errorf("failed to create job_queue table: %v", err)
+	}
+
 	return nil
 }
 
@@ -423,6 +433,7 @@ func (d *Database) createMessageTemplatesTable() error {
 		query = `
 		CREATE TABLE IF NOT EXISTS message_templates (
 			id INT AUTO_INCREMENT PRIMARY KEY,
+			user_id INT NOT NULL,
 			name VARCHAR(255) NOT NULL,
 			content TEXT NOT NULL,
 			type VARCHAR(50) NOT NULL DEFAULT 'text',
@@ -434,6 +445,8 @@ func (d *Database) createMessageTemplatesTable() error {
 			usage_count INT NOT NULL DEFAULT 0,
 			created_at BIGINT NOT NULL,
 			updated_at BIGINT,
+			FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+			INDEX idx_user_id (user_id),
 			INDEX idx_name (name),
 			INDEX idx_type (type),
 			INDEX idx_category (category),
@@ -443,17 +456,19 @@ func (d *Database) createMessageTemplatesTable() error {
 		query = `
 		CREATE TABLE IF NOT EXISTS message_templates (
 			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			user_id INTEGER NOT NULL DEFAULT 1,
 			name TEXT NOT NULL,
 			content TEXT NOT NULL,
-			type TEXT NOT NULL DEFAULT 'text',
+			type TEXT DEFAULT 'text',
 			variables TEXT,
 			media_url TEXT,
 			media_type TEXT,
 			category TEXT,
-			is_active BOOLEAN NOT NULL DEFAULT 1,
-			usage_count INTEGER NOT NULL DEFAULT 0,
+			is_active BOOLEAN DEFAULT 1,
+			usage_count INTEGER DEFAULT 0,
 			created_at INTEGER NOT NULL,
-			updated_at INTEGER
+			updated_at INTEGER,
+			FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 		)`
 		
 		_, err := d.db.Exec(query)
@@ -764,6 +779,68 @@ func (d *Database) createAutoReplyLogsTable() error {
 			"CREATE INDEX IF NOT EXISTS idx_auto_reply_logs_session_id ON auto_reply_logs(session_id)",
 			"CREATE INDEX IF NOT EXISTS idx_auto_reply_logs_contact_phone ON auto_reply_logs(contact_phone)",
 			"CREATE INDEX IF NOT EXISTS idx_auto_reply_logs_created_at ON auto_reply_logs(created_at)",
+		}
+		
+		for _, indexQuery := range indexes {
+			if _, err := d.db.Exec(indexQuery); err != nil {
+				return err
+			}
+		}
+		
+		return nil
+	}
+
+	_, err := d.db.Exec(query)
+	return err
+}
+func (d *Database) createUserSettingsTable() error {
+	var query string
+	driver := d.db.Driver()
+	driverName := fmt.Sprintf("%T", driver)
+	
+	if contains(driverName, "mysql") {
+		query = `
+		CREATE TABLE IF NOT EXISTS user_settings (
+			id INT AUTO_INCREMENT PRIMARY KEY,
+			user_id INT NOT NULL,
+			timezone VARCHAR(100) NOT NULL DEFAULT "UTC",
+			date_format VARCHAR(20) NOT NULL DEFAULT "YYYY-MM-DD",
+			time_format VARCHAR(10) NOT NULL DEFAULT "24h",
+			language VARCHAR(10) NOT NULL DEFAULT "en",
+			email_notifications BOOLEAN NOT NULL DEFAULT TRUE,
+			push_notifications BOOLEAN NOT NULL DEFAULT TRUE,
+			sms_notifications BOOLEAN NOT NULL DEFAULT FALSE,
+			created_at BIGINT NOT NULL,
+			updated_at BIGINT,
+			UNIQUE KEY unique_user_settings (user_id),
+			FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+			INDEX idx_user_id (user_id)
+		) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`
+	} else {
+		query = `
+		CREATE TABLE IF NOT EXISTS user_settings (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			user_id INTEGER NOT NULL,
+			timezone TEXT NOT NULL DEFAULT "UTC",
+			date_format TEXT NOT NULL DEFAULT "YYYY-MM-DD",
+			time_format TEXT NOT NULL DEFAULT "24h",
+			language TEXT NOT NULL DEFAULT "en",
+			email_notifications BOOLEAN NOT NULL DEFAULT 1,
+			push_notifications BOOLEAN NOT NULL DEFAULT 1,
+			sms_notifications BOOLEAN NOT NULL DEFAULT 0,
+			created_at INTEGER NOT NULL,
+			updated_at INTEGER,
+			UNIQUE(user_id),
+			FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+		)`
+		
+		_, err := d.db.Exec(query)
+		if err != nil {
+			return err
+		}
+		
+		indexes := []string{
+			"CREATE INDEX IF NOT EXISTS idx_user_settings_user_id ON user_settings(user_id)",
 		}
 		
 		for _, indexQuery := range indexes {

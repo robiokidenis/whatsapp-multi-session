@@ -7,6 +7,7 @@ import (
 // MessageTemplate represents a message template for campaigns
 type MessageTemplate struct {
 	ID          int                    `json:"id"`
+	UserID      int                    `json:"user_id"`
 	Name        string                 `json:"name"`
 	Content     string                 `json:"content"`
 	Type        string                 `json:"type"` // "text", "image", "document", "location"

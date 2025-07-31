@@ -2,9 +2,9 @@ import React, { useState, useRef } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useNotification } from '../contexts/NotificationContext';
 
-const ImportContactsModal = ({ isOpen, onClose, onImportComplete, groups }) => {
+const ImportContactsModal = ({ isOpen, onClose, onImportComplete, groups = [] }) => {
   const { token } = useAuth();
-  const { showNotification } = useNotification();
+  const { showNotification, showSuccess, showError, showWarning } = useNotification();
   const fileInputRef = useRef(null);
   
   const [importing, setImporting] = useState(false);
@@ -34,13 +34,13 @@ const ImportContactsModal = ({ isOpen, onClose, onImportComplete, groups }) => {
 
     // Validate file type
     if (!file.name.toLowerCase().endsWith('.csv')) {
-      showNotification('Please select a CSV file', 'error');
+      showError('Please select a CSV file');
       return;
     }
 
     // Validate file size (10MB limit)
     if (file.size > 10 * 1024 * 1024) {
-      showNotification('File size must be less than 10MB', 'error');
+      showError('File size must be less than 10MB');
       return;
     }
     
@@ -73,7 +73,7 @@ const ImportContactsModal = ({ isOpen, onClose, onImportComplete, groups }) => {
       if (!response.ok) {
         const errorText = await response.text();
         console.error('API Error Response:', errorText);
-        showNotification(`API Error: ${response.status} ${response.statusText}`, 'error');
+        showError(`API Error: ${response.status} ${response.statusText}`);
         return;
       }
       
@@ -82,7 +82,7 @@ const ImportContactsModal = ({ isOpen, onClose, onImportComplete, groups }) => {
       setDetectedContacts(data.contacts || []);
       setShowPreview(true);
     } catch (error) {
-      showNotification('Failed to analyze file', 'error');
+      showError('Failed to analyze file');
       console.error('Error analyzing file:', error);
     } finally {
       setImporting(false);
@@ -128,7 +128,7 @@ const ImportContactsModal = ({ isOpen, onClose, onImportComplete, groups }) => {
   
   const handleTextAnalysis = async () => {
     if (!textData.trim()) {
-      showNotification('Please enter contact data', 'error');
+      showError('Please enter contact data');
       return;
     }
     
@@ -152,7 +152,7 @@ const ImportContactsModal = ({ isOpen, onClose, onImportComplete, groups }) => {
       setDetectedContacts(data.contacts || []);
       setShowPreview(true);
     } catch (error) {
-      showNotification('Failed to analyze text', 'error');
+      showError('Failed to analyze text');
       console.error('Error analyzing text:', error);
     } finally {
       setImporting(false);
@@ -161,23 +161,93 @@ const ImportContactsModal = ({ isOpen, onClose, onImportComplete, groups }) => {
   
   const handleImport = async () => {
     if (detectedContacts.length === 0) {
-      showNotification('No contacts to import', 'error');
+      showError('No contacts to import');
       return;
     }
+
+    // Debug groups prop
+    console.log('=== GROUPS PROP DEBUG ===');
+    console.log('Groups prop:', groups);
+    console.log('Groups type:', typeof groups);
+    console.log('Groups is array:', Array.isArray(groups));
+    console.log('Groups length:', groups?.length);
     
     try {
       setImporting(true);
       
-      const contactsData = detectedContacts.map(contact => ({
-        name: contact.name,
-        phone: contact.phone,
-        email: contact.email || '',
-        company: contact.company || '',
-        position: contact.position || '',
-        group_id: selectedGroupId || null,
-        notes: `Imported from ${importType}${contact.source ? ` - ${contact.source}` : ''}`,
-        is_active: true
-      }));
+      // Validate selectedGroupId if it exists
+      if (selectedGroupId) {
+        // Ensure groups is an array
+        const groupsArray = Array.isArray(groups) ? groups : [];
+        
+        console.log('=== GROUP VALIDATION ===');
+        console.log('Selected group ID:', selectedGroupId, typeof selectedGroupId);
+        console.log('Available groups array:', groupsArray);
+        console.log('Group IDs:', groupsArray.map(g => ({ id: g.id, type: typeof g.id, name: g.name })));
+        
+        if (groupsArray.length === 0) {
+          console.warn('No groups available for validation');
+          // Allow import to continue if no groups are available
+        } else {
+          const foundGroup = groupsArray.find(g => 
+            g.id === selectedGroupId || 
+            String(g.id) === String(selectedGroupId) ||
+            parseInt(g.id) === parseInt(selectedGroupId)
+          );
+          console.log('Found group:', foundGroup);
+          
+          if (!foundGroup) {
+            showError(`Selected group is invalid. Group ID: ${selectedGroupId}`);
+            console.error('Available group IDs:', groupsArray.map(g => g.id));
+            return;
+          }
+        }
+      }
+      
+      // Try the most basic format first - ensure required fields
+      const contactsData = detectedContacts
+        .filter(contact => contact.name && contact.phone) // Only include contacts with name and phone
+        .map(contact => {
+          const basicContact = {
+            name: contact.name.trim(),
+            phone: contact.phone.trim(),
+            email: contact.email ? contact.email.trim() : '',
+            is_active: true
+          };
+        
+        // Add optional fields only if they have values
+        if (contact.company) basicContact.company = contact.company;
+        if (contact.position) basicContact.position = contact.position;
+        if (selectedGroupId) {
+          // Convert to integer - backend expects *int
+          const groupIdInt = parseInt(selectedGroupId, 10);
+          if (!isNaN(groupIdInt)) {
+            basicContact.group_id = groupIdInt;
+          }
+        }
+        if (contact.source) basicContact.notes = `Imported from ${importType} - ${contact.source}`;
+        
+        return basicContact;
+      });
+      
+      // Check if we have any valid contacts after filtering
+      if (contactsData.length === 0) {
+        showError('No valid contacts found. Contacts must have both name and phone number.');
+        return;
+      }
+      
+      console.log('=== IMPORT DEBUG INFO ===');
+      console.log('Selected group ID:', selectedGroupId, typeof selectedGroupId);
+      console.log('Available groups:', groups);
+      console.log('Contacts data:', contactsData);
+      console.log('First contact sample:', contactsData[0]);
+      console.log('Group ID conversion:', selectedGroupId, '->', parseInt(selectedGroupId, 10));
+      
+      const requestBody = {
+        contacts: contactsData
+      };
+      
+      console.log('Request body:', JSON.stringify(requestBody, null, 2));
       
       const response = await fetch('/api/contacts/import', {
         method: 'POST',
@@ -185,23 +255,46 @@ const ImportContactsModal = ({ isOpen, onClose, onImportComplete, groups }) => {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify({
-          contacts: contactsData
-        })
+        body: JSON.stringify(requestBody)
       });
       
-      if (!response.ok) throw new Error('Failed to import contacts');
+      console.log('Response status:', response.status);
+      console.log('Response headers:', response.headers);
+      
+      if (!response.ok) {
+        const errorData = await response.text();
+        console.error('=== IMPORT API ERROR ===');
+        console.error('Status:', response.status, response.statusText);
+        console.error('Error body:', errorData);
+        
+        // Try to parse as JSON for more details
+        try {
+          const errorJson = JSON.parse(errorData);
+          console.error('Parsed error:', errorJson);
+          showError(`Import failed: ${errorJson.message || errorJson.error || 'Unknown error'}`);
+        } catch (parseError) {
+          showError(`Import failed: ${response.status} ${response.statusText}`);
+        }
+        return;
+      }
       
       const results = await response.json();
+      console.log('=== IMPORT SUCCESS ===');
+      console.log('Import results:', results);
       setImportResults(results);
       
       if (results.success > 0) {
-        showNotification(`Successfully imported ${results.success} contacts`, 'success');
+        showSuccess(`Successfully imported ${results.success} contacts`);
         onImportComplete();
+      } else if (results.failed > 0) {
+        showWarning(`Import completed with ${results.failed} failures`);
       }
     } catch (error) {
-      showNotification('Failed to import contacts', 'error');
-      console.error('Error importing contacts:', error);
+      console.error('=== IMPORT EXCEPTION ===');
+      console.error('Error type:', error.constructor.name);
+      console.error('Error message:', error.message);
+      console.error('Error stack:', error.stack);
+      showError(`Import error: ${error.message}`);
     } finally {
       setImporting(false);
     }
@@ -388,16 +481,72 @@ const ImportContactsModal = ({ isOpen, onClose, onImportComplete, groups }) => {
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Assign to Group (Optional)
                 </label>
-                <select
-                  value={selectedGroupId}
-                  onChange={(e) => setSelectedGroupId(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-primary-500 focus:border-primary-500"
-                >
-                  <option value="">No Group</option>
-                  {groups.map(group => (
-                    <option key={group.id} value={group.id}>{group.name}</option>
-                  ))}
-                </select>
+                <div className="relative">
+                  <select
+                    value={selectedGroupId}
+                    onChange={(e) => {
+                      console.log('=== GROUP SELECTION CHANGE ===');
+                      console.log('New value:', e.target.value, typeof e.target.value);
+                      console.log('Available groups:', groups);
+                      console.log('Matching group:', groups.find(g => String(g.id) === String(e.target.value)));
+                      setSelectedGroupId(e.target.value);
+                    }}
+                    className="w-full px-3 py-2 pr-10 border border-gray-300 rounded-md focus:ring-primary-500 focus:border-primary-500 appearance-none bg-white"
+                  >
+                    <option value="">No Group</option>
+                    {Array.isArray(groups) && groups.map(group => (
+                      <option key={group.id} value={group.id}>
+                        {group.name} {/* Debug: ID={group.id} */}
+                      </option>
+                    ))}
+                  </select>
+                  {/* Color indicator for selected group */}
+                  {selectedGroupId && Array.isArray(groups) && groups.find(g => String(g.id) === String(selectedGroupId)) && (
+                    <div 
+                      className="absolute right-8 top-1/2 transform -translate-y-1/2 w-3 h-3 rounded-full border border-white shadow-sm"
+                      style={{ 
+                        backgroundColor: groups.find(g => String(g.id) === String(selectedGroupId))?.color || '#6b7280'
+                      }}
+                    />
+                  )}
+                  <div className="absolute inset-y-0 right-0 flex items-center pr-2 pointer-events-none">
+                    <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                    </svg>
+                  </div>
+                </div>
+                
+                {/* Selected Group Preview */}
+                {selectedGroupId && (
+                  <div className="mt-3 p-3 bg-blue-50 border border-blue-200 rounded-md">
+                    <div className="flex items-center">
+                      <div className="text-sm text-blue-800">
+                        <strong>Selected Group:</strong>
+                      </div>
+                      {(() => {
+                        const selectedGroup = Array.isArray(groups) ? groups.find(g => String(g.id) === String(selectedGroupId)) : null;
+                        return selectedGroup ? (
+                          <span 
+                            className="ml-2 inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium"
+                            style={{ 
+                              backgroundColor: selectedGroup.color + '20', 
+                              color: selectedGroup.color 
+                            }}
+                          >
+                            <div 
+                              className="w-2 h-2 rounded-full mr-1.5"
+                              style={{ backgroundColor: selectedGroup.color }}
+                            />
+                            {selectedGroup.name}
+                          </span>
+                        ) : null;
+                      })()}
+                    </div>
+                    <div className="text-xs text-blue-600 mt-1">
+                      All imported contacts will be assigned to this group
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Action Buttons for Initial Step */}

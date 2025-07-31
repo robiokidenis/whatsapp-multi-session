@@ -4,7 +4,6 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
-	"strings"
 	"time"
 
 	"whatsapp-multi-session/internal/models"
@@ -18,15 +17,16 @@ func NewTemplateRepository(db *sql.DB) *TemplateRepository {
 	return &TemplateRepository{db: db}
 }
 
-// CreateTemplate creates a new message template
-func (r *TemplateRepository) CreateTemplate(template *models.MessageTemplate) error {
+// CreateMessageTemplate creates a new message template
+func (r *TemplateRepository) CreateMessageTemplate(template *models.MessageTemplate) error {
 	variablesJSON, _ := json.Marshal(template.Variables)
 	
 	query := `
-		INSERT INTO message_templates (name, content, type, variables, media_url, media_type, category, is_active, usage_count, created_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+		INSERT INTO message_templates (user_id, name, content, type, variables, media_url, media_type, category, is_active, usage_count, created_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
 	
 	result, err := r.db.Exec(query,
+		template.UserID,
 		template.Name,
 		template.Content,
 		template.Type,
@@ -55,21 +55,22 @@ func (r *TemplateRepository) CreateTemplate(template *models.MessageTemplate) er
 	return nil
 }
 
-// GetTemplate retrieves a template by ID
-func (r *TemplateRepository) GetTemplate(id int) (*models.MessageTemplate, error) {
+// GetMessageTemplate retrieves a template by ID  
+func (r *TemplateRepository) GetMessageTemplate(userID, id int) (*models.MessageTemplate, error) {
 	template := &models.MessageTemplate{}
 	var variablesJSON sql.NullString
 	var updatedAt sql.NullInt64
 	var createdAt int64
 	
 	query := `
-		SELECT id, name, content, type, variables, media_url, media_type, category, 
+		SELECT id, user_id, name, content, type, variables, media_url, media_type, category, 
 		       is_active, usage_count, created_at, updated_at
 		FROM message_templates
-		WHERE id = ?`
+		WHERE id = ? AND user_id = ?`
 	
-	err := r.db.QueryRow(query, id).Scan(
+	err := r.db.QueryRow(query, id, userID).Scan(
 		&template.ID,
+		&template.UserID,
 		&template.Name,
 		&template.Content,
 		&template.Type,
@@ -105,25 +106,15 @@ func (r *TemplateRepository) GetTemplate(id int) (*models.MessageTemplate, error
 	return template, nil
 }
 
-// GetTemplates retrieves templates with filtering
-func (r *TemplateRepository) GetTemplates(category, templateType string, isActive *bool) ([]models.MessageTemplate, error) {
+// GetMessageTemplates retrieves templates with filtering
+func (r *TemplateRepository) GetMessageTemplates(userID int, isActive *bool) ([]models.MessageTemplate, error) {
 	query := `
-		SELECT id, name, content, type, variables, media_url, media_type, category, 
+		SELECT id, user_id, name, content, type, variables, media_url, media_type, category, 
 		       is_active, usage_count, created_at, updated_at
 		FROM message_templates
-		WHERE 1=1`
+		WHERE user_id = ?`
 	
-	args := []interface{}{}
-	
-	if category != "" {
-		query += " AND category = ?"
-		args = append(args, category)
-	}
-	
-	if templateType != "" {
-		query += " AND type = ?"
-		args = append(args, templateType)
-	}
+	args := []interface{}{userID}
 	
 	if isActive != nil {
 		query += " AND is_active = ?"
@@ -148,6 +139,7 @@ func (r *TemplateRepository) GetTemplates(category, templateType string, isActiv
 		
 		err := rows.Scan(
 			&template.ID,
+			&template.UserID,
 			&template.Name,
 			&template.Content,
 			&template.Type,
@@ -184,68 +176,35 @@ func (r *TemplateRepository) GetTemplates(category, templateType string, isActiv
 }
 
 // GetActiveTemplates retrieves only active templates
-func (r *TemplateRepository) GetActiveTemplates() ([]models.MessageTemplate, error) {
+func (r *TemplateRepository) GetActiveTemplates(userID int) ([]models.MessageTemplate, error) {
 	isActive := true
-	return r.GetTemplates("", "", &isActive)
+	return r.GetMessageTemplates(userID, &isActive)
 }
 
-// UpdateTemplate updates an existing template
-func (r *TemplateRepository) UpdateTemplate(id int, req models.UpdateTemplateRequest) error {
-	setParts := []string{}
-	args := []interface{}{}
+// UpdateMessageTemplate updates an existing template
+func (r *TemplateRepository) UpdateMessageTemplate(template *models.MessageTemplate) error {
+	variablesJSON, _ := json.Marshal(template.Variables)
 	
-	if req.Name != "" {
-		setParts = append(setParts, "name = ?")
-		args = append(args, req.Name)
-	}
+	query := `
+		UPDATE message_templates 
+		SET name = ?, content = ?, type = ?, variables = ?, media_url = ?, media_type = ?, 
+		    category = ?, is_active = ?, updated_at = ?
+		WHERE id = ? AND user_id = ?`
 	
-	if req.Content != "" {
-		setParts = append(setParts, "content = ?")
-		args = append(args, req.Content)
-	}
+	result, err := r.db.Exec(query,
+		template.Name,
+		template.Content,
+		template.Type,
+		string(variablesJSON),
+		template.MediaURL,
+		template.MediaType,
+		template.Category,
+		template.IsActive,
+		time.Now().Unix(),
+		template.ID,
+		template.UserID,
+	)
 	
-	if req.Type != "" {
-		setParts = append(setParts, "type = ?")
-		args = append(args, req.Type)
-	}
-	
-	if req.Variables != nil {
-		variablesJSON, _ := json.Marshal(req.Variables)
-		setParts = append(setParts, "variables = ?")
-		args = append(args, string(variablesJSON))
-	}
-	
-	if req.MediaURL != "" {
-		setParts = append(setParts, "media_url = ?")
-		args = append(args, req.MediaURL)
-	}
-	
-	if req.MediaType != "" {
-		setParts = append(setParts, "media_type = ?")
-		args = append(args, req.MediaType)
-	}
-	
-	if req.Category != "" {
-		setParts = append(setParts, "category = ?")
-		args = append(args, req.Category)
-	}
-	
-	if req.IsActive != nil {
-		setParts = append(setParts, "is_active = ?")
-		args = append(args, *req.IsActive)
-	}
-	
-	if len(setParts) == 0 {
-		return fmt.Errorf("no fields to update")
-	}
-	
-	setParts = append(setParts, "updated_at = ?")
-	args = append(args, time.Now().Unix())
-	args = append(args, id)
-	
-	query := fmt.Sprintf("UPDATE message_templates SET %s WHERE id = ?", strings.Join(setParts, ", "))
-	
-	result, err := r.db.Exec(query, args...)
 	if err != nil {
 		return fmt.Errorf("failed to update template: %v", err)
 	}
@@ -262,8 +221,8 @@ func (r *TemplateRepository) UpdateTemplate(id int, req models.UpdateTemplateReq
 	return nil
 }
 
-// DeleteTemplate deletes a template
-func (r *TemplateRepository) DeleteTemplate(id int) error {
+// DeleteMessageTemplate deletes a template
+func (r *TemplateRepository) DeleteMessageTemplate(userID, id int) error {
 	// Check if template is used in any campaigns
 	var campaignCount int
 	err := r.db.QueryRow("SELECT COUNT(*) FROM campaigns WHERE template_id = ?", id).Scan(&campaignCount)
@@ -275,9 +234,9 @@ func (r *TemplateRepository) DeleteTemplate(id int) error {
 		return fmt.Errorf("cannot delete template used in %d campaigns", campaignCount)
 	}
 	
-	query := "DELETE FROM message_templates WHERE id = ?"
+	query := "DELETE FROM message_templates WHERE id = ? AND user_id = ?"
 	
-	result, err := r.db.Exec(query, id)
+	result, err := r.db.Exec(query, id, userID)
 	if err != nil {
 		return fmt.Errorf("failed to delete template: %v", err)
 	}
@@ -335,14 +294,14 @@ func (r *TemplateRepository) CheckTemplateNameExists(name string, excludeID *int
 }
 
 // GetTemplateCategories returns all unique template categories
-func (r *TemplateRepository) GetTemplateCategories() ([]string, error) {
+func (r *TemplateRepository) GetTemplateCategories(userID int) ([]string, error) {
 	query := `
 		SELECT DISTINCT category 
 		FROM message_templates 
-		WHERE category IS NOT NULL AND category != '' 
+		WHERE user_id = ? AND category IS NOT NULL AND category != ''
 		ORDER BY category`
 	
-	rows, err := r.db.Query(query)
+	rows, err := r.db.Query(query, userID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query categories: %v", err)
 	}

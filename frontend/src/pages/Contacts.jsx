@@ -3,7 +3,6 @@ import { useNotification } from '../contexts/NotificationContext';
 import { useAuth } from '../contexts/AuthContext';
 import ImportContactsModal from '../components/ImportContactsModal';
 import ContactGroupsModal from '../components/ContactGroupsModal';
-import MessageTemplatesModal from '../components/MessageTemplatesModal';
 import SendBulkMessageModal from '../components/SendBulkMessageModal';
 import AutoReplyModal from '../components/AutoReplyModal';
 
@@ -25,10 +24,12 @@ const Contacts = () => {
   // Modals
   const [showImportModal, setShowImportModal] = useState(false);
   const [showGroupsModal, setShowGroupsModal] = useState(false);
-  const [showTemplatesModal, setShowTemplatesModal] = useState(false);
   const [showBulkMessageModal, setShowBulkMessageModal] = useState(false);
   const [showAutoReplyModal, setShowAutoReplyModal] = useState(false);
   const [editingContact, setEditingContact] = useState(null);
+  const [selectedGroupsForEdit, setSelectedGroupsForEdit] = useState([]);
+  const [groupInputValue, setGroupInputValue] = useState('');
+  const [showGroupSuggestions, setShowGroupSuggestions] = useState(false);
   
   // Fetch contacts
   const fetchContacts = useCallback(async () => {
@@ -84,6 +85,29 @@ const Contacts = () => {
     fetchContacts();
     fetchContactGroups();
   }, [fetchContacts, fetchContactGroups]);
+
+  // Initialize selected groups when editing contact
+  useEffect(() => {
+    if (editingContact) {
+      const groups = editingContact.groups ? editingContact.groups.map(g => g.id) : (editingContact.group_id ? [editingContact.group_id] : []);
+      setSelectedGroupsForEdit(groups);
+      setGroupInputValue('');
+    }
+  }, [editingContact]);
+
+  // Close suggestions when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (showGroupSuggestions && !event.target.closest('.group-input-container')) {
+        setShowGroupSuggestions(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [showGroupSuggestions]);
   
   // Handle contact selection
   const handleSelectContact = (contactId) => {
@@ -163,6 +187,86 @@ const Contacts = () => {
     }
   };
   
+  // Handle quick group creation
+  const handleCreateGroup = async (groupName) => {
+    try {
+      const response = await fetch('/api/contact-groups', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          name: groupName,
+          color: `#${Math.floor(Math.random()*16777215).toString(16)}`, // Random color
+          description: `Quick-created group: ${groupName}`
+        })
+      });
+      
+      if (!response.ok) throw new Error('Failed to create group');
+      
+      const newGroup = await response.json();
+      setContactGroups(prev => [...prev, newGroup]);
+      setSelectedGroupsForEdit(prev => [...prev, newGroup.id]);
+      showSuccess(`Group "${groupName}" created successfully`);
+      return newGroup;
+    } catch (error) {
+      showError('Failed to create group');
+      console.error('Error creating group:', error);
+      return null;
+    }
+  };
+
+  // Handle group input changes
+  const handleGroupInputChange = (value) => {
+    setGroupInputValue(value);
+    setShowGroupSuggestions(value.length > 0);
+  };
+
+  // Handle adding group from input
+  const handleAddGroupFromInput = async () => {
+    const trimmedValue = groupInputValue.trim();
+    if (!trimmedValue) return;
+
+    // Check if group already exists
+    const existingGroup = contactGroups.find(g => 
+      g.name.toLowerCase() === trimmedValue.toLowerCase()
+    );
+
+    if (existingGroup) {
+      if (!selectedGroupsForEdit.includes(existingGroup.id)) {
+        setSelectedGroupsForEdit(prev => [...prev, existingGroup.id]);
+      }
+    } else {
+      // Create new group
+      await handleCreateGroup(trimmedValue);
+    }
+
+    setGroupInputValue('');
+    setShowGroupSuggestions(false);
+  };
+
+  // Handle removing group from selection
+  const handleRemoveGroup = (groupId) => {
+    setSelectedGroupsForEdit(prev => prev.filter(id => id !== groupId));
+  };
+
+  // Handle adding existing group
+  const handleAddExistingGroup = (groupId) => {
+    if (!selectedGroupsForEdit.includes(groupId)) {
+      setSelectedGroupsForEdit(prev => [...prev, groupId]);
+    }
+  };
+
+  // Get filtered group suggestions
+  const getGroupSuggestions = () => {
+    if (!groupInputValue) return [];
+    return contactGroups.filter(group => 
+      group.name.toLowerCase().includes(groupInputValue.toLowerCase()) &&
+      !selectedGroupsForEdit.includes(group.id)
+    );
+  };
+
   // Handle save contact
   const handleSaveContact = async (contactData) => {
     try {
@@ -171,13 +275,24 @@ const Contacts = () => {
         ? `/api/contacts/${editingContact.id}`
         : '/api/contacts';
       
+      // Prepare data with both formats for backend compatibility
+      const dataToSend = {
+        ...contactData,
+        // Support both single group (legacy) and multiple groups (new)
+        group_id: contactData.group_ids && contactData.group_ids.length > 0 ? contactData.group_ids[0] : null,
+        group_ids: contactData.group_ids || []
+      };
+      
+      console.log('Saving contact data:', dataToSend);
+      console.log('Selected groups:', selectedGroupsForEdit);
+      
       const response = await fetch(url, {
         method: isUpdate ? 'PUT' : 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify(contactData)
+        body: JSON.stringify(dataToSend)
       });
       
       if (!response.ok) {
@@ -186,9 +301,15 @@ const Contacts = () => {
         throw new Error('Failed to save contact');
       }
       
+      const responseData = await response.json();
+      console.log('Save response:', responseData);
+      
       showSuccess(`Contact ${isUpdate ? 'updated' : 'created'} successfully`);
       setEditingContact(null);
+      setSelectedGroupsForEdit([]);
+      setGroupInputValue('');
       fetchContacts();
+      fetchContactGroups(); // Refresh groups in case new ones were created
     } catch (error) {
       showError('Failed to save contact');
       console.error('Error saving contact:', error);
@@ -248,7 +369,11 @@ const Contacts = () => {
             </button>
             
             <button
-              onClick={() => setEditingContact({})}
+              onClick={() => {
+                setEditingContact({});
+                setSelectedGroupsForEdit([]);
+                setGroupInputValue('');
+              }}
               className="px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors flex items-center gap-2"
             >
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -267,15 +392,6 @@ const Contacts = () => {
               Manage Groups
             </button>
             
-            <button
-              onClick={() => setShowTemplatesModal(true)}
-              className="px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors flex items-center gap-2"
-            >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-              </svg>
-              Templates
-            </button>
           </div>
           
           <div className="flex gap-2">
@@ -425,8 +541,28 @@ const Contacts = () => {
                     <td className="px-6 py-4 text-sm text-gray-900">{contact.phone}</td>
                     <td className="px-6 py-4 text-sm text-gray-500">{contact.email || '-'}</td>
                     <td className="px-6 py-4">
-                      {contact.group ? (
+                      {contact.groups && contact.groups.length > 0 ? (
+                        <div className="flex flex-wrap gap-1">
+                          {contact.groups.map(group => (
+                            <span 
+                              key={group.id}
+                              className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium" 
+                              style={{ backgroundColor: group.color + '20', color: group.color }}
+                            >
+                              <div 
+                                className="w-1.5 h-1.5 rounded-full mr-1"
+                                style={{ backgroundColor: group.color }}
+                              />
+                              {group.name}
+                            </span>
+                          ))}
+                        </div>
+                      ) : contact.group ? (
                         <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium" style={{ backgroundColor: contact.group.color + '20', color: contact.group.color }}>
+                          <div 
+                            className="w-1.5 h-1.5 rounded-full mr-1"
+                            style={{ backgroundColor: contact.group.color }}
+                          />
                           {contact.group.name}
                         </span>
                       ) : (
@@ -444,7 +580,11 @@ const Contacts = () => {
                     </td>
                     <td className="px-6 py-4 text-sm">
                       <button
-                        onClick={() => setEditingContact(contact)}
+                        onClick={() => {
+                          setEditingContact(contact);
+                          setSelectedGroupsForEdit(contact.groups ? contact.groups.map(g => g.id) : (contact.group_id ? [contact.group_id] : []));
+                          setGroupInputValue('');
+                        }}
                         className="text-primary-600 hover:text-primary-900 mr-3"
                       >
                         Edit
@@ -542,12 +682,6 @@ const Contacts = () => {
         />
       )}
       
-      {showTemplatesModal && (
-        <MessageTemplatesModal
-          isOpen={showTemplatesModal}
-          onClose={() => setShowTemplatesModal(false)}
-        />
-      )}
       
       {showBulkMessageModal && (
         <SendBulkMessageModal
@@ -579,7 +713,12 @@ const Contacts = () => {
                   {editingContact.id ? 'Edit Contact' : 'Add Contact'}
                 </h3>
                 <button
-                  onClick={() => setEditingContact(null)}
+                  onClick={() => {
+                    setEditingContact(null);
+                    setSelectedGroupsForEdit([]);
+                    setGroupInputValue('');
+                    setShowGroupSuggestions(false);
+                  }}
                   className="text-gray-400 hover:text-gray-600"
                 >
                   <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -598,7 +737,7 @@ const Contacts = () => {
                 email: formData.get('email'),
                 company: formData.get('company'),
                 position: formData.get('position'),
-                group_id: formData.get('group_id') || null,
+                group_ids: selectedGroupsForEdit || [],
                 notes: formData.get('notes'),
                 is_active: formData.get('is_active') === 'true'
               });
@@ -647,17 +786,151 @@ const Contacts = () => {
                     </div>
                     
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Group</label>
-                      <select
-                        name="group_id"
-                        defaultValue={editingContact.group_id}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-primary-500 focus:border-primary-500"
-                      >
-                        <option value="">No Group</option>
-                        {contactGroups.map(group => (
-                          <option key={group.id} value={group.id}>{group.name}</option>
-                        ))}
-                      </select>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Groups</label>
+                      
+                      {/* Selected Groups Display */}
+                      <div className="mb-3">
+                        <div className="flex flex-wrap gap-2 min-h-[2rem] p-2 bg-gray-50 border border-gray-200 rounded-md">
+                          {selectedGroupsForEdit.length === 0 ? (
+                            <span className="text-sm text-gray-400 italic">No groups selected</span>
+                          ) : (
+                            selectedGroupsForEdit.map(groupId => {
+                              const group = contactGroups.find(g => g.id === groupId);
+                              return group ? (
+                                <span
+                                  key={group.id}
+                                  className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium border"
+                                  style={{ 
+                                    backgroundColor: group.color + '20', 
+                                    color: group.color,
+                                    borderColor: group.color + '40'
+                                  }}
+                                >
+                                  <div 
+                                    className="w-2 h-2 rounded-full mr-1.5"
+                                    style={{ backgroundColor: group.color }}
+                                  />
+                                  {group.name}
+                                  <button
+                                    type="button"
+                                    onClick={() => handleRemoveGroup(group.id)}
+                                    className="ml-1.5 hover:bg-red-200 rounded-full p-0.5 transition-colors"
+                                  >
+                                    <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                                      <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
+                                    </svg>
+                                  </button>
+                                </span>
+                              ) : null;
+                            })
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Add Group Input */}
+                      <div className="relative mb-3 group-input-container">
+                        <div className="flex">
+                          <input
+                            type="text"
+                            value={groupInputValue}
+                            onChange={(e) => handleGroupInputChange(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') {
+                                e.preventDefault();
+                                handleAddGroupFromInput();
+                              }
+                            }}
+                            placeholder="Type group name to add or create..."
+                            className="flex-1 px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:ring-primary-500 focus:border-primary-500"
+                          />
+                          <button
+                            type="button"
+                            onClick={handleAddGroupFromInput}
+                            disabled={!groupInputValue.trim()}
+                            className="px-4 py-2 bg-primary-600 text-white border border-primary-600 rounded-r-md hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                          >
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                            </svg>
+                          </button>
+                        </div>
+
+                        {/* Group Suggestions Dropdown */}
+                        {showGroupSuggestions && getGroupSuggestions().length > 0 && (
+                          <div className="absolute z-10 w-full mt-1 bg-white border border-gray-200 rounded-md shadow-lg max-h-40 overflow-y-auto">
+                            {getGroupSuggestions().map(group => (
+                              <button
+                                key={group.id}
+                                type="button"
+                                onClick={() => {
+                                  handleAddExistingGroup(group.id);
+                                  setGroupInputValue('');
+                                  setShowGroupSuggestions(false);
+                                }}
+                                className="w-full px-3 py-2 text-left hover:bg-gray-50 flex items-center border-b border-gray-100 last:border-b-0"
+                              >
+                                <div 
+                                  className="w-3 h-3 rounded-full mr-2"
+                                  style={{ backgroundColor: group.color }}
+                                />
+                                <span className="flex-1">{group.name}</span>
+                                <span className="text-xs text-gray-400">existing</span>
+                              </button>
+                            ))}
+                          </div>
+                        )}
+
+                        {/* Create New Group Suggestion */}
+                        {showGroupSuggestions && groupInputValue.trim() && !contactGroups.find(g => 
+                          g.name.toLowerCase() === groupInputValue.toLowerCase()
+                        ) && (
+                          <div className="absolute z-10 w-full mt-1 bg-white border border-gray-200 rounded-md shadow-lg">
+                            <button
+                              type="button"
+                              onClick={handleAddGroupFromInput}
+                              className="w-full px-3 py-2 text-left hover:bg-green-50 flex items-center text-green-700 border-b border-gray-100"
+                            >
+                              <svg className="w-3 h-3 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                              </svg>
+                              <span className="flex-1">Create "{groupInputValue}"</span>
+                              <span className="text-xs text-green-500">new</span>
+                            </button>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Available Groups Quick Select */}
+                      <div className="mt-3">
+                        <div className="text-xs font-medium text-gray-500 mb-2">Available Groups:</div>
+                        <div className="flex flex-wrap gap-2">
+                          {contactGroups
+                            .filter(group => !selectedGroupsForEdit.includes(group.id))
+                            .map(group => (
+                              <button
+                                key={group.id}
+                                type="button"
+                                className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium border transition-all hover:shadow-sm hover:scale-105"
+                                style={{ 
+                                  backgroundColor: group.color + '15',
+                                  color: group.color,
+                                  borderColor: group.color + '40'
+                                }}
+                                onClick={() => handleAddExistingGroup(group.id)}
+                              >
+                                <div 
+                                  className="w-2 h-2 rounded-full mr-1.5"
+                                  style={{ backgroundColor: group.color }}
+                                />
+                                {group.name}
+                                <svg className="w-3 h-3 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                                </svg>
+                              </button>
+                            ))
+                          }
+                        </div>
+                      </div>
                     </div>
                   </div>
                   
@@ -716,7 +989,12 @@ const Contacts = () => {
               <div className="px-6 py-4 bg-gray-50 border-t border-gray-200 flex justify-end gap-3">
                 <button
                   type="button"
-                  onClick={() => setEditingContact(null)}
+                  onClick={() => {
+                    setEditingContact(null);
+                    setSelectedGroupsForEdit([]);
+                    setGroupInputValue('');
+                    setShowGroupSuggestions(false);
+                  }}
                   className="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 transition-colors"
                 >
                   Cancel
