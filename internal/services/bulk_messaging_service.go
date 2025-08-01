@@ -14,21 +14,22 @@ import (
 )
 
 type BulkMessageJob struct {
-	ID           string                 `json:"id"`
-	CampaignID   *int                   `json:"campaign_id,omitempty"`
-	SessionID    string                 `json:"session_id"`
-	Template     *models.MessageTemplate `json:"template"`
-	Contacts     []models.Contact       `json:"contacts"`
-	DelayBetween int                    `json:"delay_between"` // seconds
-	RandomDelay  bool                   `json:"random_delay"`
-	Variables    map[string]string      `json:"variables,omitempty"`
-	Status       string                 `json:"status"` // "pending", "running", "paused", "completed", "failed"
-	Progress     BulkMessageProgress    `json:"progress"`
-	CreatedAt    time.Time              `json:"created_at"`
-	StartedAt    *time.Time             `json:"started_at,omitempty"`
-	CompletedAt  *time.Time             `json:"completed_at,omitempty"`
-	ctx          context.Context
-	cancel       context.CancelFunc
+	ID            string                 `json:"id"`
+	CampaignID    *int                   `json:"campaign_id,omitempty"`
+	SessionID     string                 `json:"session_id"`
+	Template      *models.MessageTemplate `json:"template,omitempty"`
+	DirectMessage string                 `json:"direct_message,omitempty"` // Direct message when not using template
+	Contacts      []models.Contact       `json:"contacts"`
+	DelayBetween  int                    `json:"delay_between"` // seconds
+	RandomDelay   bool                   `json:"random_delay"`
+	Variables     map[string]string      `json:"variables,omitempty"`
+	Status        string                 `json:"status"` // "pending", "running", "paused", "completed", "failed"
+	Progress      BulkMessageProgress    `json:"progress"`
+	CreatedAt     time.Time              `json:"created_at"`
+	StartedAt     *time.Time             `json:"started_at,omitempty"`
+	CompletedAt   *time.Time             `json:"completed_at,omitempty"`
+	ctx           context.Context
+	cancel        context.CancelFunc
 }
 
 type BulkMessageProgress struct {
@@ -59,14 +60,21 @@ func NewBulkMessagingService(whatsappService *WhatsAppService, contactRepo *repo
 
 // ExecuteBulkMessage handles the logic for a bulk message request
 func (s *BulkMessagingService) ExecuteBulkMessage(req *models.BulkMessageRequest) (*models.BulkMessageResult, error) {
-	// 1. Get Template
-	template, err := s.templateRepo.GetTemplateByID(req.TemplateID)
-	if err != nil {
-		return nil, fmt.Errorf("template not found")
+	// 1. Get Template (if provided)
+	var template *models.MessageTemplate
+	if req.TemplateID != nil {
+		var err error
+		template, err = s.templateRepo.GetTemplateByID(*req.TemplateID)
+		if err != nil {
+			return nil, fmt.Errorf("template not found")
+		}
+	} else if req.Message == "" {
+		return nil, fmt.Errorf("either template_id or message must be provided")
 	}
 
 	// 2. Get Contacts
 	var contacts []models.Contact
+	var err error
 	if req.GroupID != nil {
 		contacts, err = s.contactRepo.GetContactsByGroupID(*req.GroupID, 1000, 0) // Adjust limit as needed
 		if err != nil {
@@ -86,7 +94,7 @@ func (s *BulkMessagingService) ExecuteBulkMessage(req *models.BulkMessageRequest
 	}
 
 	// 3. Start Bulk Message Job
-	job, err := s.StartBulkMessage(*req, template, contacts)
+	job, err := s.StartBulkMessage(*req, template, contacts, req.Message)
 	if err != nil {
 		return nil, fmt.Errorf("failed to start bulk message job: %v", err)
 	}
@@ -108,19 +116,20 @@ func (s *BulkMessagingService) ExecuteBulkMessage(req *models.BulkMessageRequest
 }
 
 // StartBulkMessage creates and starts a new bulk messaging job
-func (s *BulkMessagingService) StartBulkMessage(req models.BulkMessageRequest, template *models.MessageTemplate, contacts []models.Contact) (*BulkMessageJob, error) {
+func (s *BulkMessagingService) StartBulkMessage(req models.BulkMessageRequest, template *models.MessageTemplate, contacts []models.Contact, directMessage string) (*BulkMessageJob, error) {
 	jobID := s.generateJobID()
 	ctx, cancel := context.WithCancel(context.Background())
 	
 	job := &BulkMessageJob{
-		ID:           jobID,
-		SessionID:    req.SessionID,
-		Template:     template,
-		Contacts:     contacts,
-		DelayBetween: req.DelayBetween,
-		RandomDelay:  req.RandomDelay,
-		Variables:    req.Variables,
-		Status:       "pending",
+		ID:            jobID,
+		SessionID:     req.SessionID,
+		Template:      template,
+		DirectMessage: directMessage,
+		Contacts:      contacts,
+		DelayBetween:  req.DelayBetween,
+		RandomDelay:   req.RandomDelay,
+		Variables:     req.Variables,
+		Status:        "pending",
 		Progress: BulkMessageProgress{
 			Total:     len(contacts),
 			Sent:      0,
@@ -245,10 +254,23 @@ func (s *BulkMessagingService) processJob(job *BulkMessageJob) {
 
 // processMessage sends a single message
 func (s *BulkMessagingService) processMessage(job *BulkMessageJob, contact models.Contact, index int) bool {
-	// Generate personalized message content
-	content, err := s.generateMessageContent(job.Template, contact, job.Variables)
-	if err != nil {
-		s.log.Error("Failed to generate message content for contact %d in job %s: %v", contact.ID, job.ID, err)
+	var content string
+	var err error
+	
+	// Use direct message if no template is provided
+	if job.Template == nil && job.DirectMessage != "" {
+		content = job.DirectMessage
+		// Apply contact-specific variables to direct message
+		content = s.applyContactVariables(content, contact, job.Variables)
+	} else if job.Template != nil {
+		// Generate personalized message content from template
+		content, err = s.generateMessageContent(job.Template, contact, job.Variables)
+		if err != nil {
+			s.log.Error("Failed to generate message content for contact %d in job %s: %v", contact.ID, job.ID, err)
+			return false
+		}
+	} else {
+		s.log.Error("No message content available for job %s", job.ID)
 		return false
 	}
 	
@@ -269,6 +291,33 @@ func (s *BulkMessagingService) processMessage(job *BulkMessageJob, contact model
 		index+1, len(job.Contacts), contact.Phone, contact.Name, job.ID)
 	
 	return true
+}
+
+// applyContactVariables applies contact-specific variables to a message
+func (s *BulkMessagingService) applyContactVariables(content string, contact models.Contact, globalVars map[string]string) string {
+	// Default contact variables
+	contactVars := map[string]string{
+		"{{name}}":     contact.Name,
+		"{{phone}}":    contact.Phone,
+		"{{email}}":    contact.Email,
+		"{{company}}":  contact.Company,
+		"{{position}}": contact.Position,
+	}
+	
+	// Add global variables
+	for key, value := range globalVars {
+		if !strings.HasPrefix(key, "{{") {
+			key = "{{" + key + "}}"
+		}
+		contactVars[key] = value
+	}
+	
+	// Replace variables in content
+	for placeholder, value := range contactVars {
+		content = strings.ReplaceAll(content, placeholder, value)
+	}
+	
+	return content
 }
 
 // generateMessageContent creates personalized message content

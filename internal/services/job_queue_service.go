@@ -258,9 +258,19 @@ func (s *JobQueueService) processBulkMessageJob(job *models.JobQueue) (map[strin
 		return nil, fmt.Errorf("failed to get bulk message payload: %v", err)
 	}
 
+	var templateID *int
+	// TemplateID is already an int in the payload struct, not an interface{}
+	if payload.TemplateID > 0 {
+		templateID = &payload.TemplateID
+	}
+	
+	// Message is already a string in the payload struct
+	message := payload.Message
+	
 	req := models.BulkMessageRequest{
 		SessionID:    payload.SessionID,
-		TemplateID:   payload.TemplateID,
+		TemplateID:   templateID,
+		Message:      message,
 		ContactIDs:   payload.ContactIDs,
 		GroupID:      payload.GroupID,
 		DelayBetween: payload.DelayBetween,
@@ -310,6 +320,7 @@ func (s *JobQueueService) EnqueueBulkMessage(req *models.BulkMessageRequest, sch
 	payload := map[string]interface{}{
 		"session_id":     req.SessionID,
 		"template_id":    req.TemplateID,
+		"message":        req.Message,
 		"contact_ids":    req.ContactIDs,
 		"group_id":       req.GroupID,
 		"delay_between":  req.DelayBetween,

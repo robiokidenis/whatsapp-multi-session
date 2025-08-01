@@ -95,7 +95,8 @@ type CampaignListResponse struct {
 // BulkMessageRequest represents a direct bulk message request (without campaigns)
 type BulkMessageRequest struct {
 	SessionID    string            `json:"session_id" validate:"required"`
-	TemplateID   int               `json:"template_id" validate:"required"`
+	TemplateID   *int              `json:"template_id,omitempty"` // Optional - can send direct message without template
+	Message      string            `json:"message,omitempty"`      // Direct message content when not using template
 	ContactIDs   []int             `json:"contact_ids,omitempty"`
 	GroupID      *int              `json:"group_id,omitempty"`
 	DelayBetween int               `json:"delay_between,omitempty"`

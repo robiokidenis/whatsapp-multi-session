@@ -227,8 +227,8 @@ const Messaging = () => {
       return;
     }
     
-    if (!selectedTemplate) {
-      showError('Please select a message template');
+    if (!selectedTemplate && !message.trim()) {
+      showError('Please select a message template or enter a custom message');
       return;
     }
     
@@ -237,12 +237,18 @@ const Messaging = () => {
       
       const requestData = {
         session_id: selectedSession,
-        template_id: parseInt(selectedTemplate),
         contact_ids: targetContacts.map(c => c.id),
         delay_between: 5, // 5 seconds delay between messages
         random_delay: false,
         variables: {} // Template variables can be added here
       };
+      
+      // Add either template_id or message
+      if (selectedTemplate) {
+        requestData.template_id = parseInt(selectedTemplate);
+      } else {
+        requestData.message = message;
+      }
       
       // Add group ID if selecting by group
       if (selectionMode === 'group' && selectedGroups.length > 0) {
@@ -563,11 +569,33 @@ const Messaging = () => {
               
               {/* Template Selection */}
               <div className="mb-6">
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Message Template <span className="text-red-500">*</span>
-                </label>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                  {templates.slice(0, 4).map(template => (
+                <div className="flex items-center justify-between mb-2">
+                  <label className="block text-sm font-medium text-gray-700">
+                    Message Template <span className="text-gray-400">(Optional)</span>
+                  </label>
+                  {selectedTemplate && (
+                    <button
+                      onClick={() => {
+                        setSelectedTemplate('');
+                        setMessageType('text');
+                      }}
+                      className="text-xs text-primary-600 hover:text-primary-800"
+                    >
+                      Clear Selection
+                    </button>
+                  )}
+                </div>
+                {templates.length === 0 ? (
+                  <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg text-sm text-blue-700">
+                    No templates available. You can send custom messages directly.
+                  </div>
+                ) : (
+                  <>
+                    <p className="text-xs text-gray-500 mb-2">
+                      Select a template for quick messaging or leave unselected to write a custom message
+                    </p>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                      {templates.slice(0, 4).map(template => (
                     <button
                       key={template.id}
                       onClick={() => handleTemplateSelect(template)}
@@ -581,7 +609,9 @@ const Messaging = () => {
                       <div className="text-xs text-gray-500 mt-1 truncate">{template.content}</div>
                     </button>
                   ))}
-                </div>
+                    </div>
+                  </>
+                )}
               </div>
               
               {/* Message Type */}
@@ -615,16 +645,36 @@ const Messaging = () => {
               
               {/* Message Content */}
               <div className="mb-6">
-                <label className="block text-sm font-medium text-gray-700 mb-2">Message Content</label>
+                <div className="flex items-center justify-between mb-2">
+                  <label className="block text-sm font-medium text-gray-700">
+                    Message Content {!selectedTemplate && <span className="text-red-500">*</span>}
+                  </label>
+                  {!selectedTemplate && (
+                    <span className="text-xs text-primary-600 bg-primary-50 px-2 py-1 rounded">
+                      Custom Message Mode
+                    </span>
+                  )}
+                  {selectedTemplate && (
+                    <span className="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded">
+                      Using Template
+                    </span>
+                  )}
+                </div>
                 <textarea
                   value={message}
                   onChange={(e) => setMessage(e.target.value)}
                   rows={6}
-                  placeholder="Type your message here..."
+                  placeholder={selectedTemplate ? "Message from template (edit as needed)..." : "Type your custom message here... You can use variables like {{name}}, {{company}}, etc."}
                   className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-primary-500 focus:border-primary-500"
+                  readOnly={false}
                 />
-                <div className="mt-2 text-right text-xs text-gray-500">
-                  {message.length} characters
+                <div className="mt-2 flex justify-between text-xs text-gray-500">
+                  <div>
+                    {!selectedTemplate && "Available variables: {{name}}, {{phone}}, {{email}}, {{company}}, {{position}}"}
+                  </div>
+                  <div>
+                    {message.length} characters
+                  </div>
                 </div>
               </div>
               
@@ -679,7 +729,7 @@ const Messaging = () => {
               <div className="flex justify-end">
                 <button
                   onClick={handleSendMessage}
-                  disabled={sending || !message.trim() || getTargetContacts.length === 0 || !selectedSession || !selectedTemplate}
+                  disabled={sending || !message.trim() || getTargetContacts.length === 0 || !selectedSession}
                   className="px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
                 >
                   {sending ? (

@@ -193,15 +193,15 @@ func (r *JobQueueRepository) UpdateStatus(jobID string, status string, result ma
 	query := `
 		UPDATE job_queue 
 		SET status = ?, result = ?, error = ?, updated_at = ?`
-	args := []interface{}{status, resultJSON, errorMsg, now}
+	args := []interface{}{status, resultJSON, errorMsg, now.Unix()}
 	
 	// Add status-specific fields
 	if status == "running" {
 		query += ", started_at = ?"
-		args = append(args, now)
+		args = append(args, now.Unix())
 	} else if status == "completed" || status == "failed" {
 		query += ", completed_at = ?"
-		args = append(args, now)
+		args = append(args, now.Unix())
 	}
 	
 	query += " WHERE job_id = ?"
@@ -222,7 +222,7 @@ func (r *JobQueueRepository) IncrementAttempts(jobID string) error {
 		SET attempts = attempts + 1, updated_at = ?
 		WHERE job_id = ?`
 	
-	_, err := r.db.Exec(query, time.Now(), jobID)
+	_, err := r.db.Exec(query, time.Now().Unix(), jobID)
 	if err != nil {
 		return fmt.Errorf("failed to increment attempts: %v", err)
 	}
@@ -289,7 +289,7 @@ func (r *JobQueueRepository) CleanupOldJobs(olderThan time.Duration) (int, error
 		WHERE (status = 'completed' OR status = 'failed') 
 		  AND completed_at < ?`
 	
-	result, err := r.db.Exec(query, cutoff)
+	result, err := r.db.Exec(query, cutoff.Unix())
 	if err != nil {
 		return 0, fmt.Errorf("failed to cleanup old jobs: %v", err)
 	}
@@ -308,7 +308,8 @@ func (r *JobQueueRepository) scanJob(scanner interface{}) (*models.JobQueue, err
 	var payloadStr string
 	var resultStr sql.NullString
 	var errorStr sql.NullString
-	var scheduledAt, startedAt, completedAt, createdAt, updatedAt sql.NullTime
+	var scheduledAt, startedAt, completedAt, updatedAt sql.NullInt64
+	var createdAt int64
 	
 	var err error
 	switch s := scanner.(type) {
@@ -352,24 +353,28 @@ func (r *JobQueueRepository) scanJob(scanner interface{}) (*models.JobQueue, err
 		job.Error = errorStr.String
 	}
 	
+	// Convert Unix timestamps to time.Time
 	if scheduledAt.Valid {
-		job.ScheduledAt = &scheduledAt.Time
+		t := time.Unix(scheduledAt.Int64, 0)
+		job.ScheduledAt = &t
 	}
 	
 	if startedAt.Valid {
-		job.StartedAt = &startedAt.Time
+		t := time.Unix(startedAt.Int64, 0)
+		job.StartedAt = &t
 	}
 	
 	if completedAt.Valid {
-		job.CompletedAt = &completedAt.Time
+		t := time.Unix(completedAt.Int64, 0)
+		job.CompletedAt = &t
 	}
 	
-	if createdAt.Valid {
-		job.CreatedAt = createdAt.Time
-	}
+	// CreatedAt is always present
+	job.CreatedAt = time.Unix(createdAt, 0)
 	
 	if updatedAt.Valid {
-		job.UpdatedAt = &updatedAt.Time
+		t := time.Unix(updatedAt.Int64, 0)
+		job.UpdatedAt = &t
 	}
 	
 	return &job, nil

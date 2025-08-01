@@ -54,6 +54,7 @@ type JobQueueListResponse struct {
 type BulkMessagePayload struct {
 	SessionID    string            `json:"session_id"`
 	TemplateID   int               `json:"template_id"`
+	Message      string            `json:"message,omitempty"`      // Direct message content
 	ContactIDs   []int             `json:"contact_ids,omitempty"`
 	GroupID      *int              `json:"group_id,omitempty"`
 	DelayBetween int               `json:"delay_between"`
