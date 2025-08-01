@@ -257,38 +257,29 @@ func (s *JobQueueService) processBulkMessageJob(job *models.JobQueue) (map[strin
 	if err != nil {
 		return nil, fmt.Errorf("failed to get bulk message payload: %v", err)
 	}
-	
-	// TODO: Convert to BulkMessageRequest format and use existing service
-	// req := models.BulkMessageRequest{
-	//     SessionID:    payload.SessionID,
-	//     TemplateID:   payload.TemplateID,
-	//     ContactIDs:   payload.ContactIDs,
-	//     GroupID:      payload.GroupID,
-	//     DelayBetween: payload.DelayBetween,
-	//     RandomDelay:  payload.RandomDelay,
-	//     Variables:    payload.Variables,
-	// }
-	
-	// Execute bulk messaging (this would integrate with your existing bulk messaging service)
-	// For now, we'll simulate the process
-	result := map[string]interface{}{
-		"total_contacts": len(payload.ContactIDs),
-		"sent_count":     0,
-		"failed_count":   0,
-		"started_at":     time.Now().Unix(),
+
+	req := models.BulkMessageRequest{
+		SessionID:    payload.SessionID,
+		TemplateID:   payload.TemplateID,
+		ContactIDs:   payload.ContactIDs,
+		GroupID:      payload.GroupID,
+		DelayBetween: payload.DelayBetween,
+		RandomDelay:  payload.RandomDelay,
+		Variables:    payload.Variables,
 	}
-	
-	// TODO: Integrate with actual bulk messaging service
-	// This is where you would call your existing bulk messaging logic
-	s.logger.Info("Processing bulk message job for %d contacts", len(payload.ContactIDs))
-	
-	// Simulate processing time
-	time.Sleep(1 * time.Second)
-	
-	result["sent_count"] = len(payload.ContactIDs)
-	result["completed_at"] = time.Now().Unix()
-	
-	return result, nil
+
+	result, err := s.bulkMessagingService.ExecuteBulkMessage(&req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to execute bulk message: %v", err)
+	}
+
+	return map[string]interface{}{
+		"total_contacts": result.TotalContacts,
+		"sent_count":     result.SentCount,
+		"failed_count":   result.FailedCount,
+		"started_at":     result.StartedAt,
+		"completed_at":   result.CompletedAt,
+	}, nil
 }
 
 // processScheduledMessageJob processes a scheduled message job

@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"whatsapp-multi-session/internal/models"
+	"whatsapp-multi-session/internal/repository"
 	"whatsapp-multi-session/pkg/logger"
 )
 
@@ -39,17 +40,71 @@ type BulkMessageProgress struct {
 
 type BulkMessagingService struct {
 	whatsappService *WhatsAppService
+	contactRepo     *repository.ContactRepository
+	templateRepo    *repository.TemplateRepository
 	jobs            map[string]*BulkMessageJob
 	jobsMutex       sync.RWMutex
 	log             logger.Logger
 }
 
-func NewBulkMessagingService(whatsappService *WhatsAppService, log logger.Logger) *BulkMessagingService {
+func NewBulkMessagingService(whatsappService *WhatsAppService, contactRepo *repository.ContactRepository, templateRepo *repository.TemplateRepository, log logger.Logger) *BulkMessagingService {
 	return &BulkMessagingService{
 		whatsappService: whatsappService,
+		contactRepo:     contactRepo,
+		templateRepo:    templateRepo,
 		jobs:            make(map[string]*BulkMessageJob),
 		log:             log,
 	}
+}
+
+// ExecuteBulkMessage handles the logic for a bulk message request
+func (s *BulkMessagingService) ExecuteBulkMessage(req *models.BulkMessageRequest) (*models.BulkMessageResult, error) {
+	// 1. Get Template
+	template, err := s.templateRepo.GetTemplateByID(req.TemplateID)
+	if err != nil {
+		return nil, fmt.Errorf("template not found")
+	}
+
+	// 2. Get Contacts
+	var contacts []models.Contact
+	if req.GroupID != nil {
+		contacts, err = s.contactRepo.GetContactsByGroupID(*req.GroupID, 1000, 0) // Adjust limit as needed
+		if err != nil {
+			return nil, fmt.Errorf("failed to get contacts from group: %v", err)
+		}
+	} else if len(req.ContactIDs) > 0 {
+		contacts, err = s.contactRepo.GetContactsByIDs(req.ContactIDs)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get contacts by IDs: %v", err)
+		}
+	} else {
+		return nil, fmt.Errorf("no recipients specified (contact_ids or group_id required)")
+	}
+
+	if len(contacts) == 0 {
+		return nil, fmt.Errorf("no contacts found for the given criteria")
+	}
+
+	// 3. Start Bulk Message Job
+	job, err := s.StartBulkMessage(*req, template, contacts)
+	if err != nil {
+		return nil, fmt.Errorf("failed to start bulk message job: %v", err)
+	}
+
+	// 4. Wait for job completion (or handle asynchronously)
+	// For simplicity, we'll wait here. In a real-world scenario, you might return the job ID
+	// and let the client poll for status.
+	<-job.ctx.Done()
+
+	// 5. Return Result
+	return &models.BulkMessageResult{
+		JobID:         job.ID,
+		TotalContacts: job.Progress.Total,
+		SentCount:     job.Progress.Sent,
+		FailedCount:   job.Progress.Failed,
+		StartedAt:     job.StartedAt,
+		CompletedAt:   job.CompletedAt,
+	}, nil
 }
 
 // StartBulkMessage creates and starts a new bulk messaging job

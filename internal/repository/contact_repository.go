@@ -587,7 +587,7 @@ func (r *ContactRepository) GetContactsByIDs(ids []int) ([]models.Contact, error
 }
 
 // GetContactsByGroupID retrieves all contacts in a specific group
-func (r *ContactRepository) GetContactsByGroupID(groupID int) ([]models.Contact, error) {
+func (r *ContactRepository) GetContactsByGroupID(groupID int, limit int, offset int) ([]models.Contact, error) {
 	query := `
 		SELECT c.id, c.name, c.phone, c.email, c.company, c.position, c.group_id, c.tags,
 		       c.notes, c.is_active, c.last_contact, c.created_at, c.updated_at,
@@ -595,9 +595,10 @@ func (r *ContactRepository) GetContactsByGroupID(groupID int) ([]models.Contact,
 		FROM contacts c
 		LEFT JOIN contact_groups cg ON c.group_id = cg.id
 		WHERE c.group_id = ? AND c.is_active = true
-		ORDER BY c.name`
-	
-	rows, err := r.db.Query(query, groupID)
+		ORDER BY c.name
+		LIMIT ? OFFSET ?`
+
+	rows, err := r.db.Query(query, groupID, limit, offset)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query contacts by group: %v", err)
 	}

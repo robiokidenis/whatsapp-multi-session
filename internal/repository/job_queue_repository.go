@@ -178,7 +178,7 @@ func (r *JobQueueRepository) GetJobs(status string, jobType string, limit, offse
 
 // UpdateStatus updates a job's status and related fields
 func (r *JobQueueRepository) UpdateStatus(jobID string, status string, result map[string]interface{}, errorMsg string) error {
-	now := time.Now().Unix()
+	now := time.Now()
 	
 	var resultJSON *string
 	if result != nil {
@@ -222,7 +222,7 @@ func (r *JobQueueRepository) IncrementAttempts(jobID string) error {
 		SET attempts = attempts + 1, updated_at = ?
 		WHERE job_id = ?`
 	
-	_, err := r.db.Exec(query, time.Now().Unix(), jobID)
+	_, err := r.db.Exec(query, time.Now(), jobID)
 	if err != nil {
 		return fmt.Errorf("failed to increment attempts: %v", err)
 	}
@@ -282,7 +282,7 @@ func (r *JobQueueRepository) GetStatistics() (*models.JobStatistics, error) {
 
 // CleanupOldJobs removes completed/failed jobs older than the specified duration
 func (r *JobQueueRepository) CleanupOldJobs(olderThan time.Duration) (int, error) {
-	cutoff := time.Now().Add(-olderThan).Unix()
+	cutoff := time.Now().Add(-olderThan)
 	
 	query := `
 		DELETE FROM job_queue 
@@ -308,7 +308,7 @@ func (r *JobQueueRepository) scanJob(scanner interface{}) (*models.JobQueue, err
 	var payloadStr string
 	var resultStr sql.NullString
 	var errorStr sql.NullString
-	var scheduledAt, startedAt, completedAt, updatedAt sql.NullInt64
+	var scheduledAt, startedAt, completedAt, createdAt, updatedAt sql.NullTime
 	
 	var err error
 	switch s := scanner.(type) {
@@ -316,13 +316,13 @@ func (r *JobQueueRepository) scanJob(scanner interface{}) (*models.JobQueue, err
 		err = s.Scan(
 			&job.ID, &job.JobID, &job.Type, &job.Status, &job.Priority,
 			&payloadStr, &resultStr, &errorStr, &job.Attempts, &job.MaxAttempts,
-			&scheduledAt, &startedAt, &completedAt, &job.CreatedAt, &updatedAt,
+			&scheduledAt, &startedAt, &completedAt, &createdAt, &updatedAt,
 		)
 	case *sql.Rows:
 		err = s.Scan(
 			&job.ID, &job.JobID, &job.Type, &job.Status, &job.Priority,
 			&payloadStr, &resultStr, &errorStr, &job.Attempts, &job.MaxAttempts,
-			&scheduledAt, &startedAt, &completedAt, &job.CreatedAt, &updatedAt,
+			&scheduledAt, &startedAt, &completedAt, &createdAt, &updatedAt,
 		)
 	default:
 		return nil, fmt.Errorf("unsupported scanner type")
@@ -353,27 +353,24 @@ func (r *JobQueueRepository) scanJob(scanner interface{}) (*models.JobQueue, err
 	}
 	
 	if scheduledAt.Valid {
-		t := time.Unix(scheduledAt.Int64, 0)
-		job.ScheduledAt = &t
+		job.ScheduledAt = &scheduledAt.Time
 	}
 	
 	if startedAt.Valid {
-		t := time.Unix(startedAt.Int64, 0)
-		job.StartedAt = &t
+		job.StartedAt = &startedAt.Time
 	}
 	
 	if completedAt.Valid {
-		t := time.Unix(completedAt.Int64, 0)
-		job.CompletedAt = &t
+		job.CompletedAt = &completedAt.Time
+	}
+	
+	if createdAt.Valid {
+		job.CreatedAt = createdAt.Time
 	}
 	
 	if updatedAt.Valid {
-		t := time.Unix(updatedAt.Int64, 0)
-		job.UpdatedAt = &t
+		job.UpdatedAt = &updatedAt.Time
 	}
-	
-	// Convert Unix timestamps to time.Time
-	job.CreatedAt = time.Unix(job.CreatedAt.Unix(), 0)
 	
 	return &job, nil
 }

@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 
 	"github.com/gorilla/mux"
@@ -27,6 +28,12 @@ func main() {
 	log := logger.New(cfg.EnableLogging, cfg.LogLevel)
 	log.Info("Starting WhatsApp Multi-Session Manager")
 	log.Info("Configuration loaded - Port: %s, Log Level: %s, Database Logging: %t", cfg.Port, cfg.LogLevel, cfg.EnableDatabaseLog)
+
+	// Get absolute path for WhatsApp DB
+	whatsappDBPath, err := filepath.Abs(cfg.WhatsAppDBPath)
+	if err != nil {
+		log.Fatalf("Failed to get absolute path for WhatsApp DB: %v", err)
+	}
 
 	// Initialize database
 	dbConfig := repository.DatabaseConfig{
@@ -73,7 +80,7 @@ func main() {
 
 	// Initialize services
 	userService := services.NewUserService(userRepo, cfg.JWTSecret, log)
-	whatsappService, err := services.NewWhatsAppService(cfg.WhatsAppDBPath, sessionRepo, log)
+	whatsappService, err := services.NewWhatsAppService(whatsappDBPath, sessionRepo, log)
 	if err != nil {
 		log.Fatalf("Failed to initialize WhatsApp service: %v", err)
 	}
@@ -81,7 +88,7 @@ func main() {
 
 	// Initialize CRM services
 	contactDetectionService := services.NewContactDetectionService(*log)
-	bulkMessagingService := services.NewBulkMessagingService(whatsappService, *log)
+	bulkMessagingService := services.NewBulkMessagingService(whatsappService, contactRepo, templateRepo, *log)
 	
 	// Initialize job queue service
 	jobQueueService := services.NewJobQueueService(jobQueueRepo, bulkMessagingService, log)

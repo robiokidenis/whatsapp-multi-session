@@ -351,30 +351,30 @@ func (r *TemplateRepository) GetTemplateTypes() ([]string, error) {
 // GetTemplateStats returns statistics for templates
 func (r *TemplateRepository) GetTemplateStats() (map[string]interface{}, error) {
 	stats := make(map[string]interface{})
-	
+
 	// Total templates
 	var totalTemplates, activeTemplates int
 	err := r.db.QueryRow("SELECT COUNT(*), SUM(CASE WHEN is_active THEN 1 ELSE 0 END) FROM message_templates").Scan(&totalTemplates, &activeTemplates)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get template counts: %v", err)
 	}
-	
+
 	stats["total_templates"] = totalTemplates
 	stats["active_templates"] = activeTemplates
-	
+
 	// Templates by type
 	typeQuery := `
 		SELECT type, COUNT(*) as count
 		FROM message_templates
 		GROUP BY type
 		ORDER BY count DESC`
-	
+
 	rows, err := r.db.Query(typeQuery)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query templates by type: %v", err)
 	}
 	defer rows.Close()
-	
+
 	typeStats := make(map[string]int)
 	for rows.Next() {
 		var templateType string
@@ -386,35 +386,35 @@ func (r *TemplateRepository) GetTemplateStats() (map[string]interface{}, error) 
 		typeStats[templateType] = count
 	}
 	stats["templates_by_type"] = typeStats
-	
+
 	// Total usage count
 	var totalUsage int
 	err = r.db.QueryRow("SELECT SUM(usage_count) FROM message_templates").Scan(&totalUsage)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get total usage: %v", err)
 	}
-	
+
 	stats["total_usage"] = totalUsage
-	
+
 	// Most used templates
 	mostUsedQuery := `
 		SELECT id, name, usage_count
 		FROM message_templates
 		ORDER BY usage_count DESC
 		LIMIT 5`
-	
+
 	rows, err = r.db.Query(mostUsedQuery)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query most used templates: %v", err)
 	}
 	defer rows.Close()
-	
+
 	type TemplateUsage struct {
 		ID         int    `json:"id"`
 		Name       string `json:"name"`
 		UsageCount int    `json:"usage_count"`
 	}
-	
+
 	var mostUsed []TemplateUsage
 	for rows.Next() {
 		var usage TemplateUsage
@@ -425,6 +425,57 @@ func (r *TemplateRepository) GetTemplateStats() (map[string]interface{}, error) 
 		mostUsed = append(mostUsed, usage)
 	}
 	stats["most_used_templates"] = mostUsed
-	
+
 	return stats, nil
+}
+
+// GetTemplateByID retrieves a template by its ID without user context
+func (r *TemplateRepository) GetTemplateByID(id int) (*models.MessageTemplate, error) {
+	template := &models.MessageTemplate{}
+	var variablesJSON sql.NullString
+	var updatedAt sql.NullInt64
+	var createdAt int64
+
+	query := `
+		SELECT id, user_id, name, content, type, variables, media_url, media_type, category, 
+		       is_active, usage_count, created_at, updated_at
+		FROM message_templates
+		WHERE id = ?`
+
+	err := r.db.QueryRow(query, id).Scan(
+		&template.ID,
+		&template.UserID,
+		&template.Name,
+		&template.Content,
+		&template.Type,
+		&variablesJSON,
+		&template.MediaURL,
+		&template.MediaType,
+		&template.Category,
+		&template.IsActive,
+		&template.UsageCount,
+		&createdAt,
+		&updatedAt,
+	)
+
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, fmt.Errorf("template not found")
+		}
+		return nil, fmt.Errorf("failed to get template: %v", err)
+	}
+
+	// Parse timestamps
+	template.CreatedAt = time.Unix(createdAt, 0)
+	if updatedAt.Valid {
+		t := time.Unix(updatedAt.Int64, 0)
+		template.UpdatedAt = &t
+	}
+
+	// Parse variables
+	if variablesJSON.Valid && variablesJSON.String != "" {
+		json.Unmarshal([]byte(variablesJSON.String), &template.Variables)
+	}
+
+	return template, nil
 }

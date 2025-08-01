@@ -53,7 +53,8 @@ RUN addgroup -g 1001 appgroup && \
 WORKDIR /app
 
 # Create directories with proper permissions
-RUN mkdir -p /app/data /app/logs /app/whatsapp/sessions /app/whatsapp/logs /app/config && \
+RUN mkdir -p /app/data /app/logs /app/whatsapp/sessions /app/whatsapp/logs /app/config /app/database && \
+    touch /app/database/sessions.db && \
     chown -R appuser:appgroup /app
 
 # Copy entrypoint script

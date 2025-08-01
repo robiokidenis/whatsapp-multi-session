@@ -41,7 +41,7 @@ const MessageQueue = () => {
   // Fetch messaging jobs from job queue
   const fetchJobs = useCallback(async () => {
     try {
-      const response = await fetch('/api/job-queue?type=bulk_message', {
+      const response = await fetch('/api/job-queue?type=all', { // Fetch all job types
         headers: {
           'Authorization': `Bearer ${token}`
         }
