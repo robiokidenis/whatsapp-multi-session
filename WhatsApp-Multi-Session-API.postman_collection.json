@@ -1,0 +1,1595 @@
+{
+  "info": {
+    "name": "WhatsApp Multi-Session API",
+    "description": "Complete API collection for WhatsApp Multi-Session Manager with CRM features",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "version": "2.0.0"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{jwt_token}}",
+        "type": "string"
+      }
+    ]
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:3000",
+      "type": "string"
+    },
+    {
+      "key": "jwt_token",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "session_id",
+      "value": "default",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "Authentication",
+      "item": [
+        {
+          "name": "Login",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"admin\",\n  \"password\": \"admin123\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/auth/login",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "login"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Register User (Admin Only)",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{jwt_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"newuser\",\n  \"password\": \"password123\",\n  \"role\": \"user\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/auth/register",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "register"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Health Check",
+      "item": [
+        {
+          "name": "Health Status",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/health",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "health"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Session Management",
+      "item": [
+        {
+          "name": "Get All Sessions",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/sessions",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "sessions"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Create Session",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"sessionId\": \"{{session_id}}\",\n  \"name\": \"My WhatsApp Session\",\n  \"webhook\": \"https://your-webhook-url.com/webhook\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/sessions",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "sessions"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Session",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/sessions/{{session_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "sessions",
+                "{{session_id}}"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Update Session",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Updated Session Name\",\n  \"webhook\": \"https://new-webhook-url.com/webhook\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/sessions/{{session_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "sessions",
+                "{{session_id}}"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Session",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/sessions/{{session_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "sessions",
+                "{{session_id}}"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Connection Management",
+      "item": [
+        {
+          "name": "Connect Session",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/sessions/{{session_id}}/connect",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "sessions",
+                "{{session_id}}",
+                "connect"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Disconnect Session",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/sessions/{{session_id}}/disconnect",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "sessions",
+                "{{session_id}}",
+                "disconnect"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Login Session",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/sessions/{{session_id}}/login",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "sessions",
+                "{{session_id}}",
+                "login"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Logout Session",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/sessions/{{session_id}}/logout",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "sessions",
+                "{{session_id}}",
+                "logout"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get QR Code",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/sessions/{{session_id}}/qr",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "sessions",
+                "{{session_id}}",
+                "qr"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Session Configuration",
+      "item": [
+        {
+          "name": "Update Session Webhook",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"webhook\": \"https://your-new-webhook.com/webhook\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/sessions/{{session_id}}/webhook",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "sessions",
+                "{{session_id}}",
+                "webhook"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Update Session Name",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"New Session Name\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/sessions/{{session_id}}/name",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "sessions",
+                "{{session_id}}",
+                "name"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Messaging",
+      "item": [
+        {
+          "name": "Send Text Message",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"phone\": \"1234567890\",\n  \"message\": \"Hello from WhatsApp Multi-Session API!\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/sessions/{{session_id}}/send",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "sessions",
+                "{{session_id}}",
+                "send"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Send Location",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"phone\": \"1234567890\",\n  \"latitude\": \"-6.2088\",\n  \"longitude\": \"106.8456\",\n  \"name\": \"Jakarta, Indonesia\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/sessions/{{session_id}}/send-location",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "sessions",
+                "{{session_id}}",
+                "send-location"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Send Attachment",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "phone",
+                  "value": "1234567890",
+                  "type": "text"
+                },
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": []
+                },
+                {
+                  "key": "caption",
+                  "value": "File attachment",
+                  "type": "text"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{base_url}}/api/sessions/{{session_id}}/send-attachment",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "sessions",
+                "{{session_id}}",
+                "send-attachment"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Send Image",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "phone",
+                  "value": "1234567890",
+                  "type": "text"
+                },
+                {
+                  "key": "image",
+                  "type": "file",
+                  "src": []
+                },
+                {
+                  "key": "caption",
+                  "value": "Image caption",
+                  "type": "text"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{base_url}}/api/sessions/{{session_id}}/send-image",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "sessions",
+                "{{session_id}}",
+                "send-image"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Send File from URL",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"phone\": \"1234567890\",\n  \"url\": \"https://example.com/file.pdf\",\n  \"caption\": \"File from URL\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/sessions/{{session_id}}/send-file-url",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "sessions",
+                "{{session_id}}",
+                "send-file-url"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Send Message (General)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"sessionId\": \"{{session_id}}\",\n  \"phone\": \"1234567890\",\n  \"message\": \"Hello from general send endpoint!\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/send",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "send"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Utilities",
+      "item": [
+        {
+          "name": "Check Number",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"phone\": \"1234567890\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/sessions/{{session_id}}/check-number",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "sessions",
+                "{{session_id}}",
+                "check-number"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Send Typing Indicator",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"phone\": \"1234567890\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/sessions/{{session_id}}/typing",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "sessions",
+                "{{session_id}}",
+                "typing"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Stop Typing Indicator",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"phone\": \"1234567890\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/sessions/{{session_id}}/stop-typing",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "sessions",
+                "{{session_id}}",
+                "stop-typing"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Groups",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/sessions/{{session_id}}/groups",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "sessions",
+                "{{session_id}}",
+                "groups"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "CRM - Contacts",
+      "item": [
+        {
+          "name": "Get Contacts",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/contacts?page=1&limit=10&search=&group_id=",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "contacts"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "10"
+                },
+                {
+                  "key": "search",
+                  "value": ""
+                },
+                {
+                  "key": "group_id",
+                  "value": ""
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Create Contact",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"John Doe\",\n  \"phone\": \"1234567890\",\n  \"email\": \"john@example.com\",\n  \"group_ids\": [1, 2],\n  \"tags\": [\"customer\", \"vip\"]\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/contacts",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "contacts"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Update Contact",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"John Doe Updated\",\n  \"phone\": \"1234567890\",\n  \"email\": \"john.updated@example.com\",\n  \"group_ids\": [1],\n  \"tags\": [\"customer\"]\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/contacts/1",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "contacts",
+                "1"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Contact",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/contacts/1",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "contacts",
+                "1"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Bulk Contact Actions",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"action\": \"delete\",\n  \"contact_ids\": [1, 2, 3]\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/contacts/bulk",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "contacts",
+                "bulk"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Detect Contacts",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"session_id\": \"{{session_id}}\",\n  \"phone_numbers\": [\"1234567890\", \"0987654321\"]\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/contacts/detect",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "contacts",
+                "detect"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Import Contacts",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": []
+                },
+                {
+                  "key": "group_id",
+                  "value": "1",
+                  "type": "text"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{base_url}}/api/contacts/import",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "contacts",
+                "import"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "CRM - Contact Groups",
+      "item": [
+        {
+          "name": "Get Contact Groups",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/contact-groups",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "contact-groups"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Create Contact Group",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"VIP Customers\",\n  \"description\": \"High-value customers\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/contact-groups",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "contact-groups"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Update Contact Group",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Premium Customers\",\n  \"description\": \"Premium tier customers\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/contact-groups/1",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "contact-groups",
+                "1"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Contact Group",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/contact-groups/1",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "contact-groups",
+                "1"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "CRM - Bulk Messaging",
+      "item": [
+        {
+          "name": "Get Bulk Messaging Jobs",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/bulk-messages?page=1&limit=10",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "bulk-messages"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "10"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Start Bulk Messaging",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"session_id\": \"{{session_id}}\",\n  \"message\": \"Hello {{name}}, this is a bulk message!\",\n  \"contact_ids\": [1, 2, 3],\n  \"group_ids\": [1],\n  \"delay_seconds\": 5,\n  \"schedule_at\": \"\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/bulk-messages",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "bulk-messages"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Bulk Messaging Job",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/bulk-messages/job-id-here",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "bulk-messages",
+                "job-id-here"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Cancel Bulk Messaging Job",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/bulk-messages/job-id-here",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "bulk-messages",
+                "job-id-here"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "CRM - Auto Replies",
+      "item": [
+        {
+          "name": "Get Auto Replies",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/auto-replies",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "auto-replies"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Create Auto Reply",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"session_id\": \"{{session_id}}\",\n  \"trigger_text\": \"hello\",\n  \"reply_text\": \"Hello! Thanks for your message. How can I help you?\",\n  \"is_active\": true,\n  \"match_type\": \"contains\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/auto-replies",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "auto-replies"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Update Auto Reply",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"trigger_text\": \"hi\",\n  \"reply_text\": \"Hi there! How can I assist you today?\",\n  \"is_active\": true,\n  \"match_type\": \"exact\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/auto-replies/1",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "auto-replies",
+                "1"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Auto Reply",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/auto-replies/1",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "auto-replies",
+                "1"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Admin - User Management",
+      "item": [
+        {
+          "name": "Get Users",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/admin/users",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "users"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Create User",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"newuser\",\n  \"password\": \"password123\",\n  \"role\": \"user\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/admin/users",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "users"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get User",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/admin/users/1",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "users",
+                "1"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Update User",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"updateduser\",\n  \"role\": \"admin\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/admin/users/1",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "users",
+                "1"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Delete User",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/admin/users/1",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "users",
+                "1"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Admin - Logs",
+      "item": [
+        {
+          "name": "Get Log Status",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/admin/logs/status",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "logs",
+                "status"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Logs",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/admin/logs?page=1&limit=50&level=&component=&start_date=&end_date=",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "logs"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "50"
+                },
+                {
+                  "key": "level",
+                  "value": ""
+                },
+                {
+                  "key": "component",
+                  "value": ""
+                },
+                {
+                  "key": "start_date",
+                  "value": ""
+                },
+                {
+                  "key": "end_date",
+                  "value": ""
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Log Levels",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/admin/logs/levels",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "logs",
+                "levels"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Log Components",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/admin/logs/components",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "logs",
+                "components"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Old Logs",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/admin/logs/cleanup/30",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "logs",
+                "cleanup",
+                "30"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Clear All Logs",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/admin/logs/clear",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "logs",
+                "clear"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Media",
+      "item": [
+        {
+          "name": "Serve Temp Media",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/media/temp/filename.jpg",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "media",
+                "temp",
+                "filename.jpg"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "WebSocket",
+      "item": [
+        {
+          "name": "Session WebSocket (with Auth Middleware)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "ws://localhost:3000/api/sessions/{{session_id}}/ws",
+              "protocol": "ws",
+              "host": [
+                "localhost"
+              ],
+              "port": "3000",
+              "path": [
+                "api",
+                "sessions",
+                "{{session_id}}",
+                "ws"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Session WebSocket (Token Auth)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "ws://localhost:3000/api/ws/{{session_id}}?token={{jwt_token}}",
+              "protocol": "ws",
+              "host": [
+                "localhost"
+              ],
+              "port": "3000",
+              "path": [
+                "api",
+                "ws",
+                "{{session_id}}"
+              ],
+              "query": [
+                {
+                  "key": "token",
+                  "value": "{{jwt_token}}"
+                }
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    }
+  ],
+  "event": [
+    {
+      "listen": "test",
+      "script": {
+        "exec": [
+          "// Auto-extract JWT token from login response",
+          "if (pm.response.code === 200 && pm.request.url.getPath().includes('/auth/login')) {",
+          "    const responseJson = pm.response.json();",
+          "    if (responseJson.data && responseJson.data.token) {",
+          "        pm.collectionVariables.set('jwt_token', responseJson.data.token);",
+          "        console.log('JWT token extracted and saved to collection variables');",
+          "    }",
+          "}"
+        ],
+        "type": "text/javascript"
+      }
+    }
+  ]
+}
