@@ -5,6 +5,7 @@ import QRModal from "../components/QRModal";
 import SendMessageModal from "../components/SendMessageModal";
 import EditSessionModal from "../components/EditSessionModal";
 import CreateSessionModal from "../components/CreateSessionModal";
+import DeleteConfirmDialog from "../components/DeleteConfirmDialog";
 import { useAuth } from "../contexts/AuthContext";
 import { useNotification } from "../contexts/NotificationContext";
 
@@ -16,6 +17,9 @@ const Dashboard = () => {
   const [sendModal, setSendModal] = useState({ show: false, session: null });
   const [editModal, setEditModal] = useState({ show: false, session: null });
   const [createModal, setCreateModal] = useState(false);
+  const [deleteModal, setDeleteModal] = useState({ show: false, sessionId: null, sessionName: null });
+  const [bulkDeleteModal, setBulkDeleteModal] = useState({ show: false, count: 0 });
+  const [deleteLoading, setDeleteLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [selectedSessions, setSelectedSessions] = useState([]);
@@ -77,13 +81,25 @@ const Dashboard = () => {
   };
 
   const deleteSession = async (id) => {
-    if (!window.confirm("Delete this session?")) return;
+    const session = sessions.find(s => s.id === id);
+    setDeleteModal({ 
+      show: true, 
+      sessionId: id, 
+      sessionName: session?.name || `Session ${id}`
+    });
+  };
+
+  const confirmDeleteSession = async () => {
+    setDeleteLoading(true);
     try {
-      await axios.delete(`/api/sessions/${id}`);
+      await axios.delete(`/api/sessions/${deleteModal.sessionId}`);
       showSuccess("Session deleted");
+      setDeleteModal({ show: false, sessionId: null, sessionName: null });
       await loadSessions();
     } catch (error) {
       showError("Failed to delete session");
+    } finally {
+      setDeleteLoading(false);
     }
   };
 
@@ -116,9 +132,10 @@ const Dashboard = () => {
   };
 
   const handleBulkDelete = async () => {
-    if (!window.confirm(`Delete ${selectedSessions.length} selected sessions?`))
-      return;
+    setBulkDeleteModal({ show: true, count: selectedSessions.length });
+  };
 
+  const confirmBulkDelete = async () => {
     setBulkActionLoading(true);
     try {
       await Promise.all(
@@ -128,6 +145,7 @@ const Dashboard = () => {
       );
       showSuccess(`Deleted ${selectedSessions.length} sessions`);
       setSelectedSessions([]);
+      setBulkDeleteModal({ show: false, count: 0 });
       await loadSessions();
     } catch (error) {
       showError("Bulk delete failed");
@@ -540,6 +558,27 @@ const Dashboard = () => {
           onUpdate={updateSession}
         />
       )}
+
+      {/* Delete Confirmation Dialogs */}
+      <DeleteConfirmDialog
+        isOpen={deleteModal.show}
+        onClose={() => setDeleteModal({ show: false, sessionId: null, sessionName: null })}
+        onConfirm={confirmDeleteSession}
+        title="Delete Session"
+        message={`Are you sure you want to delete "${deleteModal.sessionName}"? This will permanently remove the session and all its data.`}
+        confirmText="Delete Session"
+        loading={deleteLoading}
+      />
+
+      <DeleteConfirmDialog
+        isOpen={bulkDeleteModal.show}
+        onClose={() => setBulkDeleteModal({ show: false, count: 0 })}
+        onConfirm={confirmBulkDelete}
+        title="Delete Multiple Sessions"
+        message={`Are you sure you want to delete ${bulkDeleteModal.count} selected sessions? This will permanently remove all selected sessions and their data.`}
+        confirmText={`Delete ${bulkDeleteModal.count} Sessions`}
+        loading={bulkActionLoading}
+      />
     </div>
   );
 };

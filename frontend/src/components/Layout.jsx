@@ -236,7 +236,7 @@ const Layout = ({ children }) => {
       {/* Enhanced Sidebar */}
       <aside 
         className={`
-          fixed lg:static inset-y-0 left-0 z-50 w-72
+          fixed lg:sticky lg:top-0 lg:h-screen inset-y-0 left-0 z-50 w-72
           ${sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
           transition-all duration-300 ease-in-out
           bg-gradient-to-b from-white to-gray-50/50 border-r border-gray-200 shadow-lg lg:shadow-none

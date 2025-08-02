@@ -3,9 +3,7 @@ import { useNotification } from '../contexts/NotificationContext';
 import { useAuth } from '../contexts/AuthContext';
 import ImportContactsModal from '../components/ImportContactsModal';
 import ContactGroupsModal from '../components/ContactGroupsModal';
-import MessageTemplatesModal from '../components/MessageTemplatesModal';
 import SendBulkMessageModal from '../components/SendBulkMessageModal';
-import AutoReplyModal from '../components/AutoReplyModal';
 
 const Contacts = () => {
   const { token } = useAuth();
@@ -25,9 +23,7 @@ const Contacts = () => {
   // Modals
   const [showImportModal, setShowImportModal] = useState(false);
   const [showGroupsModal, setShowGroupsModal] = useState(false);
-  const [showTemplatesModal, setShowTemplatesModal] = useState(false);
   const [showBulkMessageModal, setShowBulkMessageModal] = useState(false);
-  const [showAutoReplyModal, setShowAutoReplyModal] = useState(false);
   const [editingContact, setEditingContact] = useState(null);
   
   // Fetch contacts
@@ -266,16 +262,6 @@ const Contacts = () => {
               </svg>
               Manage Groups
             </button>
-            
-            <button
-              onClick={() => setShowTemplatesModal(true)}
-              className="px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors flex items-center gap-2"
-            >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-              </svg>
-              Templates
-            </button>
           </div>
           
           <div className="flex gap-2">
@@ -302,16 +288,6 @@ const Contacts = () => {
                 </button>
               </>
             )}
-            
-            <button
-              onClick={() => setShowAutoReplyModal(true)}
-              className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors flex items-center gap-2"
-            >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-              Auto Reply
-            </button>
           </div>
         </div>
       </div>
@@ -542,12 +518,6 @@ const Contacts = () => {
         />
       )}
       
-      {showTemplatesModal && (
-        <MessageTemplatesModal
-          isOpen={showTemplatesModal}
-          onClose={() => setShowTemplatesModal(false)}
-        />
-      )}
       
       {showBulkMessageModal && (
         <SendBulkMessageModal
@@ -562,12 +532,6 @@ const Contacts = () => {
         />
       )}
       
-      {showAutoReplyModal && (
-        <AutoReplyModal
-          isOpen={showAutoReplyModal}
-          onClose={() => setShowAutoReplyModal(false)}
-        />
-      )}
       
       {/* Edit Contact Modal */}
       {editingContact && (
