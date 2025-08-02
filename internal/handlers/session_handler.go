@@ -66,6 +66,24 @@ func NewSessionHandler(
 	}
 }
 
+// checkSessionOwnership verifies if user has access to the session
+func (h *SessionHandler) checkSessionOwnership(sessionID string, userID int, role string) error {
+	if role == "admin" {
+		return nil // Admin can access all sessions
+	}
+	
+	owned, err := h.whatsappService.IsSessionOwnedByUser(sessionID, userID)
+	if err != nil {
+		return fmt.Errorf("failed to check session ownership: %v", err)
+	}
+	
+	if !owned {
+		return fmt.Errorf("access denied: session not owned by user")
+	}
+	
+	return nil
+}
+
 // CreateSession handles session creation
 func (h *SessionHandler) CreateSession(w http.ResponseWriter, r *http.Request) {
 	var req models.CreateSessionRequest
@@ -117,7 +135,33 @@ func (h *SessionHandler) CreateSession(w http.ResponseWriter, r *http.Request) {
 
 // GetSessions handles getting all sessions
 func (h *SessionHandler) GetSessions(w http.ResponseWriter, r *http.Request) {
-	sessions := h.whatsappService.GetAllSessions()
+	// Get user info from context
+	userID, ok := r.Context().Value("user_id").(int)
+	if !ok {
+		http.Error(w, "User authentication required", http.StatusUnauthorized)
+		return
+	}
+
+	role, ok := r.Context().Value("role").(string)
+	if !ok {
+		http.Error(w, "User role required", http.StatusUnauthorized)
+		return
+	}
+
+	var sessions []*models.Session
+	var err error
+
+	// Admin users can see all sessions, regular users only see their own
+	if role == "admin" {
+		sessions = h.whatsappService.GetAllSessions()
+	} else {
+		sessions, err = h.whatsappService.GetSessionsByUserID(userID)
+		if err != nil {
+			h.logger.Error("Failed to get sessions for user %d: %v", userID, err)
+			HandleErrorWithMessage(w, http.StatusInternalServerError, err.Error(), models.ErrCodeInternalServer)
+			return
+		}
+	}
 
 	// Convert to response format
 	responses := make([]*models.SessionResponse, len(sessions))
@@ -142,9 +186,30 @@ func (h *SessionHandler) GetSession(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	sessionID := vars["sessionId"]
 
+	// Get user info from context
+	userID, ok := r.Context().Value("user_id").(int)
+	if !ok {
+		http.Error(w, "User authentication required", http.StatusUnauthorized)
+		return
+	}
+
+	role, ok := r.Context().Value("role").(string)
+	if !ok {
+		http.Error(w, "User role required", http.StatusUnauthorized)
+		return
+	}
+
+	// Check if session exists
 	session, exists := h.whatsappService.GetSession(sessionID)
 	if !exists {
 		HandleErrorWithMessage(w, http.StatusNotFound, "Session not found", models.ErrCodeNotFound)
+		return
+	}
+
+	// Check ownership
+	if err := h.checkSessionOwnership(sessionID, userID, role); err != nil {
+		h.logger.Error("Session ownership check failed: %v", err)
+		HandleErrorWithMessage(w, http.StatusForbidden, err.Error(), models.ErrCodeForbidden)
 		return
 	}
 
@@ -166,6 +231,26 @@ func (h *SessionHandler) GetSession(w http.ResponseWriter, r *http.Request) {
 func (h *SessionHandler) ConnectSession(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	sessionID := vars["sessionId"]
+
+	// Get user info from context
+	userID, ok := r.Context().Value("user_id").(int)
+	if !ok {
+		http.Error(w, "User authentication required", http.StatusUnauthorized)
+		return
+	}
+
+	role, ok := r.Context().Value("role").(string)
+	if !ok {
+		http.Error(w, "User role required", http.StatusUnauthorized)
+		return
+	}
+
+	// Check ownership
+	if err := h.checkSessionOwnership(sessionID, userID, role); err != nil {
+		h.logger.Error("Session ownership check failed: %v", err)
+		HandleErrorWithMessage(w, http.StatusForbidden, err.Error(), models.ErrCodeForbidden)
+		return
+	}
 
 	if err := h.whatsappService.ConnectSession(sessionID); err != nil {
 		h.logger.Error("Failed to connect session %s: %v", sessionID, err)
@@ -194,6 +279,26 @@ func (h *SessionHandler) DisconnectSession(w http.ResponseWriter, r *http.Reques
 func (h *SessionHandler) DeleteSession(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	sessionID := vars["sessionId"]
+
+	// Get user info from context
+	userID, ok := r.Context().Value("user_id").(int)
+	if !ok {
+		http.Error(w, "User authentication required", http.StatusUnauthorized)
+		return
+	}
+
+	role, ok := r.Context().Value("role").(string)
+	if !ok {
+		http.Error(w, "User role required", http.StatusUnauthorized)
+		return
+	}
+
+	// Check ownership
+	if err := h.checkSessionOwnership(sessionID, userID, role); err != nil {
+		h.logger.Error("Session ownership check failed: %v", err)
+		HandleErrorWithMessage(w, http.StatusForbidden, err.Error(), models.ErrCodeForbidden)
+		return
+	}
 
 	if err := h.whatsappService.DeleteSession(sessionID); err != nil {
 		h.logger.Error("Failed to delete session %s: %v", sessionID, err)

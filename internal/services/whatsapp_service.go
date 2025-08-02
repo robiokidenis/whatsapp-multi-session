@@ -227,10 +227,14 @@ func (s *WhatsAppService) CreateSession(req *models.CreateSessionRequest, userID
 
 	// Check session limit (only for non-admin users)
 	if userRole != "admin" {
-		currentSessionCount := len(s.sessions)
-		// This would need to be enhanced to get user's actual session limit from database
-		// For now, we'll use a default limit
-		sessionLimit := 5 // This should come from user's record
+		// Get current session count for this user
+		currentSessionCount, err := s.sessionRepo.CountByUserID(userID)
+		if err != nil {
+			return nil, fmt.Errorf("failed to check session count: %v", err)
+		}
+		
+		// Default limit (this should come from user's record in the future)
+		sessionLimit := 5
 
 		if currentSessionCount >= sessionLimit {
 			return nil, fmt.Errorf("session limit reached. You can create maximum %d sessions", sessionLimit)
@@ -285,6 +289,7 @@ func (s *WhatsAppService) CreateSession(req *models.CreateSessionRequest, userID
 		Name:       req.Name,
 		Position:   req.Position,
 		WebhookURL: req.WebhookURL,
+		UserID:     userID,
 		CreatedAt:  time.Now(),
 	}
 
@@ -317,6 +322,37 @@ func (s *WhatsAppService) GetAllSessions() []*models.Session {
 	}
 
 	return sessions
+}
+
+// GetSessionsByUserID returns all sessions for a specific user
+func (s *WhatsAppService) GetSessionsByUserID(userID int) ([]*models.Session, error) {
+	// Get sessions from database first to get user ownership info
+	sessionMetadata, err := s.sessionRepo.GetByUserID(userID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get sessions for user %d: %v", userID, err)
+	}
+	
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	
+	var userSessions []*models.Session
+	for _, metadata := range sessionMetadata {
+		if session, exists := s.sessions[metadata.ID]; exists {
+			userSessions = append(userSessions, session)
+		}
+	}
+	
+	return userSessions, nil
+}
+
+// IsSessionOwnedByUser checks if a session belongs to a specific user
+func (s *WhatsAppService) IsSessionOwnedByUser(sessionID string, userID int) (bool, error) {
+	sessionMetadata, err := s.sessionRepo.GetByIDAndUserID(sessionID, userID)
+	if err != nil {
+		return false, fmt.Errorf("failed to check session ownership: %v", err)
+	}
+	
+	return sessionMetadata != nil, nil
 }
 
 // FindSessionByPhone finds a session by phone identifier (session ID or actual phone)

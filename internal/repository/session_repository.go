@@ -21,8 +21,8 @@ func NewSessionRepository(db *sql.DB) *SessionRepository {
 // Create creates a new session
 func (r *SessionRepository) Create(session *models.SessionMetadata) error {
 	query := `
-		INSERT INTO session_metadata (id, phone, actual_phone, name, position, webhook_url, created_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?)
+		INSERT INTO session_metadata (id, phone, actual_phone, name, position, webhook_url, user_id, created_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?)
 	`
 	
 	_, err := r.db.Exec(query,
@@ -32,6 +32,7 @@ func (r *SessionRepository) Create(session *models.SessionMetadata) error {
 		session.Name,
 		session.Position,
 		session.WebhookURL,
+		session.UserID,
 		session.CreatedAt.Unix(),
 	)
 	
@@ -46,7 +47,7 @@ func (r *SessionRepository) Create(session *models.SessionMetadata) error {
 func (r *SessionRepository) GetByID(id string) (*models.SessionMetadata, error) {
 	session := &models.SessionMetadata{}
 	query := `
-		SELECT id, phone, actual_phone, name, position, webhook_url, created_at
+		SELECT id, phone, actual_phone, name, position, webhook_url, user_id, created_at
 		FROM session_metadata
 		WHERE id = ?
 	`
@@ -59,6 +60,7 @@ func (r *SessionRepository) GetByID(id string) (*models.SessionMetadata, error) 
 		&session.Name,
 		&session.Position,
 		&session.WebhookURL,
+		&session.UserID,
 		&createdAtUnix,
 	)
 	
@@ -77,7 +79,7 @@ func (r *SessionRepository) GetByID(id string) (*models.SessionMetadata, error) 
 // GetAll retrieves all sessions
 func (r *SessionRepository) GetAll() ([]*models.SessionMetadata, error) {
 	query := `
-		SELECT id, phone, actual_phone, name, position, webhook_url, created_at
+		SELECT id, phone, actual_phone, name, position, webhook_url, user_id, created_at
 		FROM session_metadata
 		ORDER BY position ASC, created_at DESC
 	`
@@ -100,6 +102,7 @@ func (r *SessionRepository) GetAll() ([]*models.SessionMetadata, error) {
 			&session.Name,
 			&session.Position,
 			&session.WebhookURL,
+			&session.UserID,
 			&createdAtUnix,
 		)
 		
@@ -124,7 +127,7 @@ func (r *SessionRepository) Update(session *models.SessionMetadata) error {
 	query := `
 		UPDATE session_metadata
 		SET phone = ?, actual_phone = ?, name = ?, position = ?, webhook_url = ?
-		WHERE id = ?
+		WHERE id = ? AND user_id = ?
 	`
 	
 	_, err := r.db.Exec(query,
@@ -134,6 +137,7 @@ func (r *SessionRepository) Update(session *models.SessionMetadata) error {
 		session.Position,
 		session.WebhookURL,
 		session.ID,
+		session.UserID,
 	)
 	
 	if err != nil {
@@ -207,6 +211,115 @@ func (r *SessionRepository) GetNextPosition() (int, error) {
 	}
 	
 	return 0, nil
+}
+
+// GetByUserID retrieves all sessions for a specific user
+func (r *SessionRepository) GetByUserID(userID int) ([]*models.SessionMetadata, error) {
+	query := `
+		SELECT id, phone, actual_phone, name, position, webhook_url, user_id, created_at
+		FROM session_metadata
+		WHERE user_id = ?
+		ORDER BY position ASC, created_at DESC
+	`
+	
+	rows, err := r.db.Query(query, userID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get sessions for user %d: %v", userID, err)
+	}
+	defer rows.Close()
+	
+	var sessions []*models.SessionMetadata
+	for rows.Next() {
+		session := &models.SessionMetadata{}
+		
+		var createdAtUnix int64
+		err := rows.Scan(
+			&session.ID,
+			&session.Phone,
+			&session.ActualPhone,
+			&session.Name,
+			&session.Position,
+			&session.WebhookURL,
+			&session.UserID,
+			&createdAtUnix,
+		)
+		
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan session: %v", err)
+		}
+		
+		session.CreatedAt = time.Unix(createdAtUnix, 0)
+		sessions = append(sessions, session)
+	}
+	
+	return sessions, nil
+}
+
+// GetByIDAndUserID retrieves a session by ID and user ID
+func (r *SessionRepository) GetByIDAndUserID(id string, userID int) (*models.SessionMetadata, error) {
+	session := &models.SessionMetadata{}
+	query := `
+		SELECT id, phone, actual_phone, name, position, webhook_url, user_id, created_at
+		FROM session_metadata
+		WHERE id = ? AND user_id = ?
+	`
+	
+	var createdAtUnix int64
+	err := r.db.QueryRow(query, id, userID).Scan(
+		&session.ID,
+		&session.Phone,
+		&session.ActualPhone,
+		&session.Name,
+		&session.Position,
+		&session.WebhookURL,
+		&session.UserID,
+		&createdAtUnix,
+	)
+	
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	
+	if err != nil {
+		return nil, fmt.Errorf("failed to get session: %v", err)
+	}
+	
+	session.CreatedAt = time.Unix(createdAtUnix, 0)
+	return session, nil
+}
+
+// DeleteByIDAndUserID deletes a session by ID and user ID
+func (r *SessionRepository) DeleteByIDAndUserID(id string, userID int) error {
+	query := `DELETE FROM session_metadata WHERE id = ? AND user_id = ?`
+	
+	result, err := r.db.Exec(query, id, userID)
+	if err != nil {
+		return fmt.Errorf("failed to delete session: %v", err)
+	}
+	
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("failed to get rows affected: %v", err)
+	}
+	
+	if rowsAffected == 0 {
+		return fmt.Errorf("session not found or not owned by user")
+	}
+	
+	return nil
+}
+
+// CountByUserID returns the total number of sessions for a user
+func (r *SessionRepository) CountByUserID(userID int) (int, error) {
+	var count int
+	query := `SELECT COUNT(*) FROM session_metadata WHERE user_id = ?`
+	
+	err := r.db.QueryRow(query, userID).Scan(&count)
+	if err != nil {
+		return 0, fmt.Errorf("failed to count sessions for user %d: %v", userID, err)
+	}
+	
+	return count, nil
 }
 
 // ReorderPositions updates positions for drag-and-drop reordering

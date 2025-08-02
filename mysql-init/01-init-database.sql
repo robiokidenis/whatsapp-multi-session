@@ -50,10 +50,15 @@ CREATE TABLE IF NOT EXISTS session_metadata (
     name VARCHAR(255),
     position INT DEFAULT 0,
     webhook_url TEXT,
+    user_id INT NOT NULL,
     created_at BIGINT NOT NULL,
     
     INDEX idx_phone (phone),
-    INDEX idx_created_at (created_at)
+    INDEX idx_user_id (user_id),
+    INDEX idx_created_at (created_at),
+    
+    -- Foreign key constraint
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- Logs table (for database logging when enabled)
