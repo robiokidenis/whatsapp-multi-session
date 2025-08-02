@@ -84,6 +84,31 @@ func (h *SessionHandler) checkSessionOwnership(sessionID string, userID int, rol
 	return nil
 }
 
+// getUserInfoAndCheckOwnership extracts user info from context and checks session ownership
+func (h *SessionHandler) getUserInfoAndCheckOwnership(w http.ResponseWriter, r *http.Request, sessionID string) (int, string, bool) {
+	// Get user info from context
+	userID, ok := r.Context().Value("user_id").(int)
+	if !ok {
+		http.Error(w, "User authentication required", http.StatusUnauthorized)
+		return 0, "", false
+	}
+
+	role, ok := r.Context().Value("role").(string)
+	if !ok {
+		http.Error(w, "User role required", http.StatusUnauthorized)
+		return 0, "", false
+	}
+
+	// Check ownership
+	if err := h.checkSessionOwnership(sessionID, userID, role); err != nil {
+		h.logger.Error("Session ownership check failed: %v", err)
+		HandleErrorWithMessage(w, http.StatusForbidden, err.Error(), models.ErrCodeForbidden)
+		return 0, "", false
+	}
+
+	return userID, role, true
+}
+
 // CreateSession handles session creation
 func (h *SessionHandler) CreateSession(w http.ResponseWriter, r *http.Request) {
 	var req models.CreateSessionRequest
@@ -266,6 +291,11 @@ func (h *SessionHandler) DisconnectSession(w http.ResponseWriter, r *http.Reques
 	vars := mux.Vars(r)
 	sessionID := vars["sessionId"]
 
+	// Check user authentication and session ownership
+	if _, _, ok := h.getUserInfoAndCheckOwnership(w, r, sessionID); !ok {
+		return
+	}
+
 	if err := h.whatsappService.DisconnectSession(sessionID); err != nil {
 		h.logger.Error("Failed to disconnect session %s: %v", sessionID, err)
 		HandleError(w, err)
@@ -314,6 +344,11 @@ func (h *SessionHandler) GetQRCode(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	sessionID := vars["sessionId"]
 
+	// Check user authentication and session ownership
+	if _, _, ok := h.getUserInfoAndCheckOwnership(w, r, sessionID); !ok {
+		return
+	}
+
 	qrCode, err := h.whatsappService.GetQRCode(sessionID)
 	if err != nil {
 		h.logger.Error("Failed to get QR code for session %s: %v", sessionID, err)
@@ -333,6 +368,11 @@ func (h *SessionHandler) GetQRCode(w http.ResponseWriter, r *http.Request) {
 func (h *SessionHandler) UpdateSession(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	sessionID := vars["sessionId"]
+
+	// Check user authentication and session ownership
+	if _, _, ok := h.getUserInfoAndCheckOwnership(w, r, sessionID); !ok {
+		return
+	}
 
 	var req models.UpdateSessionRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -354,6 +394,11 @@ func (h *SessionHandler) UpdateSession(w http.ResponseWriter, r *http.Request) {
 func (h *SessionHandler) SendMessage(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	sessionID := vars["sessionId"]
+
+	// Check user authentication and session ownership
+	if _, _, ok := h.getUserInfoAndCheckOwnership(w, r, sessionID); !ok {
+		return
+	}
 
 	var req models.SendMessageRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -384,6 +429,11 @@ func (h *SessionHandler) SendMessage(w http.ResponseWriter, r *http.Request) {
 func (h *SessionHandler) SendLocation(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	sessionID := vars["sessionId"]
+
+	// Check user authentication and session ownership
+	if _, _, ok := h.getUserInfoAndCheckOwnership(w, r, sessionID); !ok {
+		return
+	}
 
 	var req models.SendLocationRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -426,6 +476,11 @@ func (h *SessionHandler) SendAttachment(w http.ResponseWriter, r *http.Request) 
 	vars := mux.Vars(r)
 	sessionID := vars["sessionId"]
 
+	// Check user authentication and session ownership
+	if _, _, ok := h.getUserInfoAndCheckOwnership(w, r, sessionID); !ok {
+		return
+	}
+
 	var req models.SendFileRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, "Invalid request body", http.StatusBadRequest)
@@ -458,6 +513,11 @@ func (h *SessionHandler) SendAttachment(w http.ResponseWriter, r *http.Request) 
 func (h *SessionHandler) SendFileFromURL(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	sessionID := vars["sessionId"]
+
+	// Check user authentication and session ownership
+	if _, _, ok := h.getUserInfoAndCheckOwnership(w, r, sessionID); !ok {
+		return
+	}
 
 	var req models.SendFileURLRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -492,6 +552,11 @@ func (h *SessionHandler) SendImage(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	sessionID := vars["sessionId"]
 
+	// Check user authentication and session ownership
+	if _, _, ok := h.getUserInfoAndCheckOwnership(w, r, sessionID); !ok {
+		return
+	}
+
 	var req models.SendImageRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, "Invalid request body", http.StatusBadRequest)
@@ -524,6 +589,11 @@ func (h *SessionHandler) SendImage(w http.ResponseWriter, r *http.Request) {
 func (h *SessionHandler) CheckNumber(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	sessionID := vars["sessionId"]
+
+	// Check user authentication and session ownership
+	if _, _, ok := h.getUserInfoAndCheckOwnership(w, r, sessionID); !ok {
+		return
+	}
 
 	var req struct {
 		Number string `json:"number"`
@@ -563,6 +633,11 @@ func (h *SessionHandler) SendTyping(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	sessionID := vars["sessionId"]
 
+	// Check user authentication and session ownership
+	if _, _, ok := h.getUserInfoAndCheckOwnership(w, r, sessionID); !ok {
+		return
+	}
+
 	var req struct {
 		To string `json:"to"`
 	}
@@ -591,6 +666,11 @@ func (h *SessionHandler) StopTyping(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	sessionID := vars["sessionId"]
 
+	// Check user authentication and session ownership
+	if _, _, ok := h.getUserInfoAndCheckOwnership(w, r, sessionID); !ok {
+		return
+	}
+
 	var req struct {
 		To string `json:"to"`
 	}
@@ -618,6 +698,11 @@ func (h *SessionHandler) StopTyping(w http.ResponseWriter, r *http.Request) {
 func (h *SessionHandler) GetGroups(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	sessionID := vars["sessionId"]
+
+	// Check user authentication and session ownership
+	if _, _, ok := h.getUserInfoAndCheckOwnership(w, r, sessionID); !ok {
+		return
+	}
 
 	groups, err := h.whatsappService.GetGroups(sessionID)
 	if err != nil {
@@ -700,9 +785,30 @@ func (h *SessionHandler) WebSocketHandler(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	// Validate JWT token
-	if err := h.validateJWT(token); err != nil {
+	// Parse and validate JWT token to get user info
+	claims, err := h.parseJWT(token)
+	if err != nil {
 		http.Error(w, "Invalid token: "+err.Error(), http.StatusUnauthorized)
+		return
+	}
+
+	// Extract user info from claims
+	userID, ok := claims["user_id"].(float64)
+	if !ok {
+		http.Error(w, "Invalid token: user_id not found", http.StatusUnauthorized)
+		return
+	}
+
+	role, ok := claims["role"].(string)
+	if !ok {
+		http.Error(w, "Invalid token: role not found", http.StatusUnauthorized)
+		return
+	}
+
+	// Check session ownership
+	if err := h.checkSessionOwnership(sessionID, int(userID), role); err != nil {
+		h.logger.Error("WebSocket session ownership check failed: %v", err)
+		http.Error(w, "Access denied: "+err.Error(), http.StatusForbidden)
 		return
 	}
 
@@ -834,10 +940,37 @@ func (h *SessionHandler) validateJWT(tokenString string) error {
 	return nil
 }
 
+// parseJWT parses and validates a JWT token, returning the claims
+func (h *SessionHandler) parseJWT(tokenString string) (jwt.MapClaims, error) {
+	token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
+		return []byte(h.jwtSecret), nil
+	})
+
+	if err != nil {
+		return nil, err
+	}
+
+	if !token.Valid {
+		return nil, fmt.Errorf("invalid token")
+	}
+
+	claims, ok := token.Claims.(jwt.MapClaims)
+	if !ok {
+		return nil, fmt.Errorf("invalid token claims")
+	}
+
+	return claims, nil
+}
+
 // LoginSession handles session login (WhatsApp authentication)
 func (h *SessionHandler) LoginSession(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	sessionID := vars["sessionId"]
+
+	// Check user authentication and session ownership
+	if _, _, ok := h.getUserInfoAndCheckOwnership(w, r, sessionID); !ok {
+		return
+	}
 
 	if err := h.whatsappService.LoginSession(sessionID); err != nil {
 		h.logger.Error("Failed to login session %s: %v", sessionID, err)
@@ -853,6 +986,11 @@ func (h *SessionHandler) LogoutSession(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	sessionID := vars["sessionId"]
 
+	// Check user authentication and session ownership
+	if _, _, ok := h.getUserInfoAndCheckOwnership(w, r, sessionID); !ok {
+		return
+	}
+
 	if err := h.whatsappService.LogoutSession(sessionID); err != nil {
 		h.logger.Error("Failed to logout session %s: %v", sessionID, err)
 		HandleError(w, err)
@@ -866,6 +1004,11 @@ func (h *SessionHandler) LogoutSession(w http.ResponseWriter, r *http.Request) {
 func (h *SessionHandler) UpdateSessionWebhook(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	sessionID := vars["sessionId"]
+
+	// Check user authentication and session ownership
+	if _, _, ok := h.getUserInfoAndCheckOwnership(w, r, sessionID); !ok {
+		return
+	}
 
 	var req struct {
 		WebhookURL string `json:"webhook_url"`
@@ -893,6 +1036,11 @@ func (h *SessionHandler) UpdateSessionWebhook(w http.ResponseWriter, r *http.Req
 func (h *SessionHandler) UpdateSessionName(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	sessionID := vars["sessionId"]
+
+	// Check user authentication and session ownership
+	if _, _, ok := h.getUserInfoAndCheckOwnership(w, r, sessionID); !ok {
+		return
+	}
 
 	var req struct {
 		Name string `json:"name"`

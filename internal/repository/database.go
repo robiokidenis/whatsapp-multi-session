@@ -183,7 +183,12 @@ func (d *Database) createSessionsTable() error {
 			name VARCHAR(255),
 			position INT DEFAULT 0,
 			webhook_url TEXT,
-			created_at BIGINT NOT NULL
+			user_id INT NOT NULL DEFAULT 1,
+			created_at BIGINT NOT NULL,
+			INDEX idx_phone (phone),
+			INDEX idx_user_id (user_id),
+			INDEX idx_created_at (created_at),
+			FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 		) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`
 	} else {
 		query = `
@@ -194,6 +199,7 @@ func (d *Database) createSessionsTable() error {
 			name TEXT,
 			position INTEGER DEFAULT 0,
 			webhook_url TEXT,
+			user_id INTEGER NOT NULL DEFAULT 1,
 			created_at INTEGER NOT NULL
 		)`
 	}
