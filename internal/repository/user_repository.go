@@ -21,13 +21,14 @@ func NewUserRepository(db *sql.DB) *UserRepository {
 // Create creates a new user
 func (r *UserRepository) Create(user *models.User) error {
 	query := `
-		INSERT INTO users (username, password_hash, role, session_limit, is_active, created_at)
-		VALUES (?, ?, ?, ?, ?, ?)
+		INSERT INTO users (username, password_hash, api_key, role, session_limit, is_active, created_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?)
 	`
 	
 	result, err := r.db.Exec(query, 
 		user.Username, 
-		user.Password, 
+		user.Password,
+		user.APIKey,
 		user.Role, 
 		user.SessionLimit, 
 		user.IsActive,
@@ -51,17 +52,19 @@ func (r *UserRepository) Create(user *models.User) error {
 func (r *UserRepository) GetByUsername(username string) (*models.User, error) {
 	user := &models.User{}
 	query := `
-		SELECT id, username, password_hash, role, session_limit, is_active, created_at, updated_at
+		SELECT id, username, password_hash, api_key, role, session_limit, is_active, created_at, updated_at
 		FROM users
 		WHERE username = ?
 	`
 	
 	var createdAtUnix int64
 	var updatedAtUnix sql.NullInt64
+	var apiKey sql.NullString
 	err := r.db.QueryRow(query, username).Scan(
 		&user.ID,
 		&user.Username,
 		&user.Password,
+		&apiKey,
 		&user.Role,
 		&user.SessionLimit,
 		&user.IsActive,
@@ -81,6 +84,9 @@ func (r *UserRepository) GetByUsername(username string) (*models.User, error) {
 	if updatedAtUnix.Valid {
 		updatedTime := time.Unix(updatedAtUnix.Int64, 0)
 		user.UpdatedAt = &updatedTime
+	}
+	if apiKey.Valid {
+		user.APIKey = apiKey.String
 	}
 	
 	return user, nil
@@ -90,17 +96,19 @@ func (r *UserRepository) GetByUsername(username string) (*models.User, error) {
 func (r *UserRepository) GetByID(id int) (*models.User, error) {
 	user := &models.User{}
 	query := `
-		SELECT id, username, password_hash, role, session_limit, is_active, created_at, updated_at
+		SELECT id, username, password_hash, api_key, role, session_limit, is_active, created_at, updated_at
 		FROM users
 		WHERE id = ?
 	`
 	
 	var createdAtUnix int64
 	var updatedAtUnix sql.NullInt64
+	var apiKey sql.NullString
 	err := r.db.QueryRow(query, id).Scan(
 		&user.ID,
 		&user.Username,
 		&user.Password,
+		&apiKey,
 		&user.Role,
 		&user.SessionLimit,
 		&user.IsActive,
@@ -120,6 +128,53 @@ func (r *UserRepository) GetByID(id int) (*models.User, error) {
 	if updatedAtUnix.Valid {
 		updatedTime := time.Unix(updatedAtUnix.Int64, 0)
 		user.UpdatedAt = &updatedTime
+	}
+	if apiKey.Valid {
+		user.APIKey = apiKey.String
+	}
+	
+	return user, nil
+}
+
+// GetByAPIKey retrieves a user by API key
+func (r *UserRepository) GetByAPIKey(apiKey string) (*models.User, error) {
+	user := &models.User{}
+	query := `
+		SELECT id, username, password_hash, api_key, role, session_limit, is_active, created_at, updated_at
+		FROM users
+		WHERE api_key = ?
+	`
+	
+	var createdAtUnix int64
+	var updatedAtUnix sql.NullInt64
+	var userAPIKey sql.NullString
+	err := r.db.QueryRow(query, apiKey).Scan(
+		&user.ID,
+		&user.Username,
+		&user.Password,
+		&userAPIKey,
+		&user.Role,
+		&user.SessionLimit,
+		&user.IsActive,
+		&createdAtUnix,
+		&updatedAtUnix,
+	)
+	
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	
+	if err != nil {
+		return nil, fmt.Errorf("failed to get user by API key: %v", err)
+	}
+	
+	user.CreatedAt = time.Unix(createdAtUnix, 0)
+	if updatedAtUnix.Valid {
+		updatedTime := time.Unix(updatedAtUnix.Int64, 0)
+		user.UpdatedAt = &updatedTime
+	}
+	if userAPIKey.Valid {
+		user.APIKey = userAPIKey.String
 	}
 	
 	return user, nil
@@ -148,6 +203,38 @@ func (r *UserRepository) Update(user *models.User) error {
 	
 	if err != nil {
 		return fmt.Errorf("failed to update user: %v", err)
+	}
+	
+	return nil
+}
+
+// UpdateAPIKey updates a user's API key
+func (r *UserRepository) UpdateAPIKey(userID int, apiKey string) error {
+	query := `
+		UPDATE users
+		SET api_key = ?, updated_at = ?
+		WHERE id = ?
+	`
+	
+	_, err := r.db.Exec(query, apiKey, time.Now().Unix(), userID)
+	if err != nil {
+		return fmt.Errorf("failed to update API key: %v", err)
+	}
+	
+	return nil
+}
+
+// RemoveAPIKey removes a user's API key
+func (r *UserRepository) RemoveAPIKey(userID int) error {
+	query := `
+		UPDATE users
+		SET api_key = NULL, updated_at = ?
+		WHERE id = ?
+	`
+	
+	_, err := r.db.Exec(query, time.Now().Unix(), userID)
+	if err != nil {
+		return fmt.Errorf("failed to remove API key: %v", err)
 	}
 	
 	return nil

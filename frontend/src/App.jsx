@@ -7,6 +7,7 @@ import Dashboard from './pages/Dashboard';
 import UserManagement from './components/UserManagement';
 import Logs from './pages/Logs';
 import Contacts from './pages/Contacts';
+import Settings from './pages/Settings';
 import Layout from './components/Layout';
 
 function App() {
@@ -52,6 +53,16 @@ function App() {
                 <ProtectedRoute>
                   <Layout>
                     <Contacts />
+                  </Layout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/settings"
+              element={
+                <ProtectedRoute>
+                  <Layout>
+                    <Settings />
                   </Layout>
                 </ProtectedRoute>
               }

@@ -119,6 +119,7 @@ func main() {
 		nil, // templateHandler temporarily disabled
 		bulkMessagingHandler,
 		autoReplyHandler,
+		userService,
 		cfg,
 	)
 
@@ -167,6 +168,7 @@ func setupRoutes(
 	templateHandler interface{},
 	bulkMessagingHandler *handlers.BulkMessagingHandler,
 	autoReplyHandler *handlers.AutoReplyHandler,
+	userService *services.UserService,
 	cfg *config.Config,
 ) *mux.Router {
 	router := mux.NewRouter()
@@ -177,18 +179,26 @@ func setupRoutes(
 	// Auth routes (no authentication required)
 	auth := api.PathPrefix("/auth").Subrouter()
 	auth.HandleFunc("/login", authHandler.Login).Methods("POST")
+
+	// Authenticated auth routes (for password change and API key management)
+	authProtected := api.PathPrefix("/auth").Subrouter()
+	authProtected.Use(middleware.FlexibleAuthMiddleware(cfg.JWTSecret, userService))
+	authProtected.HandleFunc("/change-password", authHandler.ChangePassword).Methods("POST")
+	authProtected.HandleFunc("/api-key", authHandler.GenerateAPIKey).Methods("POST")
+	authProtected.HandleFunc("/api-key", authHandler.RevokeAPIKey).Methods("DELETE")
+	authProtected.HandleFunc("/api-key", authHandler.GetAPIKeyInfo).Methods("GET")
 	
 	// Health check
 	api.HandleFunc("/health", healthHandler).Methods("GET")
 
 	// Media routes (authentication required for security)
 	media := api.PathPrefix("/media").Subrouter()
-	media.Use(middleware.AuthMiddleware(cfg.JWTSecret))
+	media.Use(middleware.FlexibleAuthMiddleware(cfg.JWTSecret, userService))
 	media.HandleFunc("/temp/{filename}", mediaHandler.ServeTempMedia).Methods("GET")
 
 	// Protected routes (authentication required)
 	protected := api.PathPrefix("").Subrouter()
-	protected.Use(middleware.AuthMiddleware(cfg.JWTSecret))
+	protected.Use(middleware.FlexibleAuthMiddleware(cfg.JWTSecret, userService))
 
 	// Session routes
 	sessions := protected.PathPrefix("/sessions").Subrouter()
@@ -271,6 +281,10 @@ func setupRoutes(
 	admin.HandleFunc("/users/{id}", adminHandler.UpdateUser).Methods("PUT")
 	admin.HandleFunc("/users/{id}", adminHandler.DeleteUser).Methods("DELETE")
 	
+	// Admin API key management
+	admin.HandleFunc("/users/{userId}/api-key", authHandler.AdminGenerateAPIKey).Methods("POST")
+	admin.HandleFunc("/users/{userId}/api-key", authHandler.AdminRevokeAPIKey).Methods("DELETE")
+	
 	// Log status endpoint (always available)
 	admin.HandleFunc("/logs/status", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -293,7 +307,7 @@ func setupRoutes(
 	
 	// User registration (admin only)
 	auth_admin := api.PathPrefix("/auth").Subrouter()
-	auth_admin.Use(middleware.AuthMiddleware(cfg.JWTSecret))
+	auth_admin.Use(middleware.FlexibleAuthMiddleware(cfg.JWTSecret, userService))
 	auth_admin.Use(middleware.RequireRole("admin"))
 	auth_admin.HandleFunc("/register", authHandler.Register).Methods("POST")
 

@@ -142,6 +142,7 @@ func (d *Database) createUsersTable() error {
 			id INT AUTO_INCREMENT PRIMARY KEY,
 			username VARCHAR(255) UNIQUE NOT NULL,
 			password_hash TEXT NOT NULL,
+			api_key VARCHAR(64) UNIQUE NULL,
 			role VARCHAR(50) NOT NULL DEFAULT 'user',
 			session_limit INT NOT NULL DEFAULT 5,
 			is_active BOOLEAN NOT NULL DEFAULT TRUE,
@@ -154,6 +155,7 @@ func (d *Database) createUsersTable() error {
 			id INTEGER PRIMARY KEY AUTOINCREMENT,
 			username TEXT UNIQUE NOT NULL,
 			password_hash TEXT NOT NULL,
+			api_key TEXT UNIQUE NULL,
 			role TEXT NOT NULL DEFAULT 'user',
 			session_limit INTEGER NOT NULL DEFAULT 5,
 			is_active BOOLEAN NOT NULL DEFAULT 1,
@@ -163,7 +165,75 @@ func (d *Database) createUsersTable() error {
 	}
 
 	_, err := d.db.Exec(query)
-	return err
+	if err != nil {
+		return err
+	}
+
+	// Add API key column if it doesn't exist (migration for existing databases)
+	return d.migrateUsersTable()
+}
+
+// migrateUsersTable adds missing columns to existing users table
+func (d *Database) migrateUsersTable() error {
+	// Check if api_key column exists
+	var columnExists bool
+	
+	// Get database driver name
+	driver := d.db.Driver()
+	driverName := fmt.Sprintf("%T", driver)
+	
+	if contains(driverName, "mysql") {
+		query := `
+		SELECT COUNT(*) 
+		FROM INFORMATION_SCHEMA.COLUMNS 
+		WHERE TABLE_SCHEMA = DATABASE() 
+		AND TABLE_NAME = 'users' 
+		AND COLUMN_NAME = 'api_key'`
+		
+		var count int
+		err := d.db.QueryRow(query).Scan(&count)
+		if err != nil {
+			return err
+		}
+		columnExists = count > 0
+		
+		if !columnExists {
+			_, err = d.db.Exec("ALTER TABLE users ADD COLUMN api_key VARCHAR(64) UNIQUE NULL")
+			return err
+		}
+	} else {
+		// SQLite: Check if column exists by trying to add it
+		query := "PRAGMA table_info(users)"
+		rows, err := d.db.Query(query)
+		if err != nil {
+			return err
+		}
+		defer rows.Close()
+		
+		for rows.Next() {
+			var cid int
+			var name, dataType string
+			var notNull, pk int
+			var defaultValue interface{}
+			
+			err := rows.Scan(&cid, &name, &dataType, &notNull, &defaultValue, &pk)
+			if err != nil {
+				return err
+			}
+			
+			if name == "api_key" {
+				columnExists = true
+				break
+			}
+		}
+		
+		if !columnExists {
+			_, err = d.db.Exec("ALTER TABLE users ADD COLUMN api_key TEXT UNIQUE NULL")
+			return err
+		}
+	}
+	
+	return nil
 }
 
 func (d *Database) createSessionsTable() error {

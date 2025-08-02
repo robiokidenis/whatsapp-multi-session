@@ -15,6 +15,10 @@ const UserManagement = () => {
   const [selectedUsers, setSelectedUsers] = useState([]);
   const [showFilters, setShowFilters] = useState(false);
   const [bulkActionLoading, setBulkActionLoading] = useState(false);
+  const [showApiKeyModal, setShowApiKeyModal] = useState(false);
+  const [selectedUserForApiKey, setSelectedUserForApiKey] = useState(null);
+  const [generatedApiKey, setGeneratedApiKey] = useState('');
+  const [apiKeyLoading, setApiKeyLoading] = useState(false);
   const [formData, setFormData] = useState({
     username: '',
     password: '',
@@ -236,6 +240,61 @@ const UserManagement = () => {
     setShowEditModal(false);
     setSelectedUser(null);
     setFormData({ username: '', password: '', role: 'user', session_limit: 5 });
+  };
+
+  // API Key Management Functions
+  const openApiKeyModal = (user) => {
+    setSelectedUserForApiKey(user);
+    setGeneratedApiKey('');
+    setShowApiKeyModal(true);
+  };
+
+  const closeApiKeyModal = () => {
+    setShowApiKeyModal(false);
+    setSelectedUserForApiKey(null);
+    setGeneratedApiKey('');
+  };
+
+  const generateApiKeyForUser = async (userId) => {
+    try {
+      setApiKeyLoading(true);
+      const response = await axios.post(`/api/admin/users/${userId}/api-key`);
+      if (response.data.success) {
+        setGeneratedApiKey(response.data.data.api_key);
+        showSuccess('API key generated successfully');
+      }
+    } catch (error) {
+      showError('Failed to generate API key');
+      console.error('API key generation error:', error);
+    } finally {
+      setApiKeyLoading(false);
+    }
+  };
+
+  const revokeApiKeyForUser = async (userId) => {
+    if (!window.confirm('Are you sure you want to revoke this user\'s API key?')) {
+      return;
+    }
+
+    try {
+      setApiKeyLoading(true);
+      await axios.delete(`/api/admin/users/${userId}/api-key`);
+      showSuccess('API key revoked successfully');
+      setGeneratedApiKey('');
+    } catch (error) {
+      showError('Failed to revoke API key');
+      console.error('API key revocation error:', error);
+    } finally {
+      setApiKeyLoading(false);
+    }
+  };
+
+  const copyToClipboard = (text) => {
+    navigator.clipboard.writeText(text).then(() => {
+      showSuccess('API key copied to clipboard!');
+    }).catch(() => {
+      showError('Failed to copy to clipboard');
+    });
   };
 
   if (loading && users.length === 0) {
@@ -523,6 +582,13 @@ const UserManagement = () => {
                             >
                               Edit
                             </button>
+                            <button
+                              onClick={() => openApiKeyModal(user)}
+                              className="btn btn-xs btn-primary"
+                              title="Manage API Key"
+                            >
+                              API Key
+                            </button>
                             {user.username !== 'admin' && (
                               <>
                                 <button
@@ -730,6 +796,113 @@ const UserManagement = () => {
                   </button>
                 </div>
               </form>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* API Key Management Modal */}
+      {showApiKeyModal && selectedUserForApiKey && (
+        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-xl max-w-md w-full mx-4">
+            <div className="flex items-center justify-between p-6 border-b border-gray-200">
+              <h3 className="text-lg font-medium text-gray-900">
+                API Key Management - {selectedUserForApiKey.username}
+              </h3>
+              <button
+                onClick={closeApiKeyModal}
+                className="text-gray-400 hover:text-gray-500"
+              >
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            
+            <div className="p-6">
+              <div className="space-y-4">
+                <div className="text-sm text-gray-600">
+                  Generate or revoke API keys for this user. API keys provide an alternative authentication method for programmatic access.
+                </div>
+
+                {generatedApiKey && (
+                  <div className="border-2 border-green-200 rounded-lg p-4 bg-green-50">
+                    <div className="flex items-center mb-2">
+                      <svg className="w-5 h-5 text-green-600 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                      <h4 className="font-medium text-green-900">API Key Generated!</h4>
+                    </div>
+                    <p className="text-sm text-green-700 mb-3">
+                      Please copy this API key now. You won't be able to see it again!
+                    </p>
+                    <div className="flex items-center space-x-2">
+                      <input
+                        type="text"
+                        value={generatedApiKey}
+                        readOnly
+                        className="flex-1 px-3 py-2 border border-green-300 rounded-md bg-white font-mono text-sm"
+                      />
+                      <button
+                        onClick={() => copyToClipboard(generatedApiKey)}
+                        className="px-3 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500"
+                      >
+                        Copy
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                <div className="border rounded-lg p-4 bg-gray-50">
+                  <h4 className="font-medium text-gray-900 mb-2">API Key Actions</h4>
+                  <div className="space-y-2">
+                    <button
+                      onClick={() => generateApiKeyForUser(selectedUserForApiKey.id)}
+                      disabled={apiKeyLoading}
+                      className="w-full px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 flex items-center justify-center"
+                    >
+                      {apiKeyLoading ? (
+                        <>
+                          <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                          </svg>
+                          Processing...
+                        </>
+                      ) : (
+                        'Generate New API Key'
+                      )}
+                    </button>
+                    
+                    <button
+                      onClick={() => revokeApiKeyForUser(selectedUserForApiKey.id)}
+                      disabled={apiKeyLoading}
+                      className="w-full px-4 py-2 border border-red-300 text-red-700 rounded-md hover:bg-red-50 focus:outline-none focus:ring-2 focus:ring-red-500 disabled:opacity-50"
+                    >
+                      Revoke API Key
+                    </button>
+                  </div>
+                </div>
+
+                <div className="border rounded-lg p-4">
+                  <h4 className="font-medium text-gray-900 mb-2">Usage Instructions</h4>
+                  <div className="text-sm text-gray-600 space-y-2">
+                    <p>Use the API key in the Authorization header:</p>
+                    <div className="bg-gray-100 p-3 rounded font-mono text-xs">
+                      Authorization: Bearer api_key_here
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex justify-end px-6 py-4 border-t border-gray-200">
+              <button
+                onClick={closeApiKeyModal}
+                className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                Close
+              </button>
             </div>
           </div>
         </div>

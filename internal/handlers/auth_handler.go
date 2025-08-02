@@ -3,7 +3,10 @@ package handlers
 import (
 	"encoding/json"
 	"net/http"
+	"strconv"
 
+	"github.com/gorilla/mux"
+	"whatsapp-multi-session/internal/middleware"
 	"whatsapp-multi-session/internal/models"
 	"whatsapp-multi-session/internal/services"
 	"whatsapp-multi-session/pkg/logger"
@@ -115,9 +118,146 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 
 // ChangePassword handles password change
 func (h *AuthHandler) ChangePassword(w http.ResponseWriter, r *http.Request) {
-	// TODO: Get user from JWT token context
-	// For now, return method not implemented
-	http.Error(w, "Method not implemented", http.StatusNotImplemented)
+	// Get user claims from context
+	claims, ok := middleware.GetUserClaims(r)
+	if !ok {
+		HandleErrorWithMessage(w, http.StatusUnauthorized, "Unauthorized", models.ErrCodeUnauthorized)
+		return
+	}
+
+	// Parse request
+	var req models.ChangePasswordRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		HandleErrorWithMessage(w, http.StatusBadRequest, "Invalid request body", models.ErrCodeInvalidInput)
+		return
+	}
+
+	// Validate input
+	if req.OldPassword == "" || req.NewPassword == "" {
+		HandleErrorWithMessage(w, http.StatusBadRequest, "Old password and new password are required", models.ErrCodeInvalidInput)
+		return
+	}
+
+	if len(req.NewPassword) < 6 {
+		HandleErrorWithMessage(w, http.StatusBadRequest, "New password must be at least 6 characters", models.ErrCodeInvalidInput)
+		return
+	}
+
+	// Change password
+	if err := h.userService.ChangePassword(claims.UserID, &req); err != nil {
+		h.logger.Warn("Failed password change for user %d: %v", claims.UserID, err)
+		HandleErrorWithMessage(w, http.StatusBadRequest, err.Error(), models.ErrCodeInvalidInput)
+		return
+	}
+
+	h.logger.Info("Password changed successfully for user %d", claims.UserID)
+	WriteSuccessResponse(w, "Password changed successfully", nil)
+}
+
+// GenerateAPIKey generates a new API key for the authenticated user
+func (h *AuthHandler) GenerateAPIKey(w http.ResponseWriter, r *http.Request) {
+	// Get user claims from context
+	claims, ok := middleware.GetUserClaims(r)
+	if !ok {
+		HandleErrorWithMessage(w, http.StatusUnauthorized, "Unauthorized", models.ErrCodeUnauthorized)
+		return
+	}
+
+	// Generate API key
+	response, err := h.userService.GenerateAPIKey(claims.UserID)
+	if err != nil {
+		h.logger.Error("Failed to generate API key for user %d: %v", claims.UserID, err)
+		HandleErrorWithMessage(w, http.StatusInternalServerError, "Failed to generate API key", models.ErrCodeInternalServer)
+		return
+	}
+
+	h.logger.Info("Generated API key for user %d", claims.UserID)
+	WriteSuccessResponse(w, "API key generated successfully", response)
+}
+
+// RevokeAPIKey revokes the API key for the authenticated user
+func (h *AuthHandler) RevokeAPIKey(w http.ResponseWriter, r *http.Request) {
+	// Get user claims from context
+	claims, ok := middleware.GetUserClaims(r)
+	if !ok {
+		HandleErrorWithMessage(w, http.StatusUnauthorized, "Unauthorized", models.ErrCodeUnauthorized)
+		return
+	}
+
+	// Revoke API key
+	if err := h.userService.RevokeAPIKey(claims.UserID); err != nil {
+		h.logger.Error("Failed to revoke API key for user %d: %v", claims.UserID, err)
+		HandleErrorWithMessage(w, http.StatusInternalServerError, "Failed to revoke API key", models.ErrCodeInternalServer)
+		return
+	}
+
+	h.logger.Info("Revoked API key for user %d", claims.UserID)
+	WriteSuccessResponse(w, "API key revoked successfully", nil)
+}
+
+// GetAPIKeyInfo returns information about the user's API key (without the key itself)
+func (h *AuthHandler) GetAPIKeyInfo(w http.ResponseWriter, r *http.Request) {
+	// Get user claims from context
+	claims, ok := middleware.GetUserClaims(r)
+	if !ok {
+		HandleErrorWithMessage(w, http.StatusUnauthorized, "Unauthorized", models.ErrCodeUnauthorized)
+		return
+	}
+
+	// Get API key info
+	info, err := h.userService.GetAPIKeyInfo(claims.UserID)
+	if err != nil {
+		h.logger.Error("Failed to get API key info for user %d: %v", claims.UserID, err)
+		HandleErrorWithMessage(w, http.StatusInternalServerError, "Failed to get API key info", models.ErrCodeInternalServer)
+		return
+	}
+
+	WriteSuccessResponse(w, "API key info retrieved successfully", info)
+}
+
+// AdminGenerateAPIKey generates API key for any user (admin only)
+func (h *AuthHandler) AdminGenerateAPIKey(w http.ResponseWriter, r *http.Request) {
+	// Get user ID from URL params
+	vars := mux.Vars(r)
+	userIDStr := vars["userId"]
+	userID, err := strconv.Atoi(userIDStr)
+	if err != nil {
+		HandleErrorWithMessage(w, http.StatusBadRequest, "Invalid user ID", models.ErrCodeInvalidInput)
+		return
+	}
+
+	// Generate API key
+	response, err := h.userService.GenerateAPIKey(userID)
+	if err != nil {
+		h.logger.Error("Failed to generate API key for user %d: %v", userID, err)
+		HandleErrorWithMessage(w, http.StatusInternalServerError, "Failed to generate API key", models.ErrCodeInternalServer)
+		return
+	}
+
+	h.logger.Info("Admin generated API key for user %d", userID)
+	WriteSuccessResponse(w, "API key generated successfully", response)
+}
+
+// AdminRevokeAPIKey revokes API key for any user (admin only)
+func (h *AuthHandler) AdminRevokeAPIKey(w http.ResponseWriter, r *http.Request) {
+	// Get user ID from URL params
+	vars := mux.Vars(r)
+	userIDStr := vars["userId"]
+	userID, err := strconv.Atoi(userIDStr)
+	if err != nil {
+		HandleErrorWithMessage(w, http.StatusBadRequest, "Invalid user ID", models.ErrCodeInvalidInput)
+		return
+	}
+
+	// Revoke API key
+	if err := h.userService.RevokeAPIKey(userID); err != nil {
+		h.logger.Error("Failed to revoke API key for user %d: %v", userID, err)
+		HandleErrorWithMessage(w, http.StatusInternalServerError, "Failed to revoke API key", models.ErrCodeInternalServer)
+		return
+	}
+
+	h.logger.Info("Admin revoked API key for user %d", userID)
+	WriteSuccessResponse(w, "API key revoked successfully", nil)
 }
 
 // getClientIP extracts the client IP address from the request

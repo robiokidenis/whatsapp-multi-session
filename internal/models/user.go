@@ -4,13 +4,14 @@ import "time"
 
 // User represents a user account
 type User struct {
-	ID           int       `json:"id"`
-	Username     string    `json:"username"`
-	Password     string    `json:"-"` // Don't include in JSON responses
-	Role         string    `json:"role"`
-	SessionLimit int       `json:"session_limit"`
-	IsActive     bool      `json:"is_active"`
-	CreatedAt    time.Time `json:"created_at"`
+	ID           int        `json:"id"`
+	Username     string     `json:"username"`
+	Password     string     `json:"-"` // Don't include in JSON responses
+	APIKey       string     `json:"-"` // Don't include in JSON responses for security
+	Role         string     `json:"role"`
+	SessionLimit int        `json:"session_limit"`
+	IsActive     bool       `json:"is_active"`
+	CreatedAt    time.Time  `json:"created_at"`
 	UpdatedAt    *time.Time `json:"updated_at,omitempty"`
 }
 
@@ -67,4 +68,18 @@ type UpdateUserRequest struct {
 	Role         string `json:"role,omitempty"`
 	SessionLimit int    `json:"session_limit,omitempty"`
 	IsActive     *bool  `json:"is_active,omitempty"`
+}
+
+// APIKeyResponse represents API key generation response
+type APIKeyResponse struct {
+	Success bool   `json:"success"`
+	Message string `json:"message"`
+	APIKey  string `json:"api_key"`
+}
+
+// APIKeyInfo represents API key information (without the actual key)
+type APIKeyInfo struct {
+	HasKey    bool      `json:"has_key"`
+	CreatedAt time.Time `json:"created_at,omitempty"`
+	LastUsed  *time.Time `json:"last_used,omitempty"`
 }

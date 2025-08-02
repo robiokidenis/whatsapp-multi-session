@@ -9,6 +9,7 @@ import (
 
 	"whatsapp-multi-session/internal/models"
 	"whatsapp-multi-session/internal/repository"
+	"whatsapp-multi-session/internal/utils"
 	"whatsapp-multi-session/pkg/logger"
 )
 
@@ -345,4 +346,100 @@ func (s *UserService) generateJWT(user *models.User) (string, error) {
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 	return token.SignedString([]byte(s.jwtSecret))
+}
+
+// GenerateAPIKey generates a new API key for a user
+func (s *UserService) GenerateAPIKey(userID int) (*models.APIKeyResponse, error) {
+	// Check if user exists
+	user, err := s.userRepo.GetByID(userID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get user: %v", err)
+	}
+	if user == nil {
+		return nil, fmt.Errorf("user not found")
+	}
+
+	// Generate new API key
+	apiKey, err := s.generateAPIKey()
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate API key: %v", err)
+	}
+
+	// Update user with new API key
+	if err := s.userRepo.UpdateAPIKey(userID, apiKey); err != nil {
+		return nil, fmt.Errorf("failed to save API key: %v", err)
+	}
+
+	s.logger.Info("Generated new API key for user %s (ID: %d)", user.Username, userID)
+
+	return &models.APIKeyResponse{
+		Success: true,
+		Message: "API key generated successfully",
+		APIKey:  apiKey,
+	}, nil
+}
+
+// RevokeAPIKey revokes a user's API key
+func (s *UserService) RevokeAPIKey(userID int) error {
+	// Check if user exists
+	user, err := s.userRepo.GetByID(userID)
+	if err != nil {
+		return fmt.Errorf("failed to get user: %v", err)
+	}
+	if user == nil {
+		return fmt.Errorf("user not found")
+	}
+
+	// Remove API key
+	if err := s.userRepo.RemoveAPIKey(userID); err != nil {
+		return fmt.Errorf("failed to revoke API key: %v", err)
+	}
+
+	s.logger.Info("Revoked API key for user %s (ID: %d)", user.Username, userID)
+	return nil
+}
+
+// GetAPIKeyInfo returns information about a user's API key (without the key itself)
+func (s *UserService) GetAPIKeyInfo(userID int) (*models.APIKeyInfo, error) {
+	user, err := s.userRepo.GetByID(userID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get user: %v", err)
+	}
+	if user == nil {
+		return nil, fmt.Errorf("user not found")
+	}
+
+	return &models.APIKeyInfo{
+		HasKey:    user.APIKey != "",
+		CreatedAt: user.CreatedAt,
+		LastUsed:  user.UpdatedAt,
+	}, nil
+}
+
+// AuthenticateAPIKey authenticates a user by API key
+func (s *UserService) AuthenticateAPIKey(apiKey string) (*models.User, error) {
+	if apiKey == "" {
+		return nil, fmt.Errorf("API key is required")
+	}
+
+	user, err := s.userRepo.GetByAPIKey(apiKey)
+	if err != nil {
+		return nil, fmt.Errorf("failed to authenticate API key: %v", err)
+	}
+
+	if user == nil {
+		return nil, fmt.Errorf("invalid API key")
+	}
+
+	if !user.IsActive {
+		return nil, fmt.Errorf("account is disabled")
+	}
+
+	return user, nil
+}
+
+// generateAPIKey generates a secure API key
+func (s *UserService) generateAPIKey() (string, error) {
+	// Import the utils package
+	return utils.GenerateAPIKey()
 }

@@ -36,6 +36,12 @@
       "value": "",
       "type": "string",
       "description": "Authentication token (alias for jwt_token for convenience)"
+    },
+    {
+      "key": "api_key",
+      "value": "",
+      "type": "string",
+      "description": "API key for authentication (alternative to JWT token)"
     }
   ],
   "item": [
@@ -127,6 +133,123 @@
                 "api",
                 "auth",
                 "register"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Generate API Key",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": ""
+            },
+            "url": {
+              "raw": "{{base_url}}/api/auth/api-key",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "api-key"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "// Parse response JSON",
+                  "const response = pm.response.json();",
+                  "",
+                  "// Check if API key generation was successful",
+                  "if (response.success && response.data && response.data.api_key) {",
+                  "    // Set api_key variable",
+                  "    pm.collectionVariables.set('api_key', response.data.api_key);",
+                  "    ",
+                  "    console.log('✅ API key generated successfully!');",
+                  "    console.log('API Key:', response.data.api_key);",
+                  "} else {",
+                  "    console.log('❌ API key generation failed');",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "Get API Key Info",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/auth/api-key",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "api-key"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Revoke API Key",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/auth/api-key",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "api-key"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Change Password",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"old_password\": \"current_password\",\n  \"new_password\": \"new_password123\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/auth/change-password",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "change-password"
               ]
             }
           },
