@@ -697,6 +697,39 @@ func (h *SessionHandler) StopTyping(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(map[string]string{"message": "Typing indicator stopped"})
 }
 
+// SetPresence handles setting session presence status
+func (h *SessionHandler) SetPresence(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	sessionID := vars["sessionId"]
+
+	// Check user authentication and session ownership
+	if _, _, ok := h.getUserInfoAndCheckOwnership(w, r, sessionID); !ok {
+		return
+	}
+
+	var req struct {
+		Status string `json:"status"` // "available", "unavailable"
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	if req.Status == "" {
+		req.Status = "available" // Default to available
+	}
+
+	if err := h.whatsappService.SetPresence(sessionID, req.Status); err != nil {
+		h.logger.Error("Failed to set presence for session %s: %v", sessionID, err)
+		HandleError(w, err)
+		return
+	}
+
+	WriteSuccessResponse(w, "Presence updated successfully", map[string]string{
+		"status": req.Status,
+	})
+}
+
 // GetGroups handles getting groups for a session
 func (h *SessionHandler) GetGroups(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)

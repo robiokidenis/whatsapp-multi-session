@@ -222,6 +222,7 @@ func setupRoutes(
 	sessions.HandleFunc("/{sessionId}/check-number", sessionHandler.CheckNumber).Methods("POST")
 	sessions.HandleFunc("/{sessionId}/typing", sessionHandler.SendTyping).Methods("POST")
 	sessions.HandleFunc("/{sessionId}/stop-typing", sessionHandler.StopTyping).Methods("POST")
+	sessions.HandleFunc("/{sessionId}/presence", sessionHandler.SetPresence).Methods("POST")
 	sessions.HandleFunc("/{sessionId}/groups", sessionHandler.GetGroups).Methods("GET")
 	sessions.HandleFunc("/{sessionId}/conversations", sessionHandler.GetConversations).Methods("GET")
 

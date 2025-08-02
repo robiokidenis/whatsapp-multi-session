@@ -608,6 +608,15 @@ func (s *WhatsAppService) setupEventHandlers(session *models.Session) {
 				session.ActualPhone = session.Client.Store.ID.User + "@s.whatsapp.net"
 				s.logger.Info("Session %s actual phone: %s", session.ID, session.ActualPhone)
 
+				// Set online presence for better typing indicator support
+				go func() {
+					if err := session.Client.SendPresence(types.PresenceAvailable); err != nil {
+						s.logger.Warn("Failed to set online presence for session %s: %v", session.ID, err)
+					} else {
+						s.logger.Debug("Set online presence for session %s", session.ID)
+					}
+				}()
+
 				// Save updated metadata
 				go func() {
 					metadata := &models.SessionMetadata{
@@ -1376,12 +1385,63 @@ func (s *WhatsAppService) SendTyping(sessionID string, to string, typing bool) e
 		return fmt.Errorf("invalid recipient JID: %v", err)
 	}
 
+	// Ensure we're marked as online first (required for chat presence to work)
+	err = session.Client.SendPresence(types.PresenceAvailable)
+	if err != nil {
+		s.logger.Warn("Failed to set online presence: %v", err)
+		// Continue anyway, as this might still work
+	}
+
 	// Send typing indicator using chat presence
 	if typing {
-		return session.Client.SendChatPresence(jid, types.ChatPresenceComposing, types.ChatPresenceMediaText)
+		err = session.Client.SendChatPresence(jid, types.ChatPresenceComposing, types.ChatPresenceMediaText)
+		if err != nil {
+			return fmt.Errorf("failed to send typing indicator: %v", err)
+		}
+		s.logger.Debug("Sent typing indicator to %s", jid.String())
 	} else {
-		return session.Client.SendChatPresence(jid, types.ChatPresencePaused, types.ChatPresenceMediaText)
+		err = session.Client.SendChatPresence(jid, types.ChatPresencePaused, types.ChatPresenceMediaText)
+		if err != nil {
+			return fmt.Errorf("failed to stop typing indicator: %v", err)
+		}
+		s.logger.Debug("Stopped typing indicator to %s", jid.String())
 	}
+
+	return nil
+}
+
+// SetPresence sets the presence status for a session
+func (s *WhatsAppService) SetPresence(sessionID string, status string) error {
+	session, exists := s.GetSession(sessionID)
+	if !exists {
+		return models.NewNotFoundError("session not found")
+	}
+
+	if !session.Connected {
+		return models.NewServiceUnavailableError("session is not connected")
+	}
+
+	if !session.LoggedIn {
+		return models.NewUnauthorizedError("session is not authenticated")
+	}
+
+	var presence types.Presence
+	switch strings.ToLower(status) {
+	case "available", "online":
+		presence = types.PresenceAvailable
+	case "unavailable", "offline":
+		presence = types.PresenceUnavailable
+	default:
+		return fmt.Errorf("invalid presence status: %s (valid: available, unavailable)", status)
+	}
+
+	err := session.Client.SendPresence(presence)
+	if err != nil {
+		return fmt.Errorf("failed to set presence: %v", err)
+	}
+
+	s.logger.Info("Set presence to %s for session %s", status, sessionID)
+	return nil
 }
 
 // GetGroups returns all groups for a session

@@ -763,6 +763,35 @@
           "response": []
         },
         {
+          "name": "Set Presence",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"available\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/sessions/{{session_id}}/presence",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "sessions",
+                "{{session_id}}",
+                "presence"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
           "name": "Get Groups",
           "request": {
             "method": "GET",

@@ -123,6 +123,15 @@ Stop typing indicator
 }
 ```
 
+### POST /api/sessions/{sessionId}/presence
+Set session presence status (online/offline)
+```json
+{
+  "status": "available"
+}
+```
+Valid status values: `available`, `online`, `unavailable`, `offline`
+
 ### GET /api/sessions/{sessionId}/groups
 Get all groups for a session
 
