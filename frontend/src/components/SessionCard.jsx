@@ -137,6 +137,24 @@ const SessionCard = ({
               <WebhookOff className="w-3 h-3" title="No Webhook" />
             )}
           </div>
+
+          {/* Auto Reply Status */}
+          <div
+            className={`inline-flex items-center px-3 py-1.5 rounded-full text-xs font-medium border ${
+              session.auto_reply_text
+                ? "bg-indigo-50 text-indigo-700 border-indigo-200"
+                : "bg-gray-50 text-gray-600 border-gray-200"
+            }`}
+          >
+            <i
+              className={`fas ${
+                session.auto_reply_text ? "fa-reply" : "fa-reply-all"
+              } mr-2 text-xs ${
+                session.auto_reply_text ? "text-indigo-600" : "text-gray-400"
+              }`}
+            ></i>
+            {session.auto_reply_text ? "Auto Reply" : "No Auto Reply"}
+          </div>
         </div>
       </div>
 

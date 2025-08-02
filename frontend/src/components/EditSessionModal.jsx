@@ -5,6 +5,7 @@ const EditSessionModal = ({ isOpen, onClose, session, onUpdate }) => {
   const { token } = useAuth();
   const [name, setName] = useState('');
   const [webhookUrl, setWebhookUrl] = useState('');
+  const [autoReplyText, setAutoReplyText] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
@@ -13,6 +14,7 @@ const EditSessionModal = ({ isOpen, onClose, session, onUpdate }) => {
     if (session) {
       setName(session.name || '');
       setWebhookUrl(session.webhook_url || '');
+      setAutoReplyText(session.auto_reply_text || '');
       setError('');
       setSuccess('');
     }
@@ -68,13 +70,30 @@ const EditSessionModal = ({ isOpen, onClose, session, onUpdate }) => {
         throw new Error(`Failed to update webhook URL: ${webhookResponse.status} ${errorText}`);
       }
 
+      // Update auto reply text
+      console.log('Updating auto reply text for:', session.id, 'to:', autoReplyText.trim());
+      const autoReplyResponse = await fetch(`/api/sessions/${session.id}/auto-reply`, {
+        method: 'PUT',
+        headers,
+        body: JSON.stringify({ auto_reply_text: autoReplyText.trim() || null })
+      });
+
+      console.log('Auto reply update response status:', autoReplyResponse.status);
+      
+      if (!autoReplyResponse.ok) {
+        const errorText = await autoReplyResponse.text();
+        console.error('Auto reply update failed:', errorText);
+        throw new Error(`Failed to update auto reply text: ${autoReplyResponse.status} ${errorText}`);
+      }
+
       setSuccess('Session updated successfully!');
       
       // Update the session in parent component
       onUpdate({
         ...session,
         name: name.trim(),
-        webhook_url: webhookUrl.trim()
+        webhook_url: webhookUrl.trim(),
+        auto_reply_text: autoReplyText.trim() || null
       });
 
       // Close modal after a short delay
@@ -146,7 +165,7 @@ const EditSessionModal = ({ isOpen, onClose, session, onUpdate }) => {
           </div>
 
           {/* Webhook URL Input */}
-          <div className="mb-6">
+          <div className="mb-4">
             <label htmlFor="webhookUrl" className="block text-sm font-medium text-gray-700 mb-1">
               Webhook URL
             </label>
@@ -161,6 +180,25 @@ const EditSessionModal = ({ isOpen, onClose, session, onUpdate }) => {
             />
             <p className="text-xs text-gray-500 mt-1">
               Webhook URL will receive incoming WhatsApp messages for this session
+            </p>
+          </div>
+
+          {/* Auto Reply Text Input */}
+          <div className="mb-6">
+            <label htmlFor="autoReplyText" className="block text-sm font-medium text-gray-700 mb-1">
+              Auto Reply Message
+            </label>
+            <textarea
+              id="autoReplyText"
+              value={autoReplyText}
+              onChange={(e) => setAutoReplyText(e.target.value)}
+              placeholder="Enter auto reply message (optional)"
+              rows={3}
+              disabled={loading}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-green-500 focus:border-green-500 disabled:bg-gray-100 disabled:cursor-not-allowed resize-none"
+            />
+            <p className="text-xs text-gray-500 mt-1">
+              Automatically reply to incoming messages with this text
             </p>
           </div>
 

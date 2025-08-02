@@ -211,6 +211,7 @@ func setupRoutes(
 	// Session metadata updates
 	sessions.HandleFunc("/{sessionId}/webhook", sessionHandler.UpdateSessionWebhook).Methods("PUT")
 	sessions.HandleFunc("/{sessionId}/name", sessionHandler.UpdateSessionName).Methods("PUT")
+	sessions.HandleFunc("/{sessionId}/auto-reply", sessionHandler.UpdateSessionAutoReply).Methods("PUT")
 
 	// Message routes
 	sessions.HandleFunc("/{sessionId}/send", sessionHandler.SendMessage).Methods("POST")

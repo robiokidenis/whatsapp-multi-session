@@ -183,6 +183,7 @@ func (d *Database) createSessionsTable() error {
 			name VARCHAR(255),
 			position INT DEFAULT 0,
 			webhook_url TEXT,
+			auto_reply_text TEXT,
 			user_id INT NOT NULL DEFAULT 1,
 			created_at BIGINT NOT NULL,
 			INDEX idx_phone (phone),
@@ -199,6 +200,7 @@ func (d *Database) createSessionsTable() error {
 			name TEXT,
 			position INTEGER DEFAULT 0,
 			webhook_url TEXT,
+			auto_reply_text TEXT,
 			user_id INTEGER NOT NULL DEFAULT 1,
 			created_at INTEGER NOT NULL
 		)`

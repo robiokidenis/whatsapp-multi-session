@@ -145,14 +145,15 @@ func (h *SessionHandler) CreateSession(w http.ResponseWriter, r *http.Request) {
 
 	// Convert to response
 	response := &models.SessionResponse{
-		ID:          session.ID,
-		Phone:       session.Phone,
-		ActualPhone: session.ActualPhone,
-		Name:        session.Name,
-		Position:    session.Position,
-		WebhookURL:  session.WebhookURL,
-		Connected:   session.Connected,
-		LoggedIn:    session.LoggedIn,
+		ID:            session.ID,
+		Phone:         session.Phone,
+		ActualPhone:   session.ActualPhone,
+		Name:          session.Name,
+		Position:      session.Position,
+		WebhookURL:    session.WebhookURL,
+		AutoReplyText: session.AutoReplyText,
+		Connected:     session.Connected,
+		LoggedIn:      session.LoggedIn,
 	}
 
 	WriteSuccessResponse(w, "Session created successfully", response)
@@ -192,14 +193,15 @@ func (h *SessionHandler) GetSessions(w http.ResponseWriter, r *http.Request) {
 	responses := make([]*models.SessionResponse, len(sessions))
 	for i, session := range sessions {
 		responses[i] = &models.SessionResponse{
-			ID:          session.ID,
-			Phone:       session.Phone,
-			ActualPhone: session.ActualPhone,
-			Name:        session.Name,
-			Position:    session.Position,
-			WebhookURL:  session.WebhookURL,
-			Connected:   session.Connected,
-			LoggedIn:    session.LoggedIn,
+			ID:            session.ID,
+			Phone:         session.Phone,
+			ActualPhone:   session.ActualPhone,
+			Name:          session.Name,
+			Position:      session.Position,
+			WebhookURL:    session.WebhookURL,
+			AutoReplyText: session.AutoReplyText,
+			Connected:     session.Connected,
+			LoggedIn:      session.LoggedIn,
 		}
 	}
 
@@ -239,14 +241,15 @@ func (h *SessionHandler) GetSession(w http.ResponseWriter, r *http.Request) {
 	}
 
 	response := &models.SessionResponse{
-		ID:          session.ID,
-		Phone:       session.Phone,
-		ActualPhone: session.ActualPhone,
-		Name:        session.Name,
-		Position:    session.Position,
-		WebhookURL:  session.WebhookURL,
-		Connected:   session.Connected,
-		LoggedIn:    session.LoggedIn,
+		ID:            session.ID,
+		Phone:         session.Phone,
+		ActualPhone:   session.ActualPhone,
+		Name:          session.Name,
+		Position:      session.Position,
+		WebhookURL:    session.WebhookURL,
+		AutoReplyText: session.AutoReplyText,
+		Connected:     session.Connected,
+		LoggedIn:      session.LoggedIn,
 	}
 
 	WriteSuccessResponse(w, "Session retrieved successfully", response)
@@ -1067,6 +1070,38 @@ func (h *SessionHandler) UpdateSessionName(w http.ResponseWriter, r *http.Reques
 
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(map[string]string{"message": "Session name updated successfully"})
+}
+
+// UpdateSessionAutoReply updates the auto reply text for a session
+func (h *SessionHandler) UpdateSessionAutoReply(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	sessionID := vars["sessionId"]
+
+	// Check user authentication and session ownership
+	if _, _, ok := h.getUserInfoAndCheckOwnership(w, r, sessionID); !ok {
+		return
+	}
+
+	var req struct {
+		AutoReplyText *string `json:"auto_reply_text"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	updateReq := &models.UpdateSessionRequest{
+		AutoReplyText: req.AutoReplyText,
+	}
+
+	if err := h.whatsappService.UpdateSession(sessionID, updateReq); err != nil {
+		h.logger.Error("Failed to update session auto reply %s: %v", sessionID, err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]string{"message": "Session auto reply updated successfully"})
 }
 
 // generateSessionID generates a random 10-digit session ID

@@ -265,15 +265,16 @@ func (s *WhatsAppService) CreateSession(req *models.CreateSessionRequest, userID
 
 	// Create session
 	session := &models.Session{
-		ID:         sessionID,
-		Phone:      phoneForDisplay,
-		Name:       req.Name,
-		Position:   req.Position,
-		WebhookURL: req.WebhookURL,
-		Client:     client,
-		Connected:  false,
-		LoggedIn:   false,
-		Connecting: false,
+		ID:            sessionID,
+		Phone:         phoneForDisplay,
+		Name:          req.Name,
+		Position:      req.Position,
+		WebhookURL:    req.WebhookURL,
+		AutoReplyText: req.AutoReplyText,
+		Client:        client,
+		Connected:     false,
+		LoggedIn:      false,
+		Connecting:    false,
 	}
 
 	// Set up event handlers
@@ -284,13 +285,14 @@ func (s *WhatsAppService) CreateSession(req *models.CreateSessionRequest, userID
 
 	// Save to database
 	metadata := &models.SessionMetadata{
-		ID:         sessionID,
-		Phone:      phoneForDisplay,
-		Name:       req.Name,
-		Position:   req.Position,
-		WebhookURL: req.WebhookURL,
-		UserID:     userID,
-		CreatedAt:  time.Now(),
+		ID:            sessionID,
+		Phone:         phoneForDisplay,
+		Name:          req.Name,
+		Position:      req.Position,
+		WebhookURL:    req.WebhookURL,
+		AutoReplyText: req.AutoReplyText,
+		UserID:        userID,
+		CreatedAt:     time.Now(),
 	}
 
 	if err := s.sessionRepo.Create(metadata); err != nil {
@@ -574,15 +576,19 @@ func (s *WhatsAppService) UpdateSession(sessionID string, req *models.UpdateSess
 	if req.WebhookURL != "" {
 		session.WebhookURL = req.WebhookURL
 	}
+	if req.AutoReplyText != nil {
+		session.AutoReplyText = req.AutoReplyText
+	}
 
 	// Update in database
 	metadata := &models.SessionMetadata{
-		ID:          sessionID,
-		Phone:       session.Phone,
-		ActualPhone: session.ActualPhone,
-		Name:        session.Name,
-		Position:    req.Position,
-		WebhookURL:  session.WebhookURL,
+		ID:            sessionID,
+		Phone:         session.Phone,
+		ActualPhone:   session.ActualPhone,
+		Name:          session.Name,
+		Position:      req.Position,
+		WebhookURL:    session.WebhookURL,
+		AutoReplyText: session.AutoReplyText,
 	}
 
 	return s.sessionRepo.Update(metadata)
@@ -605,12 +611,13 @@ func (s *WhatsAppService) setupEventHandlers(session *models.Session) {
 				// Save updated metadata
 				go func() {
 					metadata := &models.SessionMetadata{
-						ID:          session.ID,
-						Phone:       session.Phone,
-						ActualPhone: session.ActualPhone,
-						Name:        session.Name,
-						Position:    session.Position,
-						WebhookURL:  session.WebhookURL,
+						ID:            session.ID,
+						Phone:         session.Phone,
+						ActualPhone:   session.ActualPhone,
+						Name:          session.Name,
+						Position:      session.Position,
+						WebhookURL:    session.WebhookURL,
+						AutoReplyText: session.AutoReplyText,
 					}
 					if err := s.sessionRepo.Update(metadata); err != nil {
 						s.logger.Error("Failed to update session metadata: %v", err)
@@ -639,12 +646,13 @@ func (s *WhatsAppService) setupEventHandlers(session *models.Session) {
 			// Update database to clear actual phone
 			go func() {
 				metadata := &models.SessionMetadata{
-					ID:          session.ID,
-					Phone:       session.Phone,
-					ActualPhone: "",
-					Name:        session.Name,
-					Position:    session.Position,
-					WebhookURL:  session.WebhookURL,
+					ID:            session.ID,
+					Phone:         session.Phone,
+					ActualPhone:   "",
+					Name:          session.Name,
+					Position:      session.Position,
+					WebhookURL:    session.WebhookURL,
+					AutoReplyText: session.AutoReplyText,
 				}
 				if err := s.sessionRepo.Update(metadata); err != nil {
 					s.logger.Error("Failed to update session metadata after logout: %v", err)
@@ -655,6 +663,11 @@ func (s *WhatsAppService) setupEventHandlers(session *models.Session) {
 			// Handle incoming messages
 			if handler, exists := s.eventHandlers[session.ID]; exists {
 				handler(v)
+			}
+
+			// Send auto reply if configured and this is an incoming message
+			if session.AutoReplyText != nil && *session.AutoReplyText != "" && !v.Info.IsFromMe {
+				go s.sendAutoReply(session, v)
 			}
 
 			// Send webhook if configured
@@ -723,16 +736,17 @@ func (s *WhatsAppService) loadExistingSessions() error {
 
 		// Create session
 		session := &models.Session{
-			ID:          metadata.ID,
-			Phone:       metadata.Phone,
-			ActualPhone: metadata.ActualPhone,
-			Name:        metadata.Name,
-			Position:    metadata.Position,
-			WebhookURL:  metadata.WebhookURL,
-			Client:      client,
-			Connected:   false,
-			LoggedIn:    false,
-			Connecting:  false,
+			ID:            metadata.ID,
+			Phone:         metadata.Phone,
+			ActualPhone:   metadata.ActualPhone,
+			Name:          metadata.Name,
+			Position:      metadata.Position,
+			WebhookURL:    metadata.WebhookURL,
+			AutoReplyText: metadata.AutoReplyText,
+			Client:        client,
+			Connected:     false,
+			LoggedIn:      false,
+			Connecting:    false,
 		}
 
 		// Set up event handlers
@@ -1480,6 +1494,33 @@ func (s *WhatsAppService) sendWebhook(session *models.Session, evt *events.Messa
 			break
 		}
 	}
+}
+
+// sendAutoReply sends an automatic reply to incoming messages
+func (s *WhatsAppService) sendAutoReply(session *models.Session, evt *events.Message) {
+	// Don't reply to group messages or if no auto reply text is set
+	if evt.Info.IsGroup || session.AutoReplyText == nil || *session.AutoReplyText == "" {
+		return
+	}
+
+	// Don't reply to messages that are already replies or system messages
+	if evt.Message.GetExtendedTextMessage() != nil && evt.Message.GetExtendedTextMessage().GetContextInfo() != nil {
+		return // Don't reply to replies
+	}
+
+	// Create the reply message
+	replyMsg := &waProto.Message{
+		Conversation: proto.String(*session.AutoReplyText),
+	}
+
+	// Send the auto reply
+	_, err := session.Client.SendMessage(context.Background(), evt.Info.Sender, replyMsg)
+	if err != nil {
+		s.logger.Error("Failed to send auto reply for session %s: %v", session.ID, err)
+		return
+	}
+
+	s.logger.Info("Auto reply sent to %s in session %s", evt.Info.Sender.User, session.ID)
 }
 
 // sendWebhookHTTP sends the webhook message via HTTP POST

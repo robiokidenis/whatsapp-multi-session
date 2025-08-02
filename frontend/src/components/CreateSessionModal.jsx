@@ -4,7 +4,8 @@ import axios from 'axios';
 const CreateSessionModal = ({ isOpen, onClose, onSuccess }) => {
   const [formData, setFormData] = useState({
     phone: '',
-    name: ''
+    name: '',
+    autoReplyText: ''
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -18,10 +19,11 @@ const CreateSessionModal = ({ isOpen, onClose, onSuccess }) => {
       const response = await axios.post('/api/sessions', {
         phone: formData.phone || '',
         name: formData.name,
+        auto_reply_text: formData.autoReplyText || null,
       });
 
       if (response.data.success) {
-        setFormData({ phone: '', name: '' });
+        setFormData({ phone: '', name: '', autoReplyText: '' });
         onSuccess('Session created successfully!');
         onClose();
       } else {
@@ -42,7 +44,7 @@ const CreateSessionModal = ({ isOpen, onClose, onSuccess }) => {
   };
 
   const handleClose = () => {
-    setFormData({ phone: '', name: '' });
+    setFormData({ phone: '', name: '', autoReplyText: '' });
     setError('');
     onClose();
   };
@@ -107,6 +109,24 @@ const CreateSessionModal = ({ isOpen, onClose, onSuccess }) => {
               />
               <p className="text-xs text-gray-500 mt-1">
                 Helps identify this session
+              </p>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-900 mb-2">
+                <i className="fas fa-reply mr-2 text-blue-500"></i>
+                Auto Reply Message
+              </label>
+              <textarea
+                name="autoReplyText"
+                value={formData.autoReplyText}
+                onChange={handleChange}
+                placeholder="Enter auto reply message (optional)"
+                rows={3}
+                className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors resize-none"
+              />
+              <p className="text-xs text-gray-500 mt-1">
+                Automatically reply to incoming messages with this text
               </p>
             </div>
           </div>

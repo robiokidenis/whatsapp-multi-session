@@ -50,6 +50,7 @@ CREATE TABLE IF NOT EXISTS session_metadata (
     name VARCHAR(255),
     position INT DEFAULT 0,
     webhook_url TEXT,
+    auto_reply_text TEXT,
     user_id INT NOT NULL,
     created_at BIGINT NOT NULL,
     

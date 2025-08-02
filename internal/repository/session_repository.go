@@ -21,8 +21,8 @@ func NewSessionRepository(db *sql.DB) *SessionRepository {
 // Create creates a new session
 func (r *SessionRepository) Create(session *models.SessionMetadata) error {
 	query := `
-		INSERT INTO session_metadata (id, phone, actual_phone, name, position, webhook_url, user_id, created_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+		INSERT INTO session_metadata (id, phone, actual_phone, name, position, webhook_url, auto_reply_text, user_id, created_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`
 	
 	_, err := r.db.Exec(query,
@@ -32,6 +32,7 @@ func (r *SessionRepository) Create(session *models.SessionMetadata) error {
 		session.Name,
 		session.Position,
 		session.WebhookURL,
+		session.AutoReplyText,
 		session.UserID,
 		session.CreatedAt.Unix(),
 	)
@@ -47,7 +48,7 @@ func (r *SessionRepository) Create(session *models.SessionMetadata) error {
 func (r *SessionRepository) GetByID(id string) (*models.SessionMetadata, error) {
 	session := &models.SessionMetadata{}
 	query := `
-		SELECT id, phone, actual_phone, name, position, webhook_url, user_id, created_at
+		SELECT id, phone, actual_phone, name, position, webhook_url, auto_reply_text, user_id, created_at
 		FROM session_metadata
 		WHERE id = ?
 	`
@@ -60,6 +61,7 @@ func (r *SessionRepository) GetByID(id string) (*models.SessionMetadata, error) 
 		&session.Name,
 		&session.Position,
 		&session.WebhookURL,
+		&session.AutoReplyText,
 		&session.UserID,
 		&createdAtUnix,
 	)
@@ -79,7 +81,7 @@ func (r *SessionRepository) GetByID(id string) (*models.SessionMetadata, error) 
 // GetAll retrieves all sessions
 func (r *SessionRepository) GetAll() ([]*models.SessionMetadata, error) {
 	query := `
-		SELECT id, phone, actual_phone, name, position, webhook_url, user_id, created_at
+		SELECT id, phone, actual_phone, name, position, webhook_url, auto_reply_text, user_id, created_at
 		FROM session_metadata
 		ORDER BY position ASC, created_at DESC
 	`
@@ -102,6 +104,7 @@ func (r *SessionRepository) GetAll() ([]*models.SessionMetadata, error) {
 			&session.Name,
 			&session.Position,
 			&session.WebhookURL,
+			&session.AutoReplyText,
 			&session.UserID,
 			&createdAtUnix,
 		)
@@ -126,7 +129,7 @@ func (r *SessionRepository) GetAll() ([]*models.SessionMetadata, error) {
 func (r *SessionRepository) Update(session *models.SessionMetadata) error {
 	query := `
 		UPDATE session_metadata
-		SET phone = ?, actual_phone = ?, name = ?, position = ?, webhook_url = ?
+		SET phone = ?, actual_phone = ?, name = ?, position = ?, webhook_url = ?, auto_reply_text = ?
 		WHERE id = ? AND user_id = ?
 	`
 	
@@ -136,6 +139,7 @@ func (r *SessionRepository) Update(session *models.SessionMetadata) error {
 		session.Name,
 		session.Position,
 		session.WebhookURL,
+		session.AutoReplyText,
 		session.ID,
 		session.UserID,
 	)
@@ -166,6 +170,18 @@ func (r *SessionRepository) UpdateWebhook(id, webhookURL string) error {
 	_, err := r.db.Exec(query, webhookURL, id)
 	if err != nil {
 		return fmt.Errorf("failed to update webhook: %v", err)
+	}
+	
+	return nil
+}
+
+// UpdateAutoReplyText updates the auto reply text
+func (r *SessionRepository) UpdateAutoReplyText(id string, autoReplyText *string) error {
+	query := `UPDATE session_metadata SET auto_reply_text = ? WHERE id = ?`
+	
+	_, err := r.db.Exec(query, autoReplyText, id)
+	if err != nil {
+		return fmt.Errorf("failed to update auto reply text: %v", err)
 	}
 	
 	return nil
@@ -216,7 +232,7 @@ func (r *SessionRepository) GetNextPosition() (int, error) {
 // GetByUserID retrieves all sessions for a specific user
 func (r *SessionRepository) GetByUserID(userID int) ([]*models.SessionMetadata, error) {
 	query := `
-		SELECT id, phone, actual_phone, name, position, webhook_url, user_id, created_at
+		SELECT id, phone, actual_phone, name, position, webhook_url, auto_reply_text, user_id, created_at
 		FROM session_metadata
 		WHERE user_id = ?
 		ORDER BY position ASC, created_at DESC
@@ -240,6 +256,7 @@ func (r *SessionRepository) GetByUserID(userID int) ([]*models.SessionMetadata, 
 			&session.Name,
 			&session.Position,
 			&session.WebhookURL,
+			&session.AutoReplyText,
 			&session.UserID,
 			&createdAtUnix,
 		)
@@ -259,7 +276,7 @@ func (r *SessionRepository) GetByUserID(userID int) ([]*models.SessionMetadata, 
 func (r *SessionRepository) GetByIDAndUserID(id string, userID int) (*models.SessionMetadata, error) {
 	session := &models.SessionMetadata{}
 	query := `
-		SELECT id, phone, actual_phone, name, position, webhook_url, user_id, created_at
+		SELECT id, phone, actual_phone, name, position, webhook_url, auto_reply_text, user_id, created_at
 		FROM session_metadata
 		WHERE id = ? AND user_id = ?
 	`
@@ -272,6 +289,7 @@ func (r *SessionRepository) GetByIDAndUserID(id string, userID int) (*models.Ses
 		&session.Name,
 		&session.Position,
 		&session.WebhookURL,
+		&session.AutoReplyText,
 		&session.UserID,
 		&createdAtUnix,
 	)
