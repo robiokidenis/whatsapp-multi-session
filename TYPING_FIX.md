@@ -1,34 +1,41 @@
 # Typing Indicator Fix Documentation
 
 ## Issue
-The typing indicator functionality was not working properly due to missing online presence setup.
+The typing indicator functionality was not working properly due to missing push name and presence setup.
 
 ## Root Cause Analysis
-Based on WhatsApp's protocol and whatsmeow documentation:
-1. **Presence requirement**: Typing indicators only work when the user is marked as "online" 
-2. **Protocol behavior**: WhatsApp requires `SendPresence(types.PresenceAvailable)` before chat presence indicators work
-3. **Missing setup**: The original implementation was calling `SendChatPresence` without setting overall presence first
+Based on WhatsApp's protocol and whatsmeow documentation, typing indicators require:
+1. **Push name requirement**: `Store.PushName` must be set before presence works
+2. **Presence requirement**: Overall presence must be set to "available" before chat presence works
+3. **Proper sequence**: Push name → Send presence → Send chat presence
+4. **Missing setup**: The original implementation was missing the critical push name setup
 
 ## Fixes Applied
 
-### 1. **Automatic Online Presence on Login** ✅
-- Added automatic `SendPresence(types.PresenceAvailable)` when a session successfully logs in
+### 1. **Automatic Push Name and Presence Setup on Login** ✅
+- Added automatic push name setting: `session.Client.Store.PushName = pushName`
+- Added automatic `SendPresence(types.PresenceAvailable)` after push name is set
 - This happens in the `*events.Connected` handler in `setupEventHandlers()`
 - Ensures typing indicators will work immediately after login
 
-**Location**: `internal/services/whatsapp_service.go:611-618`
+**Location**: `internal/services/whatsapp_service.go:611-629`
 
 ### 2. **Enhanced SendTyping Method** ✅  
-- Added presence check and automatic online setting in `SendTyping()`
+- Added push name validation and automatic setting in `SendTyping()`
+- Added presence check and automatic online setting
+- Added JID validation to ensure session is properly logged in
 - Improved error handling and logging
-- Added debug logging for troubleshooting
+- Added presence subscription for better reliability
 
-**Changes**:
-- Calls `SendPresence(types.PresenceAvailable)` before sending typing indicators
+**Critical Changes**:
+- Validates session has proper JID: `ownJID := session.Client.Store.ID`
+- Sets push name if missing: `session.Client.Store.PushName = pushName`
+- Calls `SendPresence(types.PresenceAvailable)` before chat presence
+- Subscribes to presence updates: `session.Client.SubscribePresence(jid)`
 - Better error messages with context
 - Proper logging for debugging
 
-**Location**: `internal/services/whatsapp_service.go:1358-1411`
+**Location**: `internal/services/whatsapp_service.go:1378-1451`
 
 ### 3. **New Manual Presence Control** ✅
 - Added new `SetPresence()` endpoint for manual control

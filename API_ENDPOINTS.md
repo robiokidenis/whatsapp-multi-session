@@ -34,7 +34,7 @@ Get all sessions
 Create a new session
 ```json
 {
-  "name": "My Session",
+  "name": "Alex Johnson",
   "phone": "628123456789",
   "webhook_url": "https://example.com/webhook"
 }

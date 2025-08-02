@@ -608,8 +608,20 @@ func (s *WhatsAppService) setupEventHandlers(session *models.Session) {
 				session.ActualPhone = session.Client.Store.ID.User + "@s.whatsapp.net"
 				s.logger.Info("Session %s actual phone: %s", session.ID, session.ActualPhone)
 
-				// Set online presence for better typing indicator support
+				// Set push name and online presence for better typing indicator support
 				go func() {
+					// Set push name first (critical requirement for presence to work)
+					pushName := session.Name
+					if pushName == "" {
+						// Generate a realistic random name to appear like a real user
+						pushName = s.generateRandomName()
+					}
+					session.Client.Store.PushName = pushName
+					s.logger.Debug("Set push name '%s' for session %s", pushName, session.ID)
+					
+					// Small delay to ensure push name is processed
+					time.Sleep(100 * time.Millisecond)
+					
 					if err := session.Client.SendPresence(types.PresenceAvailable); err != nil {
 						s.logger.Warn("Failed to set online presence for session %s: %v", session.ID, err)
 					} else {
@@ -1379,10 +1391,30 @@ func (s *WhatsAppService) SendTyping(sessionID string, to string, typing bool) e
 		return models.NewUnauthorizedError("session is not authenticated")
 	}
 
+	// Ensure we have a valid logged-in session with JID
+	ownJID := session.Client.Store.ID
+	if ownJID == nil {
+		return fmt.Errorf("session not properly logged in - no JID available")
+	}
+
 	// Parse recipient JID
 	jid, err := types.ParseJID(to)
 	if err != nil {
 		return fmt.Errorf("invalid recipient JID: %v", err)
+	}
+
+	// Ensure push name is set (critical requirement for presence to work)
+	if session.Client.Store.PushName == "" {
+		pushName := session.Name
+		if pushName == "" {
+			// Generate a realistic random name to appear like a real user
+			pushName = s.generateRandomName()
+		}
+		session.Client.Store.PushName = pushName
+		s.logger.Debug("Set push name '%s' for typing indicator", pushName)
+		
+		// Small delay to ensure push name is processed
+		time.Sleep(100 * time.Millisecond)
 	}
 
 	// Ensure we're marked as online first (required for chat presence to work)
@@ -1392,19 +1424,29 @@ func (s *WhatsAppService) SendTyping(sessionID string, to string, typing bool) e
 		// Continue anyway, as this might still work
 	}
 
+	// Small delay to ensure presence is processed
+	time.Sleep(50 * time.Millisecond)
+
+	// Subscribe to presence for better reliability (optional)
+	err = session.Client.SubscribePresence(jid)
+	if err != nil {
+		s.logger.Debug("Failed to subscribe to presence for %s: %v", jid.String(), err)
+		// Continue anyway, this is optional
+	}
+
 	// Send typing indicator using chat presence
 	if typing {
 		err = session.Client.SendChatPresence(jid, types.ChatPresenceComposing, types.ChatPresenceMediaText)
 		if err != nil {
 			return fmt.Errorf("failed to send typing indicator: %v", err)
 		}
-		s.logger.Debug("Sent typing indicator to %s", jid.String())
+		s.logger.Info("Sent typing indicator to %s from session %s", jid.String(), sessionID)
 	} else {
 		err = session.Client.SendChatPresence(jid, types.ChatPresencePaused, types.ChatPresenceMediaText)
 		if err != nil {
 			return fmt.Errorf("failed to stop typing indicator: %v", err)
 		}
-		s.logger.Debug("Stopped typing indicator to %s", jid.String())
+		s.logger.Info("Stopped typing indicator to %s from session %s", jid.String(), sessionID)
 	}
 
 	return nil
@@ -1779,4 +1821,24 @@ func (s *WhatsAppService) getContactName(contact types.ContactInfo) string {
 		return contact.PushName
 	}
 	return "Unknown"
+}
+
+// generateRandomName generates a realistic random name for push name
+func (s *WhatsAppService) generateRandomName() string {
+	firstNames := []string{
+		"Alex", "Sam", "Jordan", "Taylor", "Casey", "Morgan", "Jamie", "Riley",
+		"Avery", "Peyton", "Quinn", "Sage", "Rowan", "Emery", "Hayden", "Finley",
+		"Cameron", "Drew", "Blake", "Reese", "Parker", "River", "Skylar", "Lane",
+		"Kendall", "Harley", "Phoenix", "Dakota", "Charlie", "Frankie", "Kai",
+		"Robin", "Eden", "Jules", "Ari", "Reign", "Remy", "Briar", "Sage",
+	}
+	
+	// Use crypto/rand for better randomization
+	n, err := rand.Int(rand.Reader, big.NewInt(int64(len(firstNames))))
+	if err != nil {
+		// Fallback to timestamp-based selection
+		return firstNames[time.Now().Unix()%int64(len(firstNames))]
+	}
+	
+	return firstNames[n.Int64()]
 }

@@ -730,6 +730,7 @@ func (h *SessionHandler) SetPresence(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+
 // GetGroups handles getting groups for a session
 func (h *SessionHandler) GetGroups(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
