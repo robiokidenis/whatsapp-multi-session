@@ -1,16 +1,16 @@
 {
   "info": {
     "name": "WhatsApp Multi-Session API",
-    "description": "Complete API collection for WhatsApp Multi-Session Manager with CRM features",
+    "description": "Complete API collection for WhatsApp Multi-Session Manager with CRM features. Includes automatic token management - just run the Login request and all subsequent requests will be authenticated automatically.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
-    "version": "2.0.0"
+    "version": "2.1.0"
   },
   "auth": {
     "type": "bearer",
     "bearer": [
       {
         "key": "token",
-        "value": "{{jwt_token}}",
+        "value": "{{auth_token}}",
         "type": "string"
       }
     ]
@@ -30,6 +30,12 @@
       "key": "session_id",
       "value": "default",
       "type": "string"
+    },
+    {
+      "key": "auth_token",
+      "value": "",
+      "type": "string",
+      "description": "Authentication token (alias for jwt_token for convenience)"
     }
   ],
   "item": [
@@ -62,6 +68,30 @@
               ]
             }
           },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "// Parse response JSON",
+                  "const response = pm.response.json();",
+                  "",
+                  "// Check if login was successful",
+                  "if (response.success && response.data && response.data.token) {",
+                  "    // Set both auth_token and jwt_token variables",
+                  "    pm.collectionVariables.set('auth_token', response.data.token);",
+                  "    pm.collectionVariables.set('jwt_token', response.data.token);",
+                  "    ",
+                  "    console.log('✅ Login successful! Auth token has been automatically set.');",
+                  "    console.log('Token:', response.data.token);",
+                  "} else {",
+                  "    console.log('❌ Login failed or no token received');",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
           "response": []
         },
         {
@@ -747,6 +777,26 @@
                 "sessions",
                 "{{session_id}}",
                 "groups"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Conversations",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/sessions/{{session_id}}/conversations",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "sessions",
+                "{{session_id}}",
+                "conversations"
               ]
             }
           },

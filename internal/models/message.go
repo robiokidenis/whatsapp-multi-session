@@ -69,3 +69,18 @@ type ContactInfo struct {
 	PushName    string `json:"push_name,omitempty"`
 	Verified    bool   `json:"verified"`
 }
+
+// Conversation represents a chat/conversation in WhatsApp
+type Conversation struct {
+	JID           string     `json:"jid"`
+	Name          string     `json:"name"`
+	IsGroup       bool       `json:"is_group"`
+	LastMessageID string     `json:"last_message_id,omitempty"`
+	LastMessage   string     `json:"last_message,omitempty"`
+	LastMessageTime *time.Time `json:"last_message_time,omitempty"`
+	UnreadCount   int        `json:"unread_count"`
+	IsPinned      bool       `json:"is_pinned"`
+	IsMuted       bool       `json:"is_muted"`
+	IsArchived    bool       `json:"is_archived"`
+	Avatar        string     `json:"avatar,omitempty"`
+}

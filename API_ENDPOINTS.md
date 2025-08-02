@@ -126,6 +126,47 @@ Stop typing indicator
 ### GET /api/sessions/{sessionId}/groups
 Get all groups for a session
 
+### GET /api/sessions/{sessionId}/conversations
+Get all conversations/chats for a session (contacts and groups)
+Response:
+```json
+{
+  "success": true,
+  "message": "Conversations retrieved successfully",
+  "data": {
+    "conversations": [
+      {
+        "jid": "628123456789@s.whatsapp.net",
+        "name": "John Doe",
+        "is_group": false,
+        "last_message_id": "",
+        "last_message": "",
+        "last_message_time": null,
+        "unread_count": 0,
+        "is_pinned": false,
+        "is_muted": false,
+        "is_archived": false,
+        "avatar": ""
+      },
+      {
+        "jid": "123456789-1234567890@g.us",
+        "name": "Group Chat",
+        "is_group": true,
+        "last_message_id": "",
+        "last_message": "",
+        "last_message_time": null,
+        "unread_count": 0,
+        "is_pinned": false,
+        "is_muted": false,
+        "is_archived": false,
+        "avatar": ""
+      }
+    ],
+    "count": 2
+  }
+}
+```
+
 ## Admin User Management (Admin Role Required)
 
 ### POST /api/auth/register

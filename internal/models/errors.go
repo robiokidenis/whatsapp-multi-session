@@ -57,3 +57,9 @@ func NewBadRequestError(format string, args ...interface{}) error {
 func NewServiceUnavailableError(format string, args ...interface{}) error {
 	return ServiceUnavailableError{Message: fmt.Sprintf(format, args...)}
 }
+
+// Common errors
+var (
+	ErrSessionNotFound         = NewNotFoundError("session not found")
+	ErrSessionNotAuthenticated = NewUnauthorizedError("session not authenticated")
+)

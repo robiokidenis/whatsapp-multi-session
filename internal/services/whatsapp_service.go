@@ -1637,3 +1637,86 @@ func (s *WhatsAppService) Close() error {
 
 	return nil
 }
+
+// GetConversations retrieves all conversations/chats for a session
+func (s *WhatsAppService) GetConversations(sessionID string) ([]*models.Conversation, error) {
+	s.mu.RLock()
+	session, exists := s.sessions[sessionID]
+	s.mu.RUnlock()
+
+	if !exists {
+		return nil, models.ErrSessionNotFound
+	}
+
+	if !session.Connected || !session.LoggedIn {
+		return nil, models.ErrSessionNotAuthenticated
+	}
+
+	// Get all contacts from the store
+	contacts, err := session.Client.Store.Contacts.GetAllContacts(context.Background())
+	if err != nil {
+		return nil, fmt.Errorf("failed to get contacts: %v", err)
+	}
+
+	// Get joined groups
+	groups, err := session.Client.GetJoinedGroups()
+	if err != nil {
+		s.logger.Warn("Failed to get groups: %v", err)
+		// Continue without groups
+		groups = []*types.GroupInfo{}
+	}
+
+	// Create conversations list
+	conversations := make([]*models.Conversation, 0, len(contacts)+len(groups))
+
+	// Add individual chats
+	for jid, contact := range contacts {
+		if jid.Server != types.DefaultUserServer {
+			continue // Skip non-user contacts
+		}
+
+		conversation := &models.Conversation{
+			JID:     jid.String(),
+			Name:    s.getContactName(contact),
+			IsGroup: false,
+			// Note: WhatsApp doesn't provide unread count, last message, etc. via these APIs
+			// These would need to be tracked by listening to events or using history sync
+			UnreadCount: 0,
+			IsPinned:    false,
+			IsMuted:     false,
+			IsArchived:  false,
+		}
+		conversations = append(conversations, conversation)
+	}
+
+	// Add group chats
+	for _, group := range groups {
+		conversation := &models.Conversation{
+			JID:         group.JID.String(),
+			Name:        group.Name,
+			IsGroup:     true,
+			UnreadCount: 0,
+			IsPinned:    false,
+			IsMuted:     false,
+			IsArchived:  false,
+		}
+		conversations = append(conversations, conversation)
+	}
+
+	return conversations, nil
+}
+
+// getContactName returns the best available name for a contact
+func (s *WhatsAppService) getContactName(contact types.ContactInfo) string {
+	// Priority: FullName > BusinessName > PushName > "Unknown"
+	if contact.FullName != "" {
+		return contact.FullName
+	}
+	if contact.BusinessName != "" {
+		return contact.BusinessName
+	}
+	if contact.PushName != "" {
+		return contact.PushName
+	}
+	return "Unknown"
+}

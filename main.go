@@ -223,6 +223,7 @@ func setupRoutes(
 	sessions.HandleFunc("/{sessionId}/typing", sessionHandler.SendTyping).Methods("POST")
 	sessions.HandleFunc("/{sessionId}/stop-typing", sessionHandler.StopTyping).Methods("POST")
 	sessions.HandleFunc("/{sessionId}/groups", sessionHandler.GetGroups).Methods("GET")
+	sessions.HandleFunc("/{sessionId}/conversations", sessionHandler.GetConversations).Methods("GET")
 
 	// General send endpoint for compatibility with original API
 	protected.HandleFunc("/send", sessionHandler.SendMessageGeneral).Methods("POST")

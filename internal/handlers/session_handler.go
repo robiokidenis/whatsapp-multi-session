@@ -1104,6 +1104,30 @@ func (h *SessionHandler) UpdateSessionAutoReply(w http.ResponseWriter, r *http.R
 	json.NewEncoder(w).Encode(map[string]string{"message": "Session auto reply updated successfully"})
 }
 
+// GetConversations handles getting all conversations/chats for a session
+func (h *SessionHandler) GetConversations(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	sessionID := vars["sessionId"]
+
+	// Check user authentication and session ownership
+	if _, _, ok := h.getUserInfoAndCheckOwnership(w, r, sessionID); !ok {
+		return
+	}
+
+	// Get conversations from the WhatsApp service
+	conversations, err := h.whatsappService.GetConversations(sessionID)
+	if err != nil {
+		h.logger.Error("Failed to get conversations for session %s: %v", sessionID, err)
+		HandleError(w, err)
+		return
+	}
+
+	WriteSuccessResponse(w, "Conversations retrieved successfully", map[string]interface{}{
+		"conversations": conversations,
+		"count":         len(conversations),
+	})
+}
+
 // generateSessionID generates a random 10-digit session ID
 func generateSessionID() string {
 	// Generate a random number between 1000000000 and 9999999999 (10 digits)
