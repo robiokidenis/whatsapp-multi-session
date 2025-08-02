@@ -217,7 +217,7 @@ const MessageTemplatesModal = ({ isOpen, onClose }) => {
                           <div className="flex items-center gap-2 mb-1">
                             <h5 className="font-medium text-gray-900">{template.name}</h5>
                             <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
-                              template.type === 'text' ? 'bg-blue-100 text-blue-800' :
+                              template.type === 'text' ? 'bg-primary-100 text-primary-800' :
                               template.type === 'image' ? 'bg-green-100 text-green-800' :
                               'bg-purple-100 text-purple-800'
                             }`}>
@@ -245,7 +245,7 @@ const MessageTemplatesModal = ({ isOpen, onClose }) => {
                         <div className="flex items-center gap-1 ml-4">
                           <button
                             onClick={() => handlePreviewTemplate(template)}
-                            className="p-1 text-gray-400 hover:text-blue-600"
+                            className="p-1 text-gray-400 hover:text-primary-600"
                             title="Preview template"
                           >
                             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -489,7 +489,7 @@ const MessageTemplatesModal = ({ isOpen, onClose }) => {
                     <h5 className="font-medium text-gray-900 mb-2">{previewTemplate.name}</h5>
                     <div className="flex items-center gap-2 mb-4">
                       <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
-                        previewTemplate.type === 'text' ? 'bg-blue-100 text-blue-800' :
+                        previewTemplate.type === 'text' ? 'bg-primary-100 text-primary-800' :
                         previewTemplate.type === 'image' ? 'bg-green-100 text-green-800' :
                         'bg-purple-100 text-purple-800'
                       }`}>

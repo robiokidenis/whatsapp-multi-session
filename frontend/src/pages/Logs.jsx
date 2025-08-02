@@ -191,7 +191,7 @@ const LogsPage = () => {
   const getLevelColor = (level) => {
     switch (level?.toLowerCase()) {
       case 'debug': return 'text-gray-600';
-      case 'info': return 'text-blue-600';
+      case 'info': return 'text-primary-600';
       case 'warn': return 'text-yellow-600';
       case 'error': return 'text-red-600';
       default: return 'text-gray-800';
@@ -201,7 +201,7 @@ const LogsPage = () => {
   const getLevelBadge = (level) => {
     const colors = {
       debug: 'bg-gray-100 text-gray-800',
-      info: 'bg-blue-100 text-blue-800',
+      info: 'bg-primary-100 text-primary-800',
       warn: 'bg-yellow-100 text-yellow-800',
       error: 'bg-red-100 text-red-800'
     };
@@ -285,7 +285,7 @@ const LogsPage = () => {
         <div className="bg-white shadow rounded-lg">
           <div className="px-4 py-5 sm:p-6">
             <div className="text-center py-8">
-              <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600"></div>
+              <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600"></div>
               <p className="mt-2 text-sm text-gray-500">Loading logging status...</p>
             </div>
           </div>
@@ -306,7 +306,7 @@ const LogsPage = () => {
               <p className="text-sm text-gray-500 mt-1">{statusError}</p>
               <button
                 onClick={fetchLoggingStatus}
-                className="mt-4 bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded text-sm"
+                className="mt-4 bg-primary-500 hover:bg-primary-700 text-white font-bold py-2 px-4 rounded text-sm"
               >
                 Retry
               </button>
@@ -330,12 +330,12 @@ const LogsPage = () => {
                 Database logging is currently disabled in the application configuration. 
                 Logs are only being displayed in the console output.
               </p>
-              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6 max-w-lg mx-auto">
+              <div className="bg-primary-50 border border-primary-200 rounded-lg p-4 mb-6 max-w-lg mx-auto">
                 <div className="flex items-start">
-                  <div className="text-blue-500 mr-3 mt-1">ℹ️</div>
+                  <div className="text-primary-500 mr-3 mt-1">ℹ️</div>
                   <div className="text-left">
-                    <h4 className="text-sm font-medium text-blue-900 mb-1">Current Configuration:</h4>
-                    <ul className="text-sm text-blue-800 space-y-1">
+                    <h4 className="text-sm font-medium text-primary-900 mb-1">Current Configuration:</h4>
+                    <ul className="text-sm text-primary-800 space-y-1">
                       <li>• Console Logging: <strong>{loggingStatus.console_logging_enabled ? 'Enabled' : 'Disabled'}</strong></li>
                       <li>• Database Logging: <strong>Disabled</strong></li>
                       <li>• Log Level: <strong>{loggingStatus.log_level?.toUpperCase()}</strong></li>
@@ -371,7 +371,7 @@ const LogsPage = () => {
             <div className="flex space-x-2">
               <button
                 onClick={() => fetchLogs()}
-                className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded text-sm"
+                className="bg-primary-500 hover:bg-primary-700 text-white font-bold py-2 px-4 rounded text-sm"
               >
                 Refresh
               </button>
@@ -380,7 +380,7 @@ const LogsPage = () => {
                   type="checkbox"
                   checked={autoRefresh}
                   onChange={(e) => setAutoRefresh(e.target.checked)}
-                  className="rounded border-gray-300 text-blue-600 focus:border-blue-500 focus:ring-blue-500"
+                  className="rounded border-gray-300 text-primary-600 focus:border-primary-500 focus:ring-primary-500"
                   disabled={filters.page > 1 || !loggingStatus?.database_logging_enabled}
                 />
                 <span className={(filters.page > 1 || !loggingStatus?.database_logging_enabled) ? 'text-gray-400' : 'text-gray-700'}>
@@ -395,7 +395,7 @@ const LogsPage = () => {
             <select
               value={filters.level}
               onChange={(e) => handleFilterChange('level', e.target.value)}
-              className="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+              className="block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
             >
               <option value="">All Levels</option>
               {levels.map(level => (
@@ -406,7 +406,7 @@ const LogsPage = () => {
             <select
               value={filters.component}
               onChange={(e) => handleFilterChange('component', e.target.value)}
-              className="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+              className="block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
             >
               <option value="">All Components</option>
               {components.map(component => (
@@ -419,21 +419,21 @@ const LogsPage = () => {
               placeholder="Session ID"
               value={filters.session_id}
               onChange={(e) => handleFilterChange('session_id', e.target.value)}
-              className="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+              className="block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
             />
 
             <input
               type="datetime-local"
               value={filters.start_time ? new Date(filters.start_time * 1000).toISOString().slice(0, 16) : ''}
               onChange={(e) => handleFilterChange('start_time', e.target.value ? Math.floor(new Date(e.target.value).getTime() / 1000) : '')}
-              className="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+              className="block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
             />
 
             <input
               type="datetime-local"
               value={filters.end_time ? new Date(filters.end_time * 1000).toISOString().slice(0, 16) : ''}
               onChange={(e) => handleFilterChange('end_time', e.target.value ? Math.floor(new Date(e.target.value).getTime() / 1000) : '')}
-              className="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+              className="block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
             />
 
             <button
@@ -485,7 +485,7 @@ const LogsPage = () => {
             <div className="text-sm text-gray-600">
               Showing {logs.length} of {pagination.total} logs 
               {filters.page > 1 && (
-                <span className="ml-2 text-blue-600">
+                <span className="ml-2 text-primary-600">
                   (Page {filters.page} of {pagination.totalPages})
                 </span>
               )}
@@ -506,7 +506,7 @@ const LogsPage = () => {
           {/* Loading */}
           {loading && (
             <div className="text-center py-4">
-              <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600"></div>
+              <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600"></div>
             </div>
           )}
 
@@ -616,7 +616,7 @@ const LogsPage = () => {
                           onClick={() => handlePageChange(pageNum)}
                           className={`relative inline-flex items-center px-4 py-2 border text-sm font-medium ${
                             pageNum === pagination.page
-                              ? 'z-10 bg-indigo-50 border-indigo-500 text-indigo-600'
+                              ? 'z-10 bg-primary-50 border-primary-500 text-primary-600'
                               : 'bg-white border-gray-300 text-gray-500 hover:bg-gray-50'
                           }`}
                         >

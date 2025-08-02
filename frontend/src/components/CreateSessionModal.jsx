@@ -57,7 +57,7 @@ const CreateSessionModal = ({ isOpen, onClose, onSuccess }) => {
         {/* Modal Header */}
         <div className="flex items-center justify-between p-6 border-b border-gray-200">
           <div className="flex items-center">
-            <div className="flex items-center justify-center w-10 h-10 bg-blue-500 rounded-lg mr-3 shadow-sm">
+            <div className="flex items-center justify-center w-10 h-10 bg-primary-500 rounded-lg mr-3 shadow-sm">
               <i className="fas fa-plus text-white"></i>
             </div>
             <div>
@@ -78,7 +78,7 @@ const CreateSessionModal = ({ isOpen, onClose, onSuccess }) => {
           <div className="space-y-4">
             <div>
               <label className="block text-sm font-medium text-gray-900 mb-2">
-                <i className="fas fa-mobile-alt mr-2 text-blue-500"></i>
+                <i className="fas fa-mobile-alt mr-2 text-primary-500"></i>
                 Phone Number
               </label>
               <input
@@ -87,7 +87,7 @@ const CreateSessionModal = ({ isOpen, onClose, onSuccess }) => {
                 value={formData.phone}
                 onChange={handleChange}
                 placeholder="Enter phone number (optional)"
-                className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-colors"
               />
               <p className="text-xs text-gray-500 mt-1">
                 Auto-generated if left empty
@@ -96,7 +96,7 @@ const CreateSessionModal = ({ isOpen, onClose, onSuccess }) => {
             
             <div>
               <label className="block text-sm font-medium text-gray-900 mb-2">
-                <i className="fas fa-tag mr-2 text-blue-500"></i>
+                <i className="fas fa-tag mr-2 text-primary-500"></i>
                 Session Name
               </label>
               <input
@@ -105,7 +105,7 @@ const CreateSessionModal = ({ isOpen, onClose, onSuccess }) => {
                 value={formData.name}
                 onChange={handleChange}
                 placeholder="Enter session name (optional)"
-                className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-colors"
               />
               <p className="text-xs text-gray-500 mt-1">
                 Helps identify this session
@@ -114,7 +114,7 @@ const CreateSessionModal = ({ isOpen, onClose, onSuccess }) => {
 
             <div>
               <label className="block text-sm font-medium text-gray-900 mb-2">
-                <i className="fas fa-reply mr-2 text-blue-500"></i>
+                <i className="fas fa-reply mr-2 text-primary-500"></i>
                 Auto Reply Message
               </label>
               <textarea
@@ -123,7 +123,7 @@ const CreateSessionModal = ({ isOpen, onClose, onSuccess }) => {
                 onChange={handleChange}
                 placeholder="Enter auto reply message (optional)"
                 rows={3}
-                className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors resize-none"
+                className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-colors resize-none"
               />
               <p className="text-xs text-gray-500 mt-1">
                 Automatically reply to incoming messages with this text
@@ -152,7 +152,7 @@ const CreateSessionModal = ({ isOpen, onClose, onSuccess }) => {
             <button
               type="submit"
               disabled={loading}
-              className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg font-medium transition-colors flex items-center disabled:opacity-50"
+              className="bg-primary-500 hover:bg-primary-600 text-white px-4 py-2 rounded-lg font-medium transition-colors flex items-center disabled:opacity-50"
             >
               {loading ? (
                 <>

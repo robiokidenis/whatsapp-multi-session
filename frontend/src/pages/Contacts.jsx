@@ -221,7 +221,7 @@ const Contacts = () => {
         </div>
         <div className="bg-white rounded-lg shadow p-4">
           <div className="text-sm text-gray-500">In Groups</div>
-          <div className="text-2xl font-bold text-blue-600">{stats.withGroup}</div>
+          <div className="text-2xl font-bold text-primary-600">{stats.withGroup}</div>
         </div>
         <div className="bg-white rounded-lg shadow p-4">
           <div className="text-sm text-gray-500">Selected</div>

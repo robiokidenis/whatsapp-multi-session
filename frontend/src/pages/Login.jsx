@@ -74,25 +74,25 @@ const Login = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-emerald-50 via-teal-50 to-cyan-50 flex items-center justify-center p-4 relative overflow-hidden">
+    <div className="min-h-screen bg-gradient-to-br from-primary-50 via-primary-100 to-white flex items-center justify-center p-4 relative overflow-hidden">
       {/* Animated background elements */}
       <div className="absolute inset-0 overflow-hidden">
-        <div className="absolute -top-40 -right-40 w-60 h-60 bg-emerald-200 rounded-full mix-blend-multiply filter blur-xl opacity-70 animate-blob"></div>
-        <div className="absolute -bottom-40 -left-40 w-60 h-60 bg-teal-200 rounded-full mix-blend-multiply filter blur-xl opacity-70 animate-blob animation-delay-2000"></div>
-        <div className="absolute top-40 left-40 w-60 h-60 bg-cyan-200 rounded-full mix-blend-multiply filter blur-xl opacity-70 animate-blob animation-delay-4000"></div>
+        <div className="absolute -top-40 -right-40 w-60 h-60 bg-primary-200 rounded-full mix-blend-multiply filter blur-xl opacity-70 animate-blob"></div>
+        <div className="absolute -bottom-40 -left-40 w-60 h-60 bg-primary-300 rounded-full mix-blend-multiply filter blur-xl opacity-70 animate-blob animation-delay-2000"></div>
+        <div className="absolute top-40 left-40 w-60 h-60 bg-primary-200 rounded-full mix-blend-multiply filter blur-xl opacity-70 animate-blob animation-delay-4000"></div>
       </div>
       
       <div className={`w-full max-w-md mx-auto relative ${mounted ? 'animate-fadeIn' : 'opacity-0'}`}>
         <div className="bg-white/95 backdrop-blur-lg rounded-2xl shadow-2xl overflow-hidden border border-white/20">
           {/* Header with gradient */}
-          <div className="relative bg-gradient-to-r from-emerald-500 to-teal-600 text-white p-6 text-center">
+          <div className="relative bg-gradient-to-r from-primary-600 to-primary-700 text-white p-6 text-center">
             <div className="absolute inset-0 bg-black/10"></div>
             <div className="relative">
               <div className="inline-flex items-center justify-center w-16 h-16 bg-white/20 backdrop-blur-sm rounded-xl mb-3 animate-pulse">
                 <i className="fab fa-whatsapp text-3xl text-white"></i>
               </div>
               <h1 className="text-2xl font-bold mb-1 tracking-tight">WhatsApp Manager</h1>
-              <p className="text-emerald-100/90 font-medium text-sm">Multi-Session Platform</p>
+              <p className="text-primary-100/90 font-medium text-sm">Multi-Session Platform</p>
             </div>
           </div>
 
@@ -119,7 +119,7 @@ const Login = () => {
                     value={formData.username}
                     onChange={handleChange}
                     required
-                    className="w-full pl-10 pr-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all duration-200 bg-gray-50/50 hover:bg-white text-sm"
+                    className="w-full pl-10 pr-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-all duration-200 bg-gray-50/50 hover:bg-white text-sm"
                     placeholder="Enter your username"
                   />
                 </div>
@@ -140,7 +140,7 @@ const Login = () => {
                     value={formData.password}
                     onChange={handleChange}
                     required
-                    className="w-full pl-10 pr-12 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all duration-200 bg-gray-50/50 hover:bg-white text-sm"
+                    className="w-full pl-10 pr-12 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-all duration-200 bg-gray-50/50 hover:bg-white text-sm"
                     placeholder="Enter your password"
                   />
                   <button
@@ -160,11 +160,11 @@ const Login = () => {
                     type="checkbox"
                     checked={rememberMe}
                     onChange={(e) => setRememberMe(e.target.checked)}
-                    className="w-4 h-4 text-emerald-600 bg-gray-100 border-gray-300 rounded focus:ring-emerald-500 focus:ring-2"
+                    className="w-4 h-4 text-primary-600 bg-gray-100 border-gray-300 rounded focus:ring-primary-500 focus:ring-2"
                   />
                   <span className="ml-2 text-sm text-gray-700">Remember me</span>
                 </label>
-                <a href="#" className="text-sm text-emerald-600 hover:text-emerald-700 font-medium transition-colors">
+                <a href="#" className="text-sm text-primary-600 hover:text-primary-700 font-medium transition-colors">
                   Forgot password?
                 </a>
               </div>
@@ -173,9 +173,9 @@ const Login = () => {
               <button
                 type="submit"
                 disabled={loading || !formData.username || !formData.password}
-                className="w-full bg-gradient-to-r from-emerald-500 to-teal-600 text-white py-2.5 rounded-lg font-semibold text-sm
-                         hover:from-emerald-600 hover:to-teal-700 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 
-                         disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:from-emerald-500 disabled:hover:to-teal-600
+                className="w-full bg-gradient-to-r from-primary-600 to-primary-700 text-white py-2.5 rounded-lg font-semibold text-sm
+                         hover:from-primary-700 hover:to-primary-800 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 
+                         disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:from-primary-600 disabled:hover:to-primary-700
                          transform transition-all duration-200 hover:scale-[1.02] active:scale-[0.98]"
               >
                 {loading ? (
@@ -199,16 +199,16 @@ const Login = () => {
           {/* Footer */}
           <div className="bg-gradient-to-b from-gray-50 to-gray-100 px-6 py-4 text-center border-t border-gray-200">
             <div className="flex items-center justify-center text-gray-700 mb-1">
-              <i className="fas fa-shield-alt mr-2 text-emerald-600 text-sm"></i>
+              <i className="fas fa-shield-alt mr-2 text-primary-600 text-sm"></i>
               <span className="font-semibold text-sm">Secure Authentication</span>
             </div>
             <p className="text-xs text-gray-600">Protected by enterprise-grade security</p>
             <div className="mt-3 flex items-center justify-center space-x-3 text-xs text-gray-500">
               <span>© 2024 WhatsApp Manager</span>
               <span>•</span>
-              <a href="#" className="hover:text-emerald-600 transition-colors">Privacy</a>
+              <a href="#" className="hover:text-primary-600 transition-colors">Privacy</a>
               <span>•</span>
-              <a href="#" className="hover:text-emerald-600 transition-colors">Terms</a>
+              <a href="#" className="hover:text-primary-600 transition-colors">Terms</a>
             </div>
           </div>
         </div>

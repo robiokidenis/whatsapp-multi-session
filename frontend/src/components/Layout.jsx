@@ -178,7 +178,7 @@ const Layout = ({ children }) => {
       fixed top-4 right-4 z-60 p-4 rounded-lg shadow-lg border-l-4 animate-slide-in-right
       ${notification.type === 'error' ? 'bg-red-50 border-red-500 text-red-800' : 
         notification.type === 'success' ? 'bg-green-50 border-green-500 text-green-800' :
-        'bg-blue-50 border-blue-500 text-blue-800'}
+        'bg-primary-50 border-primary-500 text-primary-800'}
     `}>
       <div className="flex items-center justify-between">
         <p className="text-sm font-medium">{notification.message}</p>
@@ -285,7 +285,7 @@ const Layout = ({ children }) => {
                   focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-opacity-50
                   ${item.active 
                     ? 'bg-gradient-to-r from-primary-50 to-primary-100 text-primary-700 border border-primary-200 shadow-sm' 
-                    : 'text-gray-700 hover:bg-gray-100 hover:text-gray-900'
+                    : 'text-gray-700 hover:bg-primary-50/50 hover:text-primary-700'
                   }
                 `}
                 aria-current={item.active ? 'page' : undefined}

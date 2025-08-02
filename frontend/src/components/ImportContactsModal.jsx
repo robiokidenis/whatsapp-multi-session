@@ -578,9 +578,9 @@ const ImportContactsModal = ({ isOpen, onClose, onImportComplete, groups }) => {
                     <div className="text-2xl font-bold text-red-600">{importResults.failed}</div>
                     <div className="text-sm text-red-800">Failed</div>
                   </div>
-                  <div className="bg-blue-50 rounded-lg p-4">
-                    <div className="text-2xl font-bold text-blue-600">{importResults.total}</div>
-                    <div className="text-sm text-blue-800">Total</div>
+                  <div className="bg-primary-50 rounded-lg p-4">
+                    <div className="text-2xl font-bold text-primary-600">{importResults.total}</div>
+                    <div className="text-sm text-primary-800">Total</div>
                   </div>
                 </div>
                 

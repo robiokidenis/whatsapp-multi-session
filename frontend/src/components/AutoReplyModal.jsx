@@ -224,7 +224,7 @@ const AutoReplyModal = ({ isOpen, onClose }) => {
                           <div className="flex items-center gap-2 mb-1">
                             <h5 className="font-medium text-gray-900">{autoReply.name}</h5>
                             <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
-                              autoReply.trigger_type === 'keyword' ? 'bg-blue-100 text-blue-800' :
+                              autoReply.trigger_type === 'keyword' ? 'bg-primary-100 text-primary-800' :
                               autoReply.trigger_type === 'time_based' ? 'bg-green-100 text-green-800' :
                               'bg-purple-100 text-purple-800'
                             }`}>
