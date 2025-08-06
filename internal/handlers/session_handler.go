@@ -15,6 +15,7 @@ import (
 	"go.mau.fi/whatsmeow"
 
 	"whatsapp-multi-session/internal/models"
+	"whatsapp-multi-session/internal/repository"
 	"whatsapp-multi-session/internal/services"
 	"whatsapp-multi-session/pkg/logger"
 )
@@ -22,6 +23,7 @@ import (
 // SessionHandler handles session-related endpoints
 type SessionHandler struct {
 	whatsappService *services.WhatsAppService
+	messageRepo     *repository.MessageRepository
 	logger          *logger.Logger
 	jwtSecret       string
 	upgrader        websocket.Upgrader
@@ -30,6 +32,7 @@ type SessionHandler struct {
 // NewSessionHandler creates a new session handler
 func NewSessionHandler(
 	whatsappService *services.WhatsAppService,
+	messageRepo *repository.MessageRepository,
 	jwtSecret string,
 	log *logger.Logger,
 	corsOrigins []string,
@@ -60,6 +63,7 @@ func NewSessionHandler(
 
 	return &SessionHandler{
 		whatsappService: whatsappService,
+		messageRepo:     messageRepo,
 		logger:          log,
 		jwtSecret:       jwtSecret,
 		upgrader:        upgrader,
@@ -419,9 +423,14 @@ func (h *SessionHandler) SendMessage(w http.ResponseWriter, r *http.Request) {
 	messageID, err := h.whatsappService.SendMessage(sessionID, &req)
 	if err != nil {
 		h.logger.Error("Failed to send message from session %s: %v", sessionID, err)
+		// Log failed message
+		h.logMessage(sessionID, messageID, "", req.To, "text", req.Message, "", "sent", "failed", err.Error())
 		HandleError(w, err)
 		return
 	}
+
+	// Log successful message
+	h.logMessage(sessionID, messageID, "", req.To, "text", req.Message, "", "sent", "sent", "")
 
 	WriteSuccessResponse(w, "Message sent successfully", map[string]interface{}{
 		"message_id": messageID,
@@ -465,9 +474,16 @@ func (h *SessionHandler) SendLocation(w http.ResponseWriter, r *http.Request) {
 	messageID, err := h.whatsappService.SendLocation(sessionID, &req)
 	if err != nil {
 		h.logger.Error("Failed to send location from session %s: %v", sessionID, err)
+		// Log failed location message
+		locationContent := fmt.Sprintf("Location: %f, %f", req.Latitude, req.Longitude)
+		h.logMessage(sessionID, messageID, "", req.To, "location", locationContent, "", "sent", "failed", err.Error())
 		HandleError(w, err)
 		return
 	}
+
+	// Log successful location message
+	locationContent := fmt.Sprintf("Location: %f, %f", req.Latitude, req.Longitude)
+	h.logMessage(sessionID, messageID, "", req.To, "location", locationContent, "", "sent", "sent", "")
 
 	WriteSuccessResponse(w, "Location sent successfully", map[string]interface{}{
 		"message_id": messageID,
@@ -500,9 +516,14 @@ func (h *SessionHandler) SendAttachment(w http.ResponseWriter, r *http.Request) 
 	messageID, err := h.whatsappService.SendAttachment(sessionID, &req)
 	if err != nil {
 		h.logger.Error("Failed to send attachment from session %s: %v", sessionID, err)
+		// Log failed attachment
+		h.logMessage(sessionID, messageID, "", req.To, "document", req.Caption, req.File, "sent", "failed", err.Error())
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+
+	// Log successful attachment
+	h.logMessage(sessionID, messageID, "", req.To, "document", req.Caption, req.File, "sent", "sent", "")
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]interface{}{
@@ -538,9 +559,14 @@ func (h *SessionHandler) SendFileFromURL(w http.ResponseWriter, r *http.Request)
 	messageID, err := h.whatsappService.SendFileFromURL(sessionID, &req)
 	if err != nil {
 		h.logger.Error("Failed to send file from URL for session %s: %v", sessionID, err)
+		// Log failed file URL
+		h.logMessage(sessionID, messageID, "", req.To, "document", req.Caption, req.URL, "sent", "failed", err.Error())
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+
+	// Log successful file URL
+	h.logMessage(sessionID, messageID, "", req.To, "document", req.Caption, req.URL, "sent", "sent", "")
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]interface{}{
@@ -576,9 +602,14 @@ func (h *SessionHandler) SendImage(w http.ResponseWriter, r *http.Request) {
 	messageID, err := h.whatsappService.SendImage(sessionID, &req)
 	if err != nil {
 		h.logger.Error("Failed to send image from session %s: %v", sessionID, err)
+		// Log failed image
+		h.logMessage(sessionID, messageID, "", req.To, "image", req.Caption, req.Image, "sent", "failed", err.Error())
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+
+	// Log successful image
+	h.logMessage(sessionID, messageID, "", req.To, "image", req.Caption, req.Image, "sent", "sent", "")
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]interface{}{
@@ -797,11 +828,15 @@ func (h *SessionHandler) SendMessageGeneral(w http.ResponseWriter, r *http.Reque
 	messageID, err := h.whatsappService.SendMessage(sessionID, msgReq)
 	if err != nil {
 		h.logger.Error("Failed to send message from session %s: %v", sessionID, err)
+		// Log failed message
+		h.logMessage(sessionID, messageID, "", req.To, "text", req.Message, "", "sent", "failed", err.Error())
 		HandleError(w, err)
 		return
 	}
 
 	h.logger.Info("API message sent successfully with ID: %s", messageID)
+	// Log successful message
+	h.logMessage(sessionID, messageID, "", req.To, "text", req.Message, "", "sent", "sent", "")
 
 	WriteSuccessResponse(w, "Message sent successfully", map[string]interface{}{
 		"message_id": messageID,
@@ -975,6 +1010,32 @@ func (h *SessionHandler) validateJWT(tokenString string) error {
 	}
 
 	return nil
+}
+
+// logMessage logs a message to the database
+func (h *SessionHandler) logMessage(sessionID, messageID, senderJID, recipientJID, messageType, content, mediaURL, direction, status, errorMessage string) {
+	if h.messageRepo == nil {
+		return // Skip logging if no message repository
+	}
+
+	message := &repository.Message{
+		SessionID:    sessionID,
+		MessageID:    messageID,
+		SenderJID:    senderJID,
+		RecipientJID: recipientJID,
+		MessageType:  messageType,
+		Content:      content,
+		MediaURL:     mediaURL,
+		Direction:    direction,
+		Status:       status,
+		ErrorMessage: errorMessage,
+		CreatedAt:    time.Now(),
+		UpdatedAt:    time.Now(),
+	}
+
+	if err := h.messageRepo.LogMessage(message); err != nil {
+		h.logger.Error("Failed to log message to database: %v", err)
+	}
 }
 
 // parseJWT parses and validates a JWT token, returning the claims

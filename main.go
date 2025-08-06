@@ -57,6 +57,8 @@ func main() {
 	contactGroupRepo := repository.NewContactGroupRepository(db.DB())
 	//templateRepo := repository.NewTemplateRepository(db.DB()) // Temporarily disabled
 	autoReplyRepo := repository.NewAutoReplyRepository(db.DB())
+	analyticsRepo := repository.NewAnalyticsRepository(db.DB())
+	messageRepo := repository.NewMessageRepository(db.DB())
 	
 	var logRepo *repository.LogRepository
 	// Setup database logging only if enabled
@@ -80,6 +82,7 @@ func main() {
 	// Initialize CRM services
 	contactDetectionService := services.NewContactDetectionService(*log)
 	bulkMessagingService := services.NewBulkMessagingService(whatsappService, *log)
+	analyticsService := services.NewAnalyticsService(analyticsRepo, userRepo, log)
 
 	// Ensure default admin user exists
 	if err := userService.EnsureDefaultAdmin(cfg.AdminUsername, cfg.AdminPassword); err != nil {
@@ -91,7 +94,7 @@ func main() {
 
 	// Initialize handlers
 	authHandler := handlers.NewAuthHandler(userService, rateLimiter, log)
-	sessionHandler := handlers.NewSessionHandler(whatsappService, cfg.JWTSecret, log, cfg.CORSAllowedOrigins)
+	sessionHandler := handlers.NewSessionHandler(whatsappService, messageRepo, cfg.JWTSecret, log, cfg.CORSAllowedOrigins)
 	adminHandler := handlers.NewAdminHandler(userService, log)
 	mediaHandler := handlers.NewMediaHandler(log)
 
@@ -101,6 +104,7 @@ func main() {
 	//templateHandler := handlers.NewTemplateHandler(templateRepo, contactRepo, log)
 	bulkMessagingHandler := handlers.NewBulkMessagingHandler(bulkMessagingService, log)
 	autoReplyHandler := handlers.NewAutoReplyHandler(autoReplyRepo, log)
+	analyticsHandler := handlers.NewAnalyticsHandler(analyticsService, log)
 
 	var logHandler *handlers.LogHandler
 	if cfg.EnableDatabaseLog && logRepo != nil {
@@ -119,6 +123,7 @@ func main() {
 		nil, // templateHandler temporarily disabled
 		bulkMessagingHandler,
 		autoReplyHandler,
+		analyticsHandler,
 		userService,
 		cfg,
 	)
@@ -168,6 +173,7 @@ func setupRoutes(
 	templateHandler interface{},
 	bulkMessagingHandler *handlers.BulkMessagingHandler,
 	autoReplyHandler *handlers.AutoReplyHandler,
+	analyticsHandler *handlers.AnalyticsHandler,
 	userService *services.UserService,
 	cfg *config.Config,
 ) *mux.Router {
@@ -272,6 +278,11 @@ func setupRoutes(
 	protected.HandleFunc("/auto-replies/{id}", autoReplyHandler.UpdateAutoReply).Methods("PUT")
 	protected.HandleFunc("/auto-replies/{id}", autoReplyHandler.DeleteAutoReply).Methods("DELETE")
 
+	// Analytics routes
+	protected.HandleFunc("/analytics", analyticsHandler.GetAnalytics).Methods("GET")
+	protected.HandleFunc("/analytics/messages", analyticsHandler.GetMessageStats).Methods("GET")
+	protected.HandleFunc("/analytics/sessions", analyticsHandler.GetSessionStats).Methods("GET")
+
 	// User management routes (admin only)
 	admin := protected.PathPrefix("/admin").Subrouter()
 	admin.Use(middleware.RequireRole("admin"))
@@ -312,7 +323,12 @@ func setupRoutes(
 	auth_admin.HandleFunc("/register", authHandler.Register).Methods("POST")
 
 	// Static files (frontend) - register last to avoid conflicts
-	router.PathPrefix("/").Handler(SPAHandler("./frontend/dist/"))
+	if cfg.EnableFrontend {
+		router.PathPrefix("/").Handler(SPAHandler("./frontend/dist/"))
+	} else {
+		// Serve frontend disabled message for all non-API routes
+		router.PathPrefix("/").HandlerFunc(frontendDisabledHandler)
+	}
 
 	return router
 }
@@ -322,6 +338,109 @@ func healthHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	fmt.Fprintf(w, `{"status":"ok","service":"whatsapp-multi-session"}`)
+}
+
+// frontendDisabledHandler serves a message when the frontend is disabled
+func frontendDisabledHandler(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.WriteHeader(http.StatusOK)
+	
+	html := `<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WhatsApp Multi-Session - Frontend Disabled</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', sans-serif;
+            margin: 0;
+            padding: 0;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .container {
+            background: white;
+            border-radius: 12px;
+            padding: 40px;
+            text-align: center;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+            max-width: 500px;
+            margin: 20px;
+        }
+        .icon {
+            font-size: 64px;
+            margin-bottom: 20px;
+            color: #667eea;
+        }
+        h1 {
+            color: #333;
+            margin: 0 0 16px 0;
+            font-size: 28px;
+            font-weight: 600;
+        }
+        p {
+            color: #666;
+            font-size: 16px;
+            line-height: 1.6;
+            margin: 0 0 24px 0;
+        }
+        .api-info {
+            background: #f8f9ff;
+            border: 1px solid #e1e5f7;
+            border-radius: 8px;
+            padding: 20px;
+            margin: 20px 0;
+        }
+        .api-info h3 {
+            color: #333;
+            margin: 0 0 12px 0;
+            font-size: 16px;
+            font-weight: 600;
+        }
+        .api-info code {
+            background: #667eea;
+            color: white;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+        .footer {
+            margin-top: 30px;
+            padding-top: 20px;
+            border-top: 1px solid #eee;
+            color: #999;
+            font-size: 14px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="icon">🚫</div>
+        <h1>Frontend Disabled</h1>
+        <p>The web interface for this WhatsApp Multi-Session service has been disabled by the administrator.</p>
+        
+        <div class="api-info">
+            <h3>📡 API Access Available</h3>
+            <p>You can still access all functionality through the REST API endpoints:</p>
+            <p><code>/api/sessions</code> - Session management</p>
+            <p><code>/api/send</code> - Send messages</p>
+            <p><code>/api/auth</code> - Authentication</p>
+        </div>
+        
+        <p>To enable the web interface, set the <strong>ENABLE_FRONTEND=true</strong> environment variable and restart the service.</p>
+        
+        <div class="footer">
+            WhatsApp Multi-Session API Server
+        </div>
+    </div>
+</body>
+</html>`
+	
+	fmt.Fprint(w, html)
 }
 
 // SPAHandler implements the http.Handler interface, serving static files from the filesystem

@@ -34,6 +34,7 @@ type Config struct {
 	// Application settings
 	EnableLogging       bool
 	EnableDatabaseLog   bool
+	EnableFrontend      bool
 	LogLevel            string
 	MaxSessions         int
 	SessionTimeout      time.Duration
@@ -82,6 +83,7 @@ func Load() *Config {
 		// Application
 		EnableLogging:     getBoolEnv("ENABLE_LOGGING", true),
 		EnableDatabaseLog: getBoolEnv("ENABLE_DATABASE_LOG", true),
+		EnableFrontend:    getBoolEnv("ENABLE_FRONTEND", true),
 		LogLevel:          getEnv("LOG_LEVEL", "info"),
 		MaxSessions:       getIntEnv("MAX_SESSIONS", 10),
 		SessionTimeout:    getDurationEnv("SESSION_TIMEOUT", 24*time.Hour),

@@ -91,6 +91,11 @@ func (d *Database) InitTables() error {
 		return fmt.Errorf("failed to create sessions table: %v", err)
 	}
 
+	// Messages table
+	if err := d.createMessagesTable(); err != nil {
+		return fmt.Errorf("failed to create messages table: %v", err)
+	}
+
 	// Logs table
 	if err := d.createLogsTable(); err != nil {
 		return fmt.Errorf("failed to create logs table: %v", err)

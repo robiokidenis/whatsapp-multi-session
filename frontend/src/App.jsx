@@ -8,6 +8,7 @@ import UserManagement from './components/UserManagement';
 import Logs from './pages/Logs';
 import Contacts from './pages/Contacts';
 import Settings from './pages/Settings';
+import Analytics from './components/Analytics';
 import Layout from './components/Layout';
 
 function App() {
@@ -63,6 +64,16 @@ function App() {
                 <ProtectedRoute>
                   <Layout>
                     <Settings />
+                  </Layout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/analytics"
+              element={
+                <ProtectedRoute>
+                  <Layout>
+                    <Analytics />
                   </Layout>
                 </ProtectedRoute>
               }
