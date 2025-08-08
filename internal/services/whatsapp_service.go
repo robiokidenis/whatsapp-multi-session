@@ -1615,14 +1615,17 @@ func (s *WhatsAppService) sendAutoReply(session *models.Session, evt *events.Mes
 		Conversation: proto.String(*session.AutoReplyText),
 	}
 
+	// Convert sender JID to user JID (remove device part)
+	userJID := evt.Info.Sender.ToNonAD()
+	
 	// Send the auto reply
-	_, err := session.Client.SendMessage(context.Background(), evt.Info.Sender, replyMsg)
+	_, err := session.Client.SendMessage(context.Background(), userJID, replyMsg)
 	if err != nil {
 		s.logger.Error("Failed to send auto reply for session %s: %v", session.ID, err)
 		return
 	}
 
-	s.logger.Info("Auto reply sent to %s in session %s", evt.Info.Sender.User, session.ID)
+	s.logger.Info("Auto reply sent to %s in session %s", userJID.User, session.ID)
 }
 
 // sendWebhookHTTP sends the webhook message via HTTP POST
