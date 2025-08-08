@@ -7,12 +7,14 @@ import (
 	"fmt"
 	"math/big"
 	"net/http"
+	"net/url"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/gorilla/mux"
 	"github.com/gorilla/websocket"
 	"go.mau.fi/whatsmeow"
+	"golang.org/x/net/proxy"
 
 	"whatsapp-multi-session/internal/models"
 	"whatsapp-multi-session/internal/repository"
@@ -156,6 +158,7 @@ func (h *SessionHandler) CreateSession(w http.ResponseWriter, r *http.Request) {
 		Position:      session.Position,
 		WebhookURL:    session.WebhookURL,
 		AutoReplyText: session.AutoReplyText,
+		ProxyConfig:   session.ProxyConfig,
 		Connected:     session.Connected,
 		LoggedIn:      session.LoggedIn,
 	}
@@ -204,6 +207,7 @@ func (h *SessionHandler) GetSessions(w http.ResponseWriter, r *http.Request) {
 			Position:      session.Position,
 			WebhookURL:    session.WebhookURL,
 			AutoReplyText: session.AutoReplyText,
+			ProxyConfig:   session.ProxyConfig,
 			Connected:     session.Connected,
 			LoggedIn:      session.LoggedIn,
 		}
@@ -252,6 +256,7 @@ func (h *SessionHandler) GetSession(w http.ResponseWriter, r *http.Request) {
 		Position:      session.Position,
 		WebhookURL:    session.WebhookURL,
 		AutoReplyText: session.AutoReplyText,
+		ProxyConfig:   session.ProxyConfig,
 		Connected:     session.Connected,
 		LoggedIn:      session.LoggedIn,
 	}
@@ -1197,6 +1202,147 @@ func (h *SessionHandler) UpdateSessionAutoReply(w http.ResponseWriter, r *http.R
 
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(map[string]string{"message": "Session auto reply updated successfully"})
+}
+
+// UpdateSessionProxy handles updating session proxy configuration
+func (h *SessionHandler) UpdateSessionProxy(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	sessionID := vars["sessionId"]
+
+	// Check user authentication and session ownership
+	if _, _, ok := h.getUserInfoAndCheckOwnership(w, r, sessionID); !ok {
+		return
+	}
+
+	var req struct {
+		ProxyConfig *models.ProxyConfig `json:"proxy_config"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	updateReq := &models.UpdateSessionRequest{
+		ProxyConfig: req.ProxyConfig,
+	}
+
+	if err := h.whatsappService.UpdateSession(sessionID, updateReq); err != nil {
+		h.logger.Error("Failed to update session proxy %s: %v", sessionID, err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]string{"message": "Session proxy configuration updated successfully"})
+}
+
+// TestProxy handles testing proxy connectivity
+func (h *SessionHandler) TestProxy(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		ProxyConfig *models.ProxyConfig `json:"proxy_config"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	if req.ProxyConfig == nil || !req.ProxyConfig.Enabled {
+		http.Error(w, "Proxy configuration is required", http.StatusBadRequest)
+		return
+	}
+
+	// Test proxy connectivity
+	success, message := h.testProxyConnection(req.ProxyConfig)
+	
+	response := map[string]interface{}{
+		"success": success,
+		"message": message,
+		"proxy_info": map[string]interface{}{
+			"type": req.ProxyConfig.Type,
+			"host": req.ProxyConfig.Host,
+			"port": req.ProxyConfig.Port,
+		},
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	
+	// Ensure JSON encoding doesn't fail
+	if err := json.NewEncoder(w).Encode(response); err != nil {
+		h.logger.Error("Failed to encode proxy test response: %v", err)
+		http.Error(w, "Failed to encode response", http.StatusInternalServerError)
+		return
+	}
+}
+
+// testProxyConnection tests if the proxy is reachable and working
+func (h *SessionHandler) testProxyConnection(config *models.ProxyConfig) (bool, string) {
+	timeout := 5 * time.Second
+	
+	switch config.Type {
+	case "http", "https":
+		// Test HTTP/HTTPS proxy
+		proxyURL := fmt.Sprintf("%s://%s:%d", config.Type, config.Host, config.Port)
+		if config.Username != "" && config.Password != "" {
+			proxyURL = fmt.Sprintf("%s://%s:%s@%s:%d", config.Type, config.Username, config.Password, config.Host, config.Port)
+		}
+		
+		parsed, err := url.Parse(proxyURL)
+		if err != nil {
+			return false, fmt.Sprintf("Invalid proxy URL: %v", err)
+		}
+		
+		client := &http.Client{
+			Transport: &http.Transport{
+				Proxy: http.ProxyURL(parsed),
+			},
+			Timeout: timeout,
+		}
+		
+		// Test by making a simple HTTP request to a reliable endpoint
+		testURL := "http://httpbin.org/get"
+		resp, err := client.Get(testURL)
+		if err != nil {
+			// If httpbin fails, try a simpler test
+			resp, err = client.Get("http://www.google.com")
+			if err != nil {
+				return false, fmt.Sprintf("Proxy connection failed: %v", err)
+			}
+		}
+		defer resp.Body.Close()
+		
+		if resp.StatusCode == 200 {
+			return true, fmt.Sprintf("HTTP/HTTPS proxy connection successful (Status: %d)", resp.StatusCode)
+		}
+		return false, fmt.Sprintf("Proxy returned status code: %d", resp.StatusCode)
+		
+	case "socks5":
+		// Test SOCKS5 proxy
+		var auth *proxy.Auth
+		if config.Username != "" && config.Password != "" {
+			auth = &proxy.Auth{
+				User:     config.Username,
+				Password: config.Password,
+			}
+		}
+		
+		dialer, err := proxy.SOCKS5("tcp", fmt.Sprintf("%s:%d", config.Host, config.Port), auth, proxy.Direct)
+		if err != nil {
+			return false, fmt.Sprintf("Failed to create SOCKS5 dialer: %v", err)
+		}
+		
+		// Test connection by dialing through proxy
+		conn, err := dialer.Dial("tcp", "google.com:80")
+		if err != nil {
+			return false, fmt.Sprintf("SOCKS5 proxy connection failed: %v", err)
+		}
+		conn.Close()
+		
+		return true, "SOCKS5 proxy connection successful"
+		
+	default:
+		return false, "Unsupported proxy type"
+	}
 }
 
 // GetConversations handles getting all conversations/chats for a session

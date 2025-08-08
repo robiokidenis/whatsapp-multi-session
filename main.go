@@ -228,6 +228,7 @@ func setupRoutes(
 	sessions.HandleFunc("/{sessionId}/webhook", sessionHandler.UpdateSessionWebhook).Methods("PUT")
 	sessions.HandleFunc("/{sessionId}/name", sessionHandler.UpdateSessionName).Methods("PUT")
 	sessions.HandleFunc("/{sessionId}/auto-reply", sessionHandler.UpdateSessionAutoReply).Methods("PUT")
+	sessions.HandleFunc("/{sessionId}/proxy", sessionHandler.UpdateSessionProxy).Methods("PUT")
 
 	// Message routes
 	sessions.HandleFunc("/{sessionId}/send", sessionHandler.SendMessage).Methods("POST")
@@ -247,6 +248,9 @@ func setupRoutes(
 
 	// WebSocket endpoint with token-based authentication (no middleware needed as it authenticates via query params)
 	api.HandleFunc("/ws/{sessionId}", sessionHandler.WebSocketHandler).Methods("GET")
+
+	// Proxy testing route (no authentication required for testing)
+	api.HandleFunc("/proxy/test", sessionHandler.TestProxy).Methods("POST")
 
 	// CRM routes (authentication required)
 	// Contact management

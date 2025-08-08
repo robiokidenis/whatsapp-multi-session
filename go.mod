@@ -14,6 +14,7 @@ require (
 	github.com/rs/cors v1.10.1
 	go.mau.fi/whatsmeow v0.0.0-20250723174453-937d77661333
 	golang.org/x/crypto v0.40.0
+	golang.org/x/net v0.42.0
 	google.golang.org/protobuf v1.36.6
 )
 
@@ -27,7 +28,6 @@ require (
 	go.mau.fi/libsignal v0.2.0 // indirect
 	go.mau.fi/util v0.8.8 // indirect
 	golang.org/x/exp v0.0.0-20250711185948-6ae5c78190dc // indirect
-	golang.org/x/net v0.42.0 // indirect
 	golang.org/x/sys v0.34.0 // indirect
 	golang.org/x/text v0.27.0 // indirect
 )

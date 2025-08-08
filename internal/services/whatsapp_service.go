@@ -271,6 +271,7 @@ func (s *WhatsAppService) CreateSession(req *models.CreateSessionRequest, userID
 		Position:      req.Position,
 		WebhookURL:    req.WebhookURL,
 		AutoReplyText: req.AutoReplyText,
+		ProxyConfig:   req.ProxyConfig,
 		Client:        client,
 		Connected:     false,
 		LoggedIn:      false,
@@ -291,6 +292,7 @@ func (s *WhatsAppService) CreateSession(req *models.CreateSessionRequest, userID
 		Position:      req.Position,
 		WebhookURL:    req.WebhookURL,
 		AutoReplyText: req.AutoReplyText,
+		ProxyConfig:   req.ProxyConfig,
 		UserID:        userID,
 		CreatedAt:     time.Now(),
 	}
@@ -588,6 +590,9 @@ func (s *WhatsAppService) UpdateSession(sessionID string, req *models.UpdateSess
 	if req.AutoReplyText != nil {
 		session.AutoReplyText = req.AutoReplyText
 	}
+	if req.ProxyConfig != nil {
+		session.ProxyConfig = req.ProxyConfig
+	}
 
 	// Update in database with correct user_id
 	metadata := &models.SessionMetadata{
@@ -598,6 +603,7 @@ func (s *WhatsAppService) UpdateSession(sessionID string, req *models.UpdateSess
 		Position:      req.Position,
 		WebhookURL:    session.WebhookURL,
 		AutoReplyText: session.AutoReplyText,
+		ProxyConfig:   session.ProxyConfig,
 		UserID:        existingMetadata.UserID, // Use the existing user_id from database
 	}
 
@@ -618,19 +624,12 @@ func (s *WhatsAppService) setupEventHandlers(session *models.Session) {
 				session.ActualPhone = session.Client.Store.ID.User + "@s.whatsapp.net"
 				s.logger.Info("Session %s actual phone: %s", session.ID, session.ActualPhone)
 
-				// Set push name and online presence for better typing indicator support
+				// Set online presence for better typing indicator support
 				go func() {
-					// Set push name first (critical requirement for presence to work)
-					pushName := session.Name
-					if pushName == "" {
-						// Generate a realistic random name to appear like a real user
-						pushName = s.generateRandomName()
+					// Use existing push name from WhatsApp (don't override with session name)
+					if session.Client.Store.PushName != "" {
+						s.logger.Debug("Using existing push name '%s' for session %s", session.Client.Store.PushName, session.ID)
 					}
-					session.Client.Store.PushName = pushName
-					s.logger.Debug("Set push name '%s' for session %s", pushName, session.ID)
-					
-					// Small delay to ensure push name is processed
-					time.Sleep(100 * time.Millisecond)
 					
 					if err := session.Client.SendPresence(types.PresenceAvailable); err != nil {
 						s.logger.Warn("Failed to set online presence for session %s: %v", session.ID, err)
@@ -727,12 +726,15 @@ func (s *WhatsAppService) loadExistingSessions() error {
 	for _, metadata := range metadatas {
 		s.logger.Info("Restoring session %s (%s)", metadata.ID, metadata.Name)
 		
-		// Debug log to verify webhook and auto-reply are loaded
+		// Debug log to verify webhook, auto-reply and proxy are loaded
 		if metadata.WebhookURL != "" {
 			s.logger.Info("Session %s has webhook URL: %s", metadata.ID, metadata.WebhookURL)
 		}
 		if metadata.AutoReplyText != nil && *metadata.AutoReplyText != "" {
 			s.logger.Info("Session %s has auto-reply text: %s", metadata.ID, *metadata.AutoReplyText)
+		}
+		if metadata.ProxyConfig != nil && metadata.ProxyConfig.Enabled {
+			s.logger.Info("Session %s has proxy enabled: %s://%s:%d", metadata.ID, metadata.ProxyConfig.Type, metadata.ProxyConfig.Host, metadata.ProxyConfig.Port)
 		}
 
 		// Find existing device in store (like original)
@@ -782,6 +784,7 @@ func (s *WhatsAppService) loadExistingSessions() error {
 			Position:      metadata.Position,
 			WebhookURL:    metadata.WebhookURL,
 			AutoReplyText: metadata.AutoReplyText,
+			ProxyConfig:   metadata.ProxyConfig,
 			Client:        client,
 			Connected:     false,
 			LoggedIn:      false,
@@ -1423,13 +1426,11 @@ func (s *WhatsAppService) SendTyping(sessionID string, to string, typing bool) e
 
 	// Ensure push name is set (critical requirement for presence to work)
 	if session.Client.Store.PushName == "" {
-		pushName := session.Name
-		if pushName == "" {
-			// Generate a realistic random name to appear like a real user
-			pushName = s.generateRandomName()
-		}
+		// Generate a realistic random name to appear like a real user
+		// Don't use session name as it's only for internal identification
+		pushName := s.generateRandomName()
 		session.Client.Store.PushName = pushName
-		s.logger.Debug("Set push name '%s' for typing indicator", pushName)
+		s.logger.Debug("Generated push name '%s' for typing indicator", pushName)
 		
 		// Small delay to ensure push name is processed
 		time.Sleep(100 * time.Millisecond)

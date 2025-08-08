@@ -15,6 +15,8 @@ const EditSessionModal = ({ isOpen, onClose, session, onUpdate }) => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+  const [testingProxy, setTestingProxy] = useState(false);
+  const [proxyTestResult, setProxyTestResult] = useState(null);
 
   useEffect(() => {
     if (session) {
@@ -156,6 +158,66 @@ const EditSessionModal = ({ isOpen, onClose, session, onUpdate }) => {
       setError(err.message || 'Failed to update session');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const testProxyConnection = async () => {
+    if (!proxyEnabled || !proxyHost || !proxyPort) {
+      setProxyTestResult({ success: false, message: 'Please fill in proxy host and port' });
+      return;
+    }
+
+    setTestingProxy(true);
+    setProxyTestResult(null);
+
+    try {
+      const proxyConfig = {
+        enabled: true,
+        type: proxyType,
+        host: proxyHost,
+        port: parseInt(proxyPort) || 0,
+        username: proxyUsername,
+        password: proxyPassword
+      };
+
+      const response = await fetch('/api/proxy/test', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          proxy_config: proxyConfig
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+
+      const contentType = response.headers.get('content-type');
+      if (!contentType || !contentType.includes('application/json')) {
+        const text = await response.text();
+        throw new Error(`Invalid response format. Expected JSON, got: ${text.substring(0, 100)}...`);
+      }
+
+      const data = await response.json();
+      
+      // Ensure response data is valid
+      if (data && typeof data === 'object') {
+        setProxyTestResult(data);
+      } else {
+        setProxyTestResult({
+          success: false,
+          message: 'Invalid response format from server'
+        });
+      }
+    } catch (error) {
+      setProxyTestResult({
+        success: false,
+        message: error.message || 'Proxy test failed'
+      });
+    } finally {
+      setTestingProxy(false);
     }
   };
 
@@ -360,6 +422,52 @@ const EditSessionModal = ({ isOpen, onClose, session, onUpdate }) => {
                       />
                     </div>
                   </div>
+
+                  {/* Proxy Test Button */}
+                  <div className="flex justify-between items-center mb-4">
+                    <button
+                      type="button"
+                      onClick={testProxyConnection}
+                      disabled={testingProxy || !proxyHost || !proxyPort}
+                      className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white rounded-lg font-medium transition-colors flex items-center"
+                    >
+                      {testingProxy ? (
+                        <>
+                          <i className="fas fa-spinner fa-spin mr-2"></i>
+                          Testing...
+                        </>
+                      ) : (
+                        <>
+                          <i className="fas fa-network-wired mr-2"></i>
+                          Test Connection
+                        </>
+                      )}
+                    </button>
+                  </div>
+
+                  {/* Proxy Test Result */}
+                  {proxyTestResult && (
+                    <div className={`mb-4 p-3 rounded-lg border ${
+                      proxyTestResult.success 
+                        ? 'bg-green-50 border-green-200 text-green-800'
+                        : 'bg-red-50 border-red-200 text-red-800'
+                    }`}>
+                      <div className="flex items-start">
+                        <i className={`fas ${proxyTestResult.success ? 'fa-check-circle' : 'fa-exclamation-triangle'} mt-0.5 mr-2`}></i>
+                        <div className="text-sm">
+                          <p className="font-medium mb-1">
+                            {proxyTestResult.success ? 'Connection Successful' : 'Connection Failed'}
+                          </p>
+                          <p>{proxyTestResult.message}</p>
+                          {proxyTestResult.proxy_info && (
+                            <p className="mt-1 text-xs opacity-75">
+                              {proxyTestResult.proxy_info.type?.toUpperCase()} proxy at {proxyTestResult.proxy_info.host}:{proxyTestResult.proxy_info.port}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  )}
 
                   <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
                     <div className="flex items-start">

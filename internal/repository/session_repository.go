@@ -137,7 +137,9 @@ func (r *SessionRepository) GetByID(id string) (*models.SessionMetadata, error) 
 // GetAll retrieves all sessions
 func (r *SessionRepository) GetAll() ([]*models.SessionMetadata, error) {
 	query := `
-		SELECT id, phone, actual_phone, name, position, webhook_url, auto_reply_text, user_id, created_at
+		SELECT id, phone, actual_phone, name, position, webhook_url, auto_reply_text,
+		       proxy_enabled, proxy_type, proxy_host, proxy_port, proxy_username, proxy_password,
+		       user_id, created_at
 		FROM session_metadata
 		ORDER BY position ASC, created_at DESC
 	`
@@ -154,6 +156,10 @@ func (r *SessionRepository) GetAll() ([]*models.SessionMetadata, error) {
 		
 		var createdAtUnix int64
 		var autoReplyText sql.NullString
+		var proxyEnabled bool
+		var proxyType, proxyHost, proxyUsername, proxyPassword string
+		var proxyPort int
+		
 		err := rows.Scan(
 			&session.ID,
 			&session.Phone,
@@ -162,6 +168,12 @@ func (r *SessionRepository) GetAll() ([]*models.SessionMetadata, error) {
 			&session.Position,
 			&session.WebhookURL,
 			&autoReplyText,
+			&proxyEnabled,
+			&proxyType,
+			&proxyHost,
+			&proxyPort,
+			&proxyUsername,
+			&proxyPassword,
 			&session.UserID,
 			&createdAtUnix,
 		)
@@ -177,6 +189,9 @@ func (r *SessionRepository) GetAll() ([]*models.SessionMetadata, error) {
 			session.AutoReplyText = &autoReplyText.String
 		}
 		
+		// Convert proxy fields to ProxyConfig
+		session.ProxyConfig = dbFieldsToProxyConfig(proxyEnabled, proxyType, proxyHost, proxyPort, proxyUsername, proxyPassword)
+		
 		sessions = append(sessions, session)
 	}
 	
@@ -187,9 +202,13 @@ func (r *SessionRepository) GetAll() ([]*models.SessionMetadata, error) {
 func (r *SessionRepository) Update(session *models.SessionMetadata) error {
 	query := `
 		UPDATE session_metadata
-		SET phone = ?, actual_phone = ?, name = ?, position = ?, webhook_url = ?, auto_reply_text = ?
+		SET phone = ?, actual_phone = ?, name = ?, position = ?, webhook_url = ?, auto_reply_text = ?,
+		    proxy_enabled = ?, proxy_type = ?, proxy_host = ?, proxy_port = ?, proxy_username = ?, proxy_password = ?
 		WHERE id = ? AND user_id = ?
 	`
+	
+	// Convert proxy config to database fields
+	proxyEnabled, proxyType, proxyHost, proxyPort, proxyUsername, proxyPassword := proxyConfigToDBFields(session.ProxyConfig)
 	
 	_, err := r.db.Exec(query,
 		session.Phone,
@@ -198,6 +217,12 @@ func (r *SessionRepository) Update(session *models.SessionMetadata) error {
 		session.Position,
 		session.WebhookURL,
 		session.AutoReplyText,
+		proxyEnabled,
+		proxyType,
+		proxyHost,
+		proxyPort,
+		proxyUsername,
+		proxyPassword,
 		session.ID,
 		session.UserID,
 	)
@@ -290,7 +315,9 @@ func (r *SessionRepository) GetNextPosition() (int, error) {
 // GetByUserID retrieves all sessions for a specific user
 func (r *SessionRepository) GetByUserID(userID int) ([]*models.SessionMetadata, error) {
 	query := `
-		SELECT id, phone, actual_phone, name, position, webhook_url, auto_reply_text, user_id, created_at
+		SELECT id, phone, actual_phone, name, position, webhook_url, auto_reply_text,
+		       proxy_enabled, proxy_type, proxy_host, proxy_port, proxy_username, proxy_password,
+		       user_id, created_at
 		FROM session_metadata
 		WHERE user_id = ?
 		ORDER BY position ASC, created_at DESC
@@ -308,6 +335,10 @@ func (r *SessionRepository) GetByUserID(userID int) ([]*models.SessionMetadata, 
 		
 		var createdAtUnix int64
 		var autoReplyText sql.NullString
+		var proxyEnabled bool
+		var proxyType, proxyHost, proxyUsername, proxyPassword string
+		var proxyPort int
+		
 		err := rows.Scan(
 			&session.ID,
 			&session.Phone,
@@ -316,6 +347,12 @@ func (r *SessionRepository) GetByUserID(userID int) ([]*models.SessionMetadata, 
 			&session.Position,
 			&session.WebhookURL,
 			&autoReplyText,
+			&proxyEnabled,
+			&proxyType,
+			&proxyHost,
+			&proxyPort,
+			&proxyUsername,
+			&proxyPassword,
 			&session.UserID,
 			&createdAtUnix,
 		)
@@ -331,6 +368,9 @@ func (r *SessionRepository) GetByUserID(userID int) ([]*models.SessionMetadata, 
 			session.AutoReplyText = &autoReplyText.String
 		}
 		
+		// Convert proxy fields to ProxyConfig
+		session.ProxyConfig = dbFieldsToProxyConfig(proxyEnabled, proxyType, proxyHost, proxyPort, proxyUsername, proxyPassword)
+		
 		sessions = append(sessions, session)
 	}
 	
@@ -341,13 +381,19 @@ func (r *SessionRepository) GetByUserID(userID int) ([]*models.SessionMetadata, 
 func (r *SessionRepository) GetByIDAndUserID(id string, userID int) (*models.SessionMetadata, error) {
 	session := &models.SessionMetadata{}
 	query := `
-		SELECT id, phone, actual_phone, name, position, webhook_url, auto_reply_text, user_id, created_at
+		SELECT id, phone, actual_phone, name, position, webhook_url, auto_reply_text,
+		       proxy_enabled, proxy_type, proxy_host, proxy_port, proxy_username, proxy_password,
+		       user_id, created_at
 		FROM session_metadata
 		WHERE id = ? AND user_id = ?
 	`
 	
 	var createdAtUnix int64
 	var autoReplyText sql.NullString
+	var proxyEnabled bool
+	var proxyType, proxyHost, proxyUsername, proxyPassword string
+	var proxyPort int
+	
 	err := r.db.QueryRow(query, id, userID).Scan(
 		&session.ID,
 		&session.Phone,
@@ -356,6 +402,12 @@ func (r *SessionRepository) GetByIDAndUserID(id string, userID int) (*models.Ses
 		&session.Position,
 		&session.WebhookURL,
 		&autoReplyText,
+		&proxyEnabled,
+		&proxyType,
+		&proxyHost,
+		&proxyPort,
+		&proxyUsername,
+		&proxyPassword,
 		&session.UserID,
 		&createdAtUnix,
 	)
@@ -374,6 +426,9 @@ func (r *SessionRepository) GetByIDAndUserID(id string, userID int) (*models.Ses
 	if autoReplyText.Valid {
 		session.AutoReplyText = &autoReplyText.String
 	}
+	
+	// Convert proxy fields to ProxyConfig
+	session.ProxyConfig = dbFieldsToProxyConfig(proxyEnabled, proxyType, proxyHost, proxyPort, proxyUsername, proxyPassword)
 	
 	return session, nil
 }
