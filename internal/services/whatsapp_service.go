@@ -394,6 +394,11 @@ func (s *WhatsAppService) ConnectSession(sessionID string) error {
 		return models.NewNotFoundError("session %s not found", sessionID)
 	}
 
+	// Check if session is enabled
+	if !session.Enabled {
+		return models.NewBadRequestError("session %s is disabled and cannot be connected", sessionID)
+	}
+
 	if session.Connecting {
 		return models.NewBadRequestError("session %s is already connecting", sessionID)
 	}
@@ -476,6 +481,11 @@ func (s *WhatsAppService) LoginSession(sessionID string) error {
 	session, exists := s.GetSession(sessionID)
 	if !exists {
 		return models.NewNotFoundError("session %s not found", sessionID)
+	}
+
+	// Check if session is enabled
+	if !session.Enabled {
+		return models.NewBadRequestError("session %s is disabled and cannot be logged in", sessionID)
 	}
 
 	if session.LoggedIn {
@@ -641,18 +651,58 @@ func (s *WhatsAppService) UpdateSessionAutoReply(sessionID string, autoReplyText
 // UpdateSessionEnabled updates only the enabled status for a session
 func (s *WhatsAppService) UpdateSessionEnabled(sessionID string, enabled bool) error {
 	s.mu.Lock()
-	defer s.mu.Unlock()
-
 	session, exists := s.sessions[sessionID]
 	if !exists {
+		s.mu.Unlock()
 		return models.NewNotFoundError("session %s not found", sessionID)
 	}
 
+	// Store previous state
+	wasDisabled := !session.Enabled
+
 	// Update in-memory session
 	session.Enabled = enabled
+	s.mu.Unlock()
 
 	// Update only the enabled status in database using the dedicated method
-	return s.sessionRepo.UpdateSessionEnabled(sessionID, enabled)
+	if err := s.sessionRepo.UpdateSessionEnabled(sessionID, enabled); err != nil {
+		return err
+	}
+
+	// If session was disabled and is now enabled, try to auto-connect
+	if wasDisabled && enabled {
+		s.logger.Info("Session %s has been enabled, attempting to auto-connect", sessionID)
+		
+		// Check if session has stored credentials and is not already connected
+		if !session.Connected && session.Client != nil {
+			go func() {
+				// Wait a moment to ensure everything is settled
+				time.Sleep(1 * time.Second)
+				
+				s.logger.Info("Auto-connecting newly enabled session %s", sessionID)
+				if err := session.Client.Connect(); err != nil {
+					s.logger.Error("Failed to auto-connect enabled session %s: %v", sessionID, err)
+				} else {
+					s.logger.Info("Successfully connected enabled session %s", sessionID)
+				}
+			}()
+		} else if session.Connected {
+			s.logger.Info("Session %s is already connected", sessionID)
+		} else {
+			s.logger.Info("Session %s needs re-authentication (no stored credentials)", sessionID)
+		}
+	} else if !wasDisabled && !enabled && session.Connected {
+		// If session was enabled and is now disabled, disconnect it
+		s.logger.Info("Session %s has been disabled, disconnecting", sessionID)
+		go func() {
+			if session.Client != nil {
+				session.Client.Disconnect()
+				s.logger.Info("Disconnected disabled session %s", sessionID)
+			}
+		}()
+	}
+
+	return nil
 }
 
 // setupEventHandlers sets up event handlers for a session
@@ -740,14 +790,22 @@ func (s *WhatsAppService) setupEventHandlers(session *models.Session) {
 				handler(v)
 			}
 
-			// Send auto reply if configured and this is an incoming message
-			if session.AutoReplyText != nil && *session.AutoReplyText != "" && !v.Info.IsFromMe {
-				go s.sendAutoReply(session, v)
-			}
+			// Only process auto-reply and webhook if session is enabled
+			if session.Enabled {
+				// Send auto reply if configured and this is an incoming message
+				if session.AutoReplyText != nil && *session.AutoReplyText != "" && !v.Info.IsFromMe {
+					go s.sendAutoReply(session, v)
+				}
 
-			// Send webhook if configured
-			if session.WebhookURL != "" {
-				go s.sendWebhook(session, v)
+				// Send webhook if configured
+				if session.WebhookURL != "" {
+					go s.sendWebhook(session, v)
+				}
+			} else {
+				// Log that the session is disabled and won't process messages
+				if !v.Info.IsFromMe {
+					s.logger.Debug("Session %s is disabled, skipping auto-reply and webhook for message from %s", session.ID, v.Info.Sender.User)
+				}
 			}
 		}
 	})
@@ -843,18 +901,22 @@ func (s *WhatsAppService) loadExistingSessions() error {
 		// Store in memory
 		s.sessions[metadata.ID] = session
 
-		// Try to connect if device has stored credentials (like original)
+		// Try to connect if device has stored credentials and session is enabled
 		if deviceStore != nil && deviceStore.ID != nil {
-			go func(sessionID string, client *whatsmeow.Client) {
-				// Wait a bit before connecting to ensure everything is initialized
-				time.Sleep(2 * time.Second)
+			if metadata.Enabled {
+				go func(sessionID string, client *whatsmeow.Client) {
+					// Wait a bit before connecting to ensure everything is initialized
+					time.Sleep(2 * time.Second)
 
-				s.logger.Info("Auto-connecting restored session %s with JID %s", sessionID, deviceStore.ID.String())
-				err := client.Connect()
-				if err != nil {
-					s.logger.Error("Failed to auto-connect session %s: %v", sessionID, err)
-				}
-			}(metadata.ID, client)
+					s.logger.Info("Auto-connecting restored session %s with JID %s", sessionID, deviceStore.ID.String())
+					err := client.Connect()
+					if err != nil {
+						s.logger.Error("Failed to auto-connect session %s: %v", sessionID, err)
+					}
+				}(metadata.ID, client)
+			} else {
+				s.logger.Info("Session %s is disabled, skipping auto-connect", metadata.ID)
+			}
 		} else {
 			s.logger.Info("Session %s needs re-authentication (no stored credentials)", metadata.ID)
 		}
@@ -1588,6 +1650,12 @@ func (s *WhatsAppService) GetGroups(sessionID string) ([]map[string]interface{},
 
 // sendWebhook sends incoming message data to configured webhook URL
 func (s *WhatsAppService) sendWebhook(session *models.Session, evt *events.Message) {
+	// Don't send webhook if session is disabled
+	if !session.Enabled {
+		s.logger.Debug("Session %s is disabled, skipping webhook", session.ID)
+		return
+	}
+	
 	// Get sender name from push name (most reliable method)
 	senderName := "Unknown"
 	if evt.Info.PushName != "" {
@@ -1675,6 +1743,12 @@ func (s *WhatsAppService) sendWebhook(session *models.Session, evt *events.Messa
 
 // sendAutoReply sends an automatic reply to incoming messages
 func (s *WhatsAppService) sendAutoReply(session *models.Session, evt *events.Message) {
+	// Don't reply if session is disabled
+	if !session.Enabled {
+		s.logger.Debug("Session %s is disabled, skipping auto-reply", session.ID)
+		return
+	}
+	
 	// Don't reply to group messages or if no auto reply text is set
 	if evt.Info.IsGroup || session.AutoReplyText == nil || *session.AutoReplyText == "" {
 		return

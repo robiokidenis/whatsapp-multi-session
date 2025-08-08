@@ -296,7 +296,85 @@ func (d *Database) createSessionsTable() error {
 	}
 
 	_, err := d.db.Exec(query)
-	return err
+	if err != nil {
+		return err
+	}
+
+	// Migrate existing session_metadata table to add enabled column if missing
+	return d.migrateSessionsTable()
+}
+
+// migrateSessionsTable adds missing columns to existing session_metadata table
+func (d *Database) migrateSessionsTable() error {
+	// Check if enabled column exists
+	var columnExists bool
+	
+	// Get database driver name
+	driver := d.db.Driver()
+	driverName := fmt.Sprintf("%T", driver)
+	
+	if contains(driverName, "mysql") {
+		query := `
+		SELECT COUNT(*) 
+		FROM INFORMATION_SCHEMA.COLUMNS 
+		WHERE TABLE_SCHEMA = DATABASE() 
+		AND TABLE_NAME = 'session_metadata' 
+		AND COLUMN_NAME = 'enabled'`
+		
+		var count int
+		err := d.db.QueryRow(query).Scan(&count)
+		if err != nil {
+			return err
+		}
+		columnExists = count > 0
+		
+		if !columnExists {
+			_, err = d.db.Exec("ALTER TABLE session_metadata ADD COLUMN enabled BOOLEAN DEFAULT TRUE")
+			if err != nil {
+				return err
+			}
+			// Update existing records to have enabled = TRUE
+			_, err = d.db.Exec("UPDATE session_metadata SET enabled = TRUE WHERE enabled IS NULL")
+			return err
+		}
+	} else {
+		// SQLite: Check if column exists by trying to add it
+		query := "PRAGMA table_info(session_metadata)"
+		rows, err := d.db.Query(query)
+		if err != nil {
+			return err
+		}
+		defer rows.Close()
+		
+		for rows.Next() {
+			var cid int
+			var name, dataType string
+			var notNull, pk int
+			var defaultValue interface{}
+			
+			err := rows.Scan(&cid, &name, &dataType, &notNull, &defaultValue, &pk)
+			if err != nil {
+				return err
+			}
+			
+			if name == "enabled" {
+				columnExists = true
+				break
+			}
+		}
+		
+		if !columnExists {
+			_, err = d.db.Exec("ALTER TABLE session_metadata ADD COLUMN enabled BOOLEAN DEFAULT 1")
+			if err != nil {
+				return err
+			}
+			// Update existing records to have enabled = 1
+			_, err = d.db.Exec("UPDATE session_metadata SET enabled = 1 WHERE enabled IS NULL")
+			return err
+		}
+	}
+	
+	return nil
 }
 
 func (d *Database) createLogsTable() error {
