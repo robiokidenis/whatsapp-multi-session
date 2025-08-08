@@ -35,7 +35,7 @@ func NewDatabase(config DatabaseConfig) (*Database, error) {
 		// MySQL connection
 		dsn := fmt.Sprintf("%s:%s@tcp(%s:%s)/%s?parseTime=true&charset=utf8mb4&collation=utf8mb4_unicode_ci",
 			config.User, config.Password, config.Host, config.Port, config.Database)
-		
+
 		db, err = sql.Open("mysql", dsn)
 		if err != nil {
 			return nil, fmt.Errorf("failed to open MySQL database: %v", err)
@@ -105,7 +105,7 @@ func (d *Database) InitTables() error {
 	if err := d.createContactGroupsTable(); err != nil {
 		return fmt.Errorf("failed to create contact_groups table: %v", err)
 	}
-	
+
 	if err := d.createContactsTable(); err != nil {
 		return fmt.Errorf("failed to create contacts table: %v", err)
 	}
@@ -136,11 +136,11 @@ func (d *Database) InitTables() error {
 func (d *Database) createUsersTable() error {
 	// Check if we're using MySQL or SQLite
 	var query string
-	
+
 	// Get database driver name
 	driver := d.db.Driver()
 	driverName := fmt.Sprintf("%T", driver)
-	
+
 	if contains(driverName, "mysql") {
 		query = `
 		CREATE TABLE IF NOT EXISTS users (
@@ -182,11 +182,11 @@ func (d *Database) createUsersTable() error {
 func (d *Database) migrateUsersTable() error {
 	// Check if api_key column exists
 	var columnExists bool
-	
+
 	// Get database driver name
 	driver := d.db.Driver()
 	driverName := fmt.Sprintf("%T", driver)
-	
+
 	if contains(driverName, "mysql") {
 		query := `
 		SELECT COUNT(*) 
@@ -194,14 +194,14 @@ func (d *Database) migrateUsersTable() error {
 		WHERE TABLE_SCHEMA = DATABASE() 
 		AND TABLE_NAME = 'users' 
 		AND COLUMN_NAME = 'api_key'`
-		
+
 		var count int
 		err := d.db.QueryRow(query).Scan(&count)
 		if err != nil {
 			return err
 		}
 		columnExists = count > 0
-		
+
 		if !columnExists {
 			_, err = d.db.Exec("ALTER TABLE users ADD COLUMN api_key VARCHAR(64) UNIQUE NULL")
 			return err
@@ -214,41 +214,41 @@ func (d *Database) migrateUsersTable() error {
 			return err
 		}
 		defer rows.Close()
-		
+
 		for rows.Next() {
 			var cid int
 			var name, dataType string
 			var notNull, pk int
 			var defaultValue interface{}
-			
+
 			err := rows.Scan(&cid, &name, &dataType, &notNull, &defaultValue, &pk)
 			if err != nil {
 				return err
 			}
-			
+
 			if name == "api_key" {
 				columnExists = true
 				break
 			}
 		}
-		
+
 		if !columnExists {
 			_, err = d.db.Exec("ALTER TABLE users ADD COLUMN api_key TEXT UNIQUE NULL")
 			return err
 		}
 	}
-	
+
 	return nil
 }
 
 func (d *Database) createSessionsTable() error {
 	// Check if we're using MySQL or SQLite
 	var query string
-	
+
 	// Get database driver name
 	driver := d.db.Driver()
 	driverName := fmt.Sprintf("%T", driver)
-	
+
 	if contains(driverName, "mysql") {
 		query = `
 		CREATE TABLE IF NOT EXISTS session_metadata (
@@ -265,6 +265,7 @@ func (d *Database) createSessionsTable() error {
 			proxy_port INT DEFAULT 0,
 			proxy_username VARCHAR(255) DEFAULT '',
 			proxy_password VARCHAR(255) DEFAULT '',
+			enabled BOOLEAN DEFAULT TRUE,
 			user_id INT NOT NULL DEFAULT 1,
 			created_at BIGINT NOT NULL,
 			INDEX idx_phone (phone),
@@ -288,6 +289,7 @@ func (d *Database) createSessionsTable() error {
 			proxy_port INTEGER DEFAULT 0,
 			proxy_username TEXT DEFAULT '',
 			proxy_password TEXT DEFAULT '',
+			enabled BOOLEAN DEFAULT 1,
 			user_id INTEGER NOT NULL DEFAULT 1,
 			created_at INTEGER NOT NULL
 		)`
@@ -300,11 +302,11 @@ func (d *Database) createSessionsTable() error {
 func (d *Database) createLogsTable() error {
 	// Check if we're using MySQL or SQLite
 	var query string
-	
+
 	// Get database driver name
 	driver := d.db.Driver()
 	driverName := fmt.Sprintf("%T", driver)
-	
+
 	if contains(driverName, "mysql") {
 		query = `
 		CREATE TABLE IF NOT EXISTS logs (
@@ -333,26 +335,26 @@ func (d *Database) createLogsTable() error {
 			metadata TEXT,
 			created_at INTEGER NOT NULL
 		)`
-		
+
 		// Create indexes for SQLite
 		_, err := d.db.Exec(query)
 		if err != nil {
 			return err
 		}
-		
+
 		indexes := []string{
 			"CREATE INDEX IF NOT EXISTS idx_logs_level ON logs(level)",
 			"CREATE INDEX IF NOT EXISTS idx_logs_component ON logs(component)",
 			"CREATE INDEX IF NOT EXISTS idx_logs_session_id ON logs(session_id)",
 			"CREATE INDEX IF NOT EXISTS idx_logs_created_at ON logs(created_at)",
 		}
-		
+
 		for _, indexQuery := range indexes {
 			if _, err := d.db.Exec(indexQuery); err != nil {
 				return err
 			}
 		}
-		
+
 		return nil
 	}
 
@@ -362,7 +364,7 @@ func (d *Database) createLogsTable() error {
 
 // Helper function to check if string contains substring
 func contains(s, substr string) bool {
-	return len(s) >= len(substr) && (s == substr || len(s) > len(substr) && 
+	return len(s) >= len(substr) && (s == substr || len(s) > len(substr) &&
 		(hasPrefix(s, substr) || hasSuffix(s, substr) || indexString(s, substr) >= 0))
 }
 
@@ -387,7 +389,7 @@ func (d *Database) createContactGroupsTable() error {
 	var query string
 	driver := d.db.Driver()
 	driverName := fmt.Sprintf("%T", driver)
-	
+
 	if contains(driverName, "mysql") {
 		query = `
 		CREATE TABLE IF NOT EXISTS contact_groups (
@@ -412,23 +414,23 @@ func (d *Database) createContactGroupsTable() error {
 			created_at INTEGER NOT NULL,
 			updated_at INTEGER
 		)`
-		
+
 		_, err := d.db.Exec(query)
 		if err != nil {
 			return err
 		}
-		
+
 		indexes := []string{
 			"CREATE INDEX IF NOT EXISTS idx_contact_groups_name ON contact_groups(name)",
 			"CREATE INDEX IF NOT EXISTS idx_contact_groups_is_active ON contact_groups(is_active)",
 		}
-		
+
 		for _, indexQuery := range indexes {
 			if _, err := d.db.Exec(indexQuery); err != nil {
 				return err
 			}
 		}
-		
+
 		return nil
 	}
 
@@ -440,7 +442,7 @@ func (d *Database) createContactsTable() error {
 	var query string
 	driver := d.db.Driver()
 	driverName := fmt.Sprintf("%T", driver)
-	
+
 	if contains(driverName, "mysql") {
 		query = `
 		CREATE TABLE IF NOT EXISTS contacts (
@@ -482,12 +484,12 @@ func (d *Database) createContactsTable() error {
 			updated_at INTEGER,
 			FOREIGN KEY (group_id) REFERENCES contact_groups(id) ON DELETE SET NULL
 		)`
-		
+
 		_, err := d.db.Exec(query)
 		if err != nil {
 			return err
 		}
-		
+
 		indexes := []string{
 			"CREATE INDEX IF NOT EXISTS idx_contacts_phone ON contacts(phone)",
 			"CREATE INDEX IF NOT EXISTS idx_contacts_name ON contacts(name)",
@@ -495,13 +497,13 @@ func (d *Database) createContactsTable() error {
 			"CREATE INDEX IF NOT EXISTS idx_contacts_is_active ON contacts(is_active)",
 			"CREATE INDEX IF NOT EXISTS idx_contacts_email ON contacts(email)",
 		}
-		
+
 		for _, indexQuery := range indexes {
 			if _, err := d.db.Exec(indexQuery); err != nil {
 				return err
 			}
 		}
-		
+
 		return nil
 	}
 
@@ -513,7 +515,7 @@ func (d *Database) createMessageTemplatesTable() error {
 	var query string
 	driver := d.db.Driver()
 	driverName := fmt.Sprintf("%T", driver)
-	
+
 	if contains(driverName, "mysql") {
 		query = `
 		CREATE TABLE IF NOT EXISTS message_templates (
@@ -550,25 +552,25 @@ func (d *Database) createMessageTemplatesTable() error {
 			created_at INTEGER NOT NULL,
 			updated_at INTEGER
 		)`
-		
+
 		_, err := d.db.Exec(query)
 		if err != nil {
 			return err
 		}
-		
+
 		indexes := []string{
 			"CREATE INDEX IF NOT EXISTS idx_message_templates_name ON message_templates(name)",
 			"CREATE INDEX IF NOT EXISTS idx_message_templates_type ON message_templates(type)",
 			"CREATE INDEX IF NOT EXISTS idx_message_templates_category ON message_templates(category)",
 			"CREATE INDEX IF NOT EXISTS idx_message_templates_is_active ON message_templates(is_active)",
 		}
-		
+
 		for _, indexQuery := range indexes {
 			if _, err := d.db.Exec(indexQuery); err != nil {
 				return err
 			}
 		}
-		
+
 		return nil
 	}
 
@@ -580,7 +582,7 @@ func (d *Database) createCampaignsTable() error {
 	var query string
 	driver := d.db.Driver()
 	driverName := fmt.Sprintf("%T", driver)
-	
+
 	if contains(driverName, "mysql") {
 		query = `
 		CREATE TABLE IF NOT EXISTS campaigns (
@@ -638,12 +640,12 @@ func (d *Database) createCampaignsTable() error {
 			FOREIGN KEY (template_id) REFERENCES message_templates(id) ON DELETE CASCADE,
 			FOREIGN KEY (group_id) REFERENCES contact_groups(id) ON DELETE SET NULL
 		)`
-		
+
 		_, err := d.db.Exec(query)
 		if err != nil {
 			return err
 		}
-		
+
 		indexes := []string{
 			"CREATE INDEX IF NOT EXISTS idx_campaigns_name ON campaigns(name)",
 			"CREATE INDEX IF NOT EXISTS idx_campaigns_status ON campaigns(status)",
@@ -651,13 +653,13 @@ func (d *Database) createCampaignsTable() error {
 			"CREATE INDEX IF NOT EXISTS idx_campaigns_template_id ON campaigns(template_id)",
 			"CREATE INDEX IF NOT EXISTS idx_campaigns_group_id ON campaigns(group_id)",
 		}
-		
+
 		for _, indexQuery := range indexes {
 			if _, err := d.db.Exec(indexQuery); err != nil {
 				return err
 			}
 		}
-		
+
 		return nil
 	}
 
@@ -669,7 +671,7 @@ func (d *Database) createCampaignMessagesTable() error {
 	var query string
 	driver := d.db.Driver()
 	driverName := fmt.Sprintf("%T", driver)
-	
+
 	if contains(driverName, "mysql") {
 		query = `
 		CREATE TABLE IF NOT EXISTS campaign_messages (
@@ -704,25 +706,25 @@ func (d *Database) createCampaignMessagesTable() error {
 			FOREIGN KEY (campaign_id) REFERENCES campaigns(id) ON DELETE CASCADE,
 			FOREIGN KEY (contact_id) REFERENCES contacts(id) ON DELETE CASCADE
 		)`
-		
+
 		_, err := d.db.Exec(query)
 		if err != nil {
 			return err
 		}
-		
+
 		indexes := []string{
 			"CREATE INDEX IF NOT EXISTS idx_campaign_messages_campaign_id ON campaign_messages(campaign_id)",
 			"CREATE INDEX IF NOT EXISTS idx_campaign_messages_contact_id ON campaign_messages(contact_id)",
 			"CREATE INDEX IF NOT EXISTS idx_campaign_messages_status ON campaign_messages(status)",
 			"CREATE INDEX IF NOT EXISTS idx_campaign_messages_sent_at ON campaign_messages(sent_at)",
 		}
-		
+
 		for _, indexQuery := range indexes {
 			if _, err := d.db.Exec(indexQuery); err != nil {
 				return err
 			}
 		}
-		
+
 		return nil
 	}
 
@@ -734,7 +736,7 @@ func (d *Database) createAutoRepliesTable() error {
 	var query string
 	driver := d.db.Driver()
 	driverName := fmt.Sprintf("%T", driver)
-	
+
 	if contains(driverName, "mysql") {
 		query = `
 		CREATE TABLE IF NOT EXISTS auto_replies (
@@ -785,25 +787,25 @@ func (d *Database) createAutoRepliesTable() error {
 			created_at INTEGER NOT NULL,
 			updated_at INTEGER
 		)`
-		
+
 		_, err := d.db.Exec(query)
 		if err != nil {
 			return err
 		}
-		
+
 		indexes := []string{
 			"CREATE INDEX IF NOT EXISTS idx_auto_replies_session_id ON auto_replies(session_id)",
 			"CREATE INDEX IF NOT EXISTS idx_auto_replies_trigger_type ON auto_replies(trigger_type)",
 			"CREATE INDEX IF NOT EXISTS idx_auto_replies_is_active ON auto_replies(is_active)",
 			"CREATE INDEX IF NOT EXISTS idx_auto_replies_priority ON auto_replies(priority)",
 		}
-		
+
 		for _, indexQuery := range indexes {
 			if _, err := d.db.Exec(indexQuery); err != nil {
 				return err
 			}
 		}
-		
+
 		return nil
 	}
 
@@ -815,7 +817,7 @@ func (d *Database) createAutoReplyLogsTable() error {
 	var query string
 	driver := d.db.Driver()
 	driverName := fmt.Sprintf("%T", driver)
-	
+
 	if contains(driverName, "mysql") {
 		query = `
 		CREATE TABLE IF NOT EXISTS auto_reply_logs (
@@ -848,25 +850,25 @@ func (d *Database) createAutoReplyLogsTable() error {
 			created_at INTEGER NOT NULL,
 			FOREIGN KEY (auto_reply_id) REFERENCES auto_replies(id) ON DELETE CASCADE
 		)`
-		
+
 		_, err := d.db.Exec(query)
 		if err != nil {
 			return err
 		}
-		
+
 		indexes := []string{
 			"CREATE INDEX IF NOT EXISTS idx_auto_reply_logs_auto_reply_id ON auto_reply_logs(auto_reply_id)",
 			"CREATE INDEX IF NOT EXISTS idx_auto_reply_logs_session_id ON auto_reply_logs(session_id)",
 			"CREATE INDEX IF NOT EXISTS idx_auto_reply_logs_contact_phone ON auto_reply_logs(contact_phone)",
 			"CREATE INDEX IF NOT EXISTS idx_auto_reply_logs_created_at ON auto_reply_logs(created_at)",
 		}
-		
+
 		for _, indexQuery := range indexes {
 			if _, err := d.db.Exec(indexQuery); err != nil {
 				return err
 			}
 		}
-		
+
 		return nil
 	}
 
