@@ -1013,6 +1013,9 @@ func (s *WhatsAppService) SendMessage(sessionID string, req *models.SendMessageR
 		return "", fmt.Errorf("invalid recipient JID: %v", err)
 	}
 
+	// Convert to non-device JID for message sending
+	jid = jid.ToNonAD()
+
 	// Send message
 	msg := &waProto.Message{
 		Conversation: proto.String(req.Message),
@@ -1067,6 +1070,9 @@ func (s *WhatsAppService) SendLocation(sessionID string, req *models.SendLocatio
 	if err != nil {
 		return "", fmt.Errorf("invalid recipient JID: %v", err)
 	}
+
+	// Convert to non-device JID for message sending
+	jid = jid.ToNonAD()
 
 	// Create location message
 	msg := &waProto.Message{
@@ -1123,6 +1129,9 @@ func (s *WhatsAppService) SendAttachment(sessionID string, req *models.SendFileR
 	if err != nil {
 		return "", fmt.Errorf("invalid recipient JID: %v", err)
 	}
+
+	// Convert to non-device JID for message sending
+	jid = jid.ToNonAD()
 
 	// Decode base64 file
 	fileData, err := base64.StdEncoding.DecodeString(req.File)
@@ -1197,6 +1206,9 @@ func (s *WhatsAppService) SendFileFromURL(sessionID string, req *models.SendFile
 		return "", fmt.Errorf("invalid recipient JID: %v", err)
 	}
 
+	// Convert to non-device JID for message sending
+	jid = jid.ToNonAD()
+
 	// Download file from URL
 	fileData, contentType, filename, err := s.downloadFile(req.URL)
 	if err != nil {
@@ -1248,6 +1260,9 @@ func (s *WhatsAppService) SendImage(sessionID string, req *models.SendImageReque
 	if err != nil {
 		return "", fmt.Errorf("invalid recipient JID: %v", err)
 	}
+
+	// Convert to non-device JID for message sending
+	jid = jid.ToNonAD()
 
 	// Decode base64 image
 	imageData, err := base64.StdEncoding.DecodeString(req.Image)
