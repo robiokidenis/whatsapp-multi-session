@@ -229,6 +229,7 @@ func setupRoutes(
 	sessions.HandleFunc("/{sessionId}/name", sessionHandler.UpdateSessionName).Methods("PUT")
 	sessions.HandleFunc("/{sessionId}/auto-reply", sessionHandler.UpdateSessionAutoReply).Methods("PUT")
 	sessions.HandleFunc("/{sessionId}/proxy", sessionHandler.UpdateSessionProxy).Methods("PUT")
+	sessions.HandleFunc("/{sessionId}/enabled", sessionHandler.UpdateSessionEnabled).Methods("PUT")
 
 	// Message routes
 	sessions.HandleFunc("/{sessionId}/send", sessionHandler.SendMessage).Methods("POST")

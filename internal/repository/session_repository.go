@@ -46,8 +46,8 @@ func (r *SessionRepository) Create(session *models.SessionMetadata) error {
 	query := `
 		INSERT INTO session_metadata (id, phone, actual_phone, name, position, webhook_url, auto_reply_text, 
 		                             proxy_enabled, proxy_type, proxy_host, proxy_port, proxy_username, proxy_password,
-		                             user_id, created_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		                             enabled, user_id, created_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`
 	
 	// Convert proxy config to database fields
@@ -67,6 +67,7 @@ func (r *SessionRepository) Create(session *models.SessionMetadata) error {
 		proxyPort,
 		proxyUsername,
 		proxyPassword,
+		session.Enabled,
 		session.UserID,
 		session.CreatedAt.Unix(),
 	)
@@ -84,7 +85,7 @@ func (r *SessionRepository) GetByID(id string) (*models.SessionMetadata, error) 
 	query := `
 		SELECT id, phone, actual_phone, name, position, webhook_url, auto_reply_text,
 		       proxy_enabled, proxy_type, proxy_host, proxy_port, proxy_username, proxy_password,
-		       user_id, created_at
+		       enabled, user_id, created_at
 		FROM session_metadata
 		WHERE id = ?
 	`
@@ -109,6 +110,7 @@ func (r *SessionRepository) GetByID(id string) (*models.SessionMetadata, error) 
 		&proxyPort,
 		&proxyUsername,
 		&proxyPassword,
+		&session.Enabled,
 		&session.UserID,
 		&createdAtUnix,
 	)
@@ -139,7 +141,7 @@ func (r *SessionRepository) GetAll() ([]*models.SessionMetadata, error) {
 	query := `
 		SELECT id, phone, actual_phone, name, position, webhook_url, auto_reply_text,
 		       proxy_enabled, proxy_type, proxy_host, proxy_port, proxy_username, proxy_password,
-		       user_id, created_at
+		       enabled, user_id, created_at
 		FROM session_metadata
 		ORDER BY position ASC, created_at DESC
 	`
@@ -174,6 +176,7 @@ func (r *SessionRepository) GetAll() ([]*models.SessionMetadata, error) {
 			&proxyPort,
 			&proxyUsername,
 			&proxyPassword,
+			&session.Enabled,
 			&session.UserID,
 			&createdAtUnix,
 		)
@@ -203,7 +206,8 @@ func (r *SessionRepository) Update(session *models.SessionMetadata) error {
 	query := `
 		UPDATE session_metadata
 		SET phone = ?, actual_phone = ?, name = ?, position = ?, webhook_url = ?, auto_reply_text = ?,
-		    proxy_enabled = ?, proxy_type = ?, proxy_host = ?, proxy_port = ?, proxy_username = ?, proxy_password = ?
+		    proxy_enabled = ?, proxy_type = ?, proxy_host = ?, proxy_port = ?, proxy_username = ?, proxy_password = ?,
+		    enabled = ?
 		WHERE id = ? AND user_id = ?
 	`
 	
@@ -223,6 +227,7 @@ func (r *SessionRepository) Update(session *models.SessionMetadata) error {
 		proxyPort,
 		proxyUsername,
 		proxyPassword,
+		session.Enabled,
 		session.ID,
 		session.UserID,
 	)
@@ -265,6 +270,18 @@ func (r *SessionRepository) UpdateAutoReplyText(id string, autoReplyText *string
 	_, err := r.db.Exec(query, autoReplyText, id)
 	if err != nil {
 		return fmt.Errorf("failed to update auto reply text: %v", err)
+	}
+	
+	return nil
+}
+
+// UpdateSessionEnabled updates the enabled status of a session
+func (r *SessionRepository) UpdateSessionEnabled(id string, enabled bool) error {
+	query := `UPDATE session_metadata SET enabled = ? WHERE id = ?`
+	
+	_, err := r.db.Exec(query, enabled, id)
+	if err != nil {
+		return fmt.Errorf("failed to update session enabled status: %v", err)
 	}
 	
 	return nil
@@ -317,7 +334,7 @@ func (r *SessionRepository) GetByUserID(userID int) ([]*models.SessionMetadata, 
 	query := `
 		SELECT id, phone, actual_phone, name, position, webhook_url, auto_reply_text,
 		       proxy_enabled, proxy_type, proxy_host, proxy_port, proxy_username, proxy_password,
-		       user_id, created_at
+		       enabled, user_id, created_at
 		FROM session_metadata
 		WHERE user_id = ?
 		ORDER BY position ASC, created_at DESC
@@ -353,6 +370,7 @@ func (r *SessionRepository) GetByUserID(userID int) ([]*models.SessionMetadata, 
 			&proxyPort,
 			&proxyUsername,
 			&proxyPassword,
+			&session.Enabled,
 			&session.UserID,
 			&createdAtUnix,
 		)
@@ -383,7 +401,7 @@ func (r *SessionRepository) GetByIDAndUserID(id string, userID int) (*models.Ses
 	query := `
 		SELECT id, phone, actual_phone, name, position, webhook_url, auto_reply_text,
 		       proxy_enabled, proxy_type, proxy_host, proxy_port, proxy_username, proxy_password,
-		       user_id, created_at
+		       enabled, user_id, created_at
 		FROM session_metadata
 		WHERE id = ? AND user_id = ?
 	`
@@ -408,6 +426,7 @@ func (r *SessionRepository) GetByIDAndUserID(id string, userID int) (*models.Ses
 		&proxyPort,
 		&proxyUsername,
 		&proxyPassword,
+		&session.Enabled,
 		&session.UserID,
 		&createdAtUnix,
 	)

@@ -159,6 +159,7 @@ func (h *SessionHandler) CreateSession(w http.ResponseWriter, r *http.Request) {
 		WebhookURL:    session.WebhookURL,
 		AutoReplyText: session.AutoReplyText,
 		ProxyConfig:   session.ProxyConfig,
+		Enabled:       session.Enabled,
 		Connected:     session.Connected,
 		LoggedIn:      session.LoggedIn,
 	}
@@ -208,6 +209,7 @@ func (h *SessionHandler) GetSessions(w http.ResponseWriter, r *http.Request) {
 			WebhookURL:    session.WebhookURL,
 			AutoReplyText: session.AutoReplyText,
 			ProxyConfig:   session.ProxyConfig,
+			Enabled:       session.Enabled,
 			Connected:     session.Connected,
 			LoggedIn:      session.LoggedIn,
 		}
@@ -257,6 +259,7 @@ func (h *SessionHandler) GetSession(w http.ResponseWriter, r *http.Request) {
 		WebhookURL:    session.WebhookURL,
 		AutoReplyText: session.AutoReplyText,
 		ProxyConfig:   session.ProxyConfig,
+		Enabled:       session.Enabled,
 		Connected:     session.Connected,
 		LoggedIn:      session.LoggedIn,
 	}
@@ -273,6 +276,12 @@ func (h *SessionHandler) ConnectSession(w http.ResponseWriter, r *http.Request) 
 	userID, ok := r.Context().Value("user_id").(int)
 	if !ok {
 		http.Error(w, "User authentication required", http.StatusUnauthorized)
+		return
+	}
+
+	// Check if session is enabled
+	if err := h.checkSessionEnabled(sessionID); err != nil {
+		http.Error(w, err.Error(), http.StatusForbidden)
 		return
 	}
 
@@ -412,6 +421,12 @@ func (h *SessionHandler) SendMessage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Check if session is enabled
+	if err := h.checkSessionEnabled(sessionID); err != nil {
+		http.Error(w, err.Error(), http.StatusForbidden)
+		return
+	}
+
 	var req models.SendMessageRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, "Invalid request body", http.StatusBadRequest)
@@ -502,6 +517,12 @@ func (h *SessionHandler) SendAttachment(w http.ResponseWriter, r *http.Request) 
 
 	// Check user authentication and session ownership
 	if _, _, ok := h.getUserInfoAndCheckOwnership(w, r, sessionID); !ok {
+		return
+	}
+
+	// Check if session is enabled
+	if err := h.checkSessionEnabled(sessionID); err != nil {
+		http.Error(w, err.Error(), http.StatusForbidden)
 		return
 	}
 
@@ -1075,6 +1096,12 @@ func (h *SessionHandler) LoginSession(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Check if session is enabled
+	if err := h.checkSessionEnabled(sessionID); err != nil {
+		http.Error(w, err.Error(), http.StatusForbidden)
+		return
+	}
+
 	if err := h.whatsappService.LoginSession(sessionID); err != nil {
 		h.logger.Error("Failed to login session %s: %v", sessionID, err)
 		HandleError(w, err)
@@ -1190,11 +1217,7 @@ func (h *SessionHandler) UpdateSessionAutoReply(w http.ResponseWriter, r *http.R
 		return
 	}
 
-	updateReq := &models.UpdateSessionRequest{
-		AutoReplyText: req.AutoReplyText,
-	}
-
-	if err := h.whatsappService.UpdateSession(sessionID, updateReq); err != nil {
+	if err := h.whatsappService.UpdateSessionAutoReply(sessionID, req.AutoReplyText); err != nil {
 		h.logger.Error("Failed to update session auto reply %s: %v", sessionID, err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -1202,6 +1225,56 @@ func (h *SessionHandler) UpdateSessionAutoReply(w http.ResponseWriter, r *http.R
 
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(map[string]string{"message": "Session auto reply updated successfully"})
+}
+
+// checkSessionEnabled checks if a session is enabled before allowing operations
+func (h *SessionHandler) checkSessionEnabled(sessionID string) error {
+	session, exists := h.whatsappService.GetSession(sessionID)
+	if !exists {
+		return fmt.Errorf("session %s not found", sessionID)
+	}
+	
+	if !session.Enabled {
+		return fmt.Errorf("session %s is disabled and cannot perform operations", sessionID)
+	}
+	
+	return nil
+}
+
+// UpdateSessionEnabled updates the enabled status for a session
+func (h *SessionHandler) UpdateSessionEnabled(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	sessionID := vars["sessionId"]
+
+	// Check user authentication and session ownership
+	if _, _, ok := h.getUserInfoAndCheckOwnership(w, r, sessionID); !ok {
+		return
+	}
+
+	var req struct {
+		Enabled bool `json:"enabled"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	if err := h.whatsappService.UpdateSessionEnabled(sessionID, req.Enabled); err != nil {
+		h.logger.Error("Failed to update session enabled status %s: %v", sessionID, err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	action := "disabled"
+	if req.Enabled {
+		action = "enabled"
+	}
+
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]string{
+		"message": fmt.Sprintf("Session %s successfully", action),
+		"enabled": fmt.Sprintf("%v", req.Enabled),
+	})
 }
 
 // UpdateSessionProxy handles updating session proxy configuration

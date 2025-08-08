@@ -26,6 +26,7 @@ type Session struct {
 	WebhookURL    string                         `json:"webhook_url"`
 	AutoReplyText *string                        `json:"auto_reply_text,omitempty"` // Auto reply text, nullable
 	ProxyConfig   *ProxyConfig                   `json:"proxy_config,omitempty"`    // Proxy configuration, nullable
+	Enabled       bool                           `json:"enabled"`                   // Session enabled/disabled status
 	Client        *whatsmeow.Client              `json:"-"`
 	QRChan        <-chan whatsmeow.QRChannelItem `json:"-"`
 	Connected     bool                           `json:"connected"`
@@ -43,6 +44,7 @@ type SessionMetadata struct {
 	WebhookURL    string       `json:"webhook_url"`
 	AutoReplyText *string      `json:"auto_reply_text,omitempty"` // Auto reply text, nullable
 	ProxyConfig   *ProxyConfig `json:"proxy_config,omitempty"`    // Proxy configuration, nullable
+	Enabled       bool         `json:"enabled"`                   // Session enabled/disabled status
 	UserID        int          `json:"user_id"`
 	CreatedAt     time.Time    `json:"created_at"`
 }
@@ -55,6 +57,7 @@ type CreateSessionRequest struct {
 	WebhookURL    string       `json:"webhook_url,omitempty"`
 	AutoReplyText *string      `json:"auto_reply_text,omitempty"` // Auto reply text, nullable
 	ProxyConfig   *ProxyConfig `json:"proxy_config,omitempty"`    // Proxy configuration, nullable
+	Enabled       bool         `json:"enabled,omitempty"`         // Session enabled status, defaults to true
 }
 
 // UpdateSessionRequest represents session update request
@@ -64,6 +67,7 @@ type UpdateSessionRequest struct {
 	Position      int          `json:"position,omitempty"`
 	AutoReplyText *string      `json:"auto_reply_text,omitempty"` // Auto reply text, nullable
 	ProxyConfig   *ProxyConfig `json:"proxy_config,omitempty"`    // Proxy configuration, nullable
+	Enabled       *bool        `json:"enabled,omitempty"`         // Session enabled status, nullable for explicit updates
 }
 
 // SessionResponse represents session response
@@ -76,6 +80,7 @@ type SessionResponse struct {
 	WebhookURL    string       `json:"webhook_url,omitempty"`
 	AutoReplyText *string      `json:"auto_reply_text,omitempty"` // Auto reply text, nullable
 	ProxyConfig   *ProxyConfig `json:"proxy_config,omitempty"`    // Proxy configuration, nullable
+	Enabled       bool         `json:"enabled"`                   // Session enabled/disabled status
 	Connected     bool         `json:"connected"`
 	LoggedIn      bool         `json:"logged_in"`
 	QRCode        string       `json:"qr_code,omitempty"`

@@ -263,7 +263,12 @@ func (s *WhatsAppService) CreateSession(req *models.CreateSessionRequest, userID
 	client.EnableAutoReconnect = true
 	client.AutoTrustIdentity = true
 
-	// Create session
+	// Create session - default enabled to true unless specified otherwise
+	enabled := true
+	if req.Enabled {
+		enabled = req.Enabled
+	}
+	
 	session := &models.Session{
 		ID:            sessionID,
 		Phone:         phoneForDisplay,
@@ -272,6 +277,7 @@ func (s *WhatsAppService) CreateSession(req *models.CreateSessionRequest, userID
 		WebhookURL:    req.WebhookURL,
 		AutoReplyText: req.AutoReplyText,
 		ProxyConfig:   req.ProxyConfig,
+		Enabled:       enabled,
 		Client:        client,
 		Connected:     false,
 		LoggedIn:      false,
@@ -293,6 +299,7 @@ func (s *WhatsAppService) CreateSession(req *models.CreateSessionRequest, userID
 		WebhookURL:    req.WebhookURL,
 		AutoReplyText: req.AutoReplyText,
 		ProxyConfig:   req.ProxyConfig,
+		Enabled:       enabled,
 		UserID:        userID,
 		CreatedAt:     time.Now(),
 	}
@@ -593,6 +600,9 @@ func (s *WhatsAppService) UpdateSession(sessionID string, req *models.UpdateSess
 	if req.ProxyConfig != nil {
 		session.ProxyConfig = req.ProxyConfig
 	}
+	if req.Enabled != nil {
+		session.Enabled = *req.Enabled
+	}
 
 	// Update in database with correct user_id
 	metadata := &models.SessionMetadata{
@@ -604,10 +614,45 @@ func (s *WhatsAppService) UpdateSession(sessionID string, req *models.UpdateSess
 		WebhookURL:    session.WebhookURL,
 		AutoReplyText: session.AutoReplyText,
 		ProxyConfig:   session.ProxyConfig,
+		Enabled:       session.Enabled,
 		UserID:        existingMetadata.UserID, // Use the existing user_id from database
 	}
 
 	return s.sessionRepo.Update(metadata)
+}
+
+// UpdateSessionAutoReply updates only the auto-reply text for a session
+func (s *WhatsAppService) UpdateSessionAutoReply(sessionID string, autoReplyText *string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	session, exists := s.sessions[sessionID]
+	if !exists {
+		return models.NewNotFoundError("session %s not found", sessionID)
+	}
+
+	// Update in-memory session
+	session.AutoReplyText = autoReplyText
+
+	// Update only the auto-reply text in database using the dedicated method
+	return s.sessionRepo.UpdateAutoReplyText(sessionID, autoReplyText)
+}
+
+// UpdateSessionEnabled updates only the enabled status for a session
+func (s *WhatsAppService) UpdateSessionEnabled(sessionID string, enabled bool) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	session, exists := s.sessions[sessionID]
+	if !exists {
+		return models.NewNotFoundError("session %s not found", sessionID)
+	}
+
+	// Update in-memory session
+	session.Enabled = enabled
+
+	// Update only the enabled status in database using the dedicated method
+	return s.sessionRepo.UpdateSessionEnabled(sessionID, enabled)
 }
 
 // setupEventHandlers sets up event handlers for a session
@@ -785,6 +830,7 @@ func (s *WhatsAppService) loadExistingSessions() error {
 			WebhookURL:    metadata.WebhookURL,
 			AutoReplyText: metadata.AutoReplyText,
 			ProxyConfig:   metadata.ProxyConfig,
+			Enabled:       metadata.Enabled,
 			Client:        client,
 			Connected:     false,
 			LoggedIn:      false,

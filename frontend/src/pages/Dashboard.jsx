@@ -114,6 +114,17 @@ const Dashboard = () => {
     }
   };
 
+  const toggleSessionEnabled = async (sessionId, enabled) => {
+    try {
+      await axios.put(`/api/sessions/${sessionId}/enabled`, { enabled });
+      showSuccess(`Session ${enabled ? 'enabled' : 'disabled'} successfully`);
+      await loadSessions();
+    } catch (error) {
+      console.error("Error toggling session:", error);
+      showError(`Failed to ${enabled ? 'enable' : 'disable'} session`);
+    }
+  };
+
 
   const handleSelectSession = (sessionId) => {
     setSelectedSessions((prev) =>
@@ -431,6 +442,7 @@ const Dashboard = () => {
                       onLogout={logoutSession}
                       onDelete={deleteSession}
                       onEdit={openEditModal}
+                      onToggleEnabled={toggleSessionEnabled}
                       isSelected={isSelected}
                       onSelect={handleSelectSession}
                       showFilters={showFilters}

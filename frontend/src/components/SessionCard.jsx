@@ -8,6 +8,7 @@ const SessionCard = ({
   onLogout,
   onDelete,
   onEdit,
+  onToggleEnabled,
   isSelected = false,
   onSelect = null,
   showFilters = false,
@@ -20,13 +21,28 @@ const SessionCard = ({
   return (
     <div
       className={`group relative bg-white rounded-3xl border shadow-lg hover:shadow-2xl transition-all duration-500 overflow-hidden backdrop-blur-sm h-[300px] flex flex-col ${
-        isSelected
-          ? "border-primary-400 bg-gradient-to-br from-primary-50 via-white to-primary-25 ring-2 ring-primary-300 shadow-primary-200/50 transform scale-[1.02]"
-          : "border-gray-200/60 hover:border-primary-200 hover:shadow-primary-100/30 hover:transform hover:scale-[1.01]"
+        !session.enabled 
+          ? "opacity-60 grayscale border-gray-300 bg-gray-50" 
+          : isSelected
+            ? "border-primary-400 bg-gradient-to-br from-primary-50 via-white to-primary-25 ring-2 ring-primary-300 shadow-primary-200/50 transform scale-[1.02]"
+            : "border-gray-200/60 hover:border-primary-200 hover:shadow-primary-100/30 hover:transform hover:scale-[1.01]"
       }`}
     >
       {/* Subtle Background Pattern */}
       <div className="absolute inset-0 bg-gradient-to-br from-transparent via-gray-50/30 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
+      
+      {/* Disabled Indicator */}
+      {!session.enabled && (
+        <div className="absolute top-4 left-4 z-20">
+          <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-700 border border-gray-300">
+            <svg className="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728L5.636 5.636m12.728 12.728L5.636 5.636" />
+            </svg>
+            Disabled
+          </span>
+        </div>
+      )}
+      
       {/* Clean Top Corner Actions */}
       <div className="absolute top-4 right-4 z-20 flex items-center gap-2">
         {/* Selection Checkbox */}
@@ -90,6 +106,35 @@ const SessionCard = ({
                   Logout Session
                 </button>
               )}
+              
+              {/* Enable/Disable Toggle */}
+              <button
+                onClick={() => {
+                  onToggleEnabled(session.id, !session.enabled);
+                  setShowActions(false);
+                }}
+                className={`w-full px-4 py-2.5 text-left text-sm flex items-center transition-colors ${
+                  session.enabled 
+                    ? 'text-amber-600 hover:bg-amber-50' 
+                    : 'text-green-600 hover:bg-green-50'
+                }`}
+              >
+                {session.enabled ? (
+                  <>
+                    <svg className="w-4 h-4 mr-3 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728L5.636 5.636m12.728 12.728L5.636 5.636" />
+                    </svg>
+                    Disable Session
+                  </>
+                ) : (
+                  <>
+                    <svg className="w-4 h-4 mr-3 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    Enable Session
+                  </>
+                )}
+              </button>
               
               <div className="border-t border-gray-100 my-1"></div>
               
