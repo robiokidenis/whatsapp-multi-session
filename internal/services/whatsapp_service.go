@@ -1541,25 +1541,13 @@ func (s *WhatsAppService) GetGroups(sessionID string) ([]map[string]interface{},
 
 // sendWebhook sends incoming message data to configured webhook URL
 func (s *WhatsAppService) sendWebhook(session *models.Session, evt *events.Message) {
-	// Get sender's contact info for name
+	// Get sender name from push name (most reliable method)
 	senderName := "Unknown"
-	
-	// Try to get contact info from WhatsApp store
-	if contactInfo, err := session.Client.Store.Contacts.GetContact(context.Background(), evt.Info.Sender); err == nil && contactInfo != nil {
-		senderName = s.getContactName(contactInfo)
-		s.logger.Debug("Got contact name from store for %s: %s", evt.Info.Sender.User, senderName)
-	} else {
-		s.logger.Debug("Failed to get contact from store for %s: %v", evt.Info.Sender.User, err)
-		
-		// Fallback 1: Use push name from the message event
-		if evt.Info.PushName != "" {
-			senderName = evt.Info.PushName
-			s.logger.Debug("Using push name for %s: %s", evt.Info.Sender.User, senderName)
-		} else if evt.Info.Sender.User != "" {
-			// Fallback 2: Use the phone number part as name
-			senderName = evt.Info.Sender.User
-			s.logger.Debug("Using phone number as name for %s: %s", evt.Info.Sender.User, senderName)
-		}
+	if evt.Info.PushName != "" {
+		senderName = evt.Info.PushName
+	} else if evt.Info.Sender.User != "" {
+		// Fallback to phone number if no push name
+		senderName = evt.Info.Sender.User
 	}
 	
 	// Create webhook message
@@ -1853,6 +1841,10 @@ func (s *WhatsAppService) GetConversations(sessionID string) ([]*models.Conversa
 
 // getContactName returns the best available name for a contact
 func (s *WhatsAppService) getContactName(contact types.ContactInfo) string {
+	// Debug log the contact info we received
+	s.logger.Debug("Contact info - FullName: '%s', BusinessName: '%s', PushName: '%s'", 
+		contact.FullName, contact.BusinessName, contact.PushName)
+	
 	// Priority: FullName > BusinessName > PushName > "Unknown"
 	if contact.FullName != "" {
 		return contact.FullName
