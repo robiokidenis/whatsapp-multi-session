@@ -1148,11 +1148,7 @@ func (h *SessionHandler) UpdateSessionWebhook(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	updateReq := &models.UpdateSessionRequest{
-		WebhookURL: req.WebhookURL,
-	}
-
-	if err := h.whatsappService.UpdateSession(sessionID, updateReq); err != nil {
+	if err := h.whatsappService.UpdateSessionWebhook(sessionID, req.WebhookURL); err != nil {
 		h.logger.Error("Failed to update session webhook %s: %v", sessionID, err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
