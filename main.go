@@ -36,7 +36,7 @@ func main() {
 		Password: cfg.MySQLPassword,
 		Database: cfg.MySQLDatabase,
 	}
-	
+
 	db, err := repository.NewDatabase(dbConfig)
 	if err != nil {
 		log.Fatalf("Failed to connect to database: %v", err)
@@ -57,7 +57,7 @@ func main() {
 	autoReplyRepo := repository.NewAutoReplyRepository(db.DB())
 	analyticsRepo := repository.NewAnalyticsRepository(db.DB())
 	messageRepo := repository.NewMessageRepository(db.DB())
-	
+
 	var logRepo *repository.LogRepository
 	// Setup database logging only if enabled
 	if cfg.EnableDatabaseLog {
@@ -111,11 +111,11 @@ func main() {
 
 	// Setup routes
 	router := setupRoutes(
-		authHandler, 
-		sessionHandler, 
-		adminHandler, 
-		mediaHandler, 
-		logHandler, 
+		authHandler,
+		sessionHandler,
+		adminHandler,
+		mediaHandler,
+		logHandler,
 		contactHandler,
 		contactGroupHandler,
 		nil, // templateHandler temporarily disabled
@@ -191,7 +191,7 @@ func setupRoutes(
 	authProtected.HandleFunc("/api-key", authHandler.GenerateAPIKey).Methods("POST")
 	authProtected.HandleFunc("/api-key", authHandler.RevokeAPIKey).Methods("DELETE")
 	authProtected.HandleFunc("/api-key", authHandler.GetAPIKeyInfo).Methods("GET")
-	
+
 	// Health check
 	api.HandleFunc("/health", healthHandler).Methods("GET")
 
@@ -294,18 +294,18 @@ func setupRoutes(
 	admin.HandleFunc("/users/{id}", adminHandler.GetUser).Methods("GET")
 	admin.HandleFunc("/users/{id}", adminHandler.UpdateUser).Methods("PUT")
 	admin.HandleFunc("/users/{id}", adminHandler.DeleteUser).Methods("DELETE")
-	
+
 	// Admin API key management
 	admin.HandleFunc("/users/{userId}/api-key", authHandler.AdminGenerateAPIKey).Methods("POST")
 	admin.HandleFunc("/users/{userId}/api-key", authHandler.AdminRevokeAPIKey).Methods("DELETE")
-	
+
 	// Log status endpoint (always available)
 	admin.HandleFunc("/logs/status", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		status := map[string]interface{}{
 			"database_logging_enabled": cfg.EnableDatabaseLog,
 			"console_logging_enabled":  cfg.EnableLogging,
-			"log_level":               cfg.LogLevel,
+			"log_level":                cfg.LogLevel,
 		}
 		json.NewEncoder(w).Encode(status)
 	}).Methods("GET")
@@ -318,7 +318,7 @@ func setupRoutes(
 		admin.HandleFunc("/logs/cleanup/{days}", logHandler.DeleteOldLogs).Methods("DELETE")
 		admin.HandleFunc("/logs/clear", logHandler.ClearAllLogs).Methods("DELETE")
 	}
-	
+
 	// User registration (admin only)
 	auth_admin := api.PathPrefix("/auth").Subrouter()
 	auth_admin.Use(middleware.FlexibleAuthMiddleware(cfg.JWTSecret, userService))
@@ -347,102 +347,9 @@ func healthHandler(w http.ResponseWriter, r *http.Request) {
 func frontendDisabledHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.WriteHeader(http.StatusOK)
-	
-	html := `<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>WhatsApp Multi-Session - Frontend Disabled</title>
-    <style>
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', sans-serif;
-            margin: 0;
-            padding: 0;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            min-height: 100vh;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
-        .container {
-            background: white;
-            border-radius: 12px;
-            padding: 40px;
-            text-align: center;
-            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
-            max-width: 500px;
-            margin: 20px;
-        }
-        .icon {
-            font-size: 64px;
-            margin-bottom: 20px;
-            color: #667eea;
-        }
-        h1 {
-            color: #333;
-            margin: 0 0 16px 0;
-            font-size: 28px;
-            font-weight: 600;
-        }
-        p {
-            color: #666;
-            font-size: 16px;
-            line-height: 1.6;
-            margin: 0 0 24px 0;
-        }
-        .api-info {
-            background: #f8f9ff;
-            border: 1px solid #e1e5f7;
-            border-radius: 8px;
-            padding: 20px;
-            margin: 20px 0;
-        }
-        .api-info h3 {
-            color: #333;
-            margin: 0 0 12px 0;
-            font-size: 16px;
-            font-weight: 600;
-        }
-        .api-info code {
-            background: #667eea;
-            color: white;
-            padding: 2px 6px;
-            border-radius: 4px;
-            font-size: 14px;
-        }
-        .footer {
-            margin-top: 30px;
-            padding-top: 20px;
-            border-top: 1px solid #eee;
-            color: #999;
-            font-size: 14px;
-        }
-    </style>
-</head>
-<body>
-    <div class="container">
-        <div class="icon">🚫</div>
-        <h1>Frontend Disabled</h1>
-        <p>The web interface for this WhatsApp Multi-Session service has been disabled by the administrator.</p>
-        
-        <div class="api-info">
-            <h3>📡 API Access Available</h3>
-            <p>You can still access all functionality through the REST API endpoints:</p>
-            <p><code>/api/sessions</code> - Session management</p>
-            <p><code>/api/send</code> - Send messages</p>
-            <p><code>/api/auth</code> - Authentication</p>
-        </div>
-        
-        <p>To enable the web interface, set the <strong>ENABLE_FRONTEND=true</strong> environment variable and restart the service.</p>
-        
-        <div class="footer">
-            WhatsApp Multi-Session API Server
-        </div>
-    </div>
-</body>
-</html>`
-	
+
+	html := `its working`
+
 	fmt.Fprint(w, html)
 }
 
