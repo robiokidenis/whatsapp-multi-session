@@ -5,7 +5,13 @@ const CreateSessionModal = ({ isOpen, onClose, onSuccess }) => {
   const [formData, setFormData] = useState({
     phone: '',
     name: '',
-    autoReplyText: ''
+    autoReplyText: '',
+    proxyEnabled: false,
+    proxyType: 'http',
+    proxyHost: '',
+    proxyPort: '',
+    proxyUsername: '',
+    proxyPassword: ''
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -16,14 +22,35 @@ const CreateSessionModal = ({ isOpen, onClose, onSuccess }) => {
     setError('');
 
     try {
+      // Build proxy config object
+      const proxyConfig = formData.proxyEnabled ? {
+        enabled: true,
+        type: formData.proxyType,
+        host: formData.proxyHost,
+        port: parseInt(formData.proxyPort) || 0,
+        username: formData.proxyUsername,
+        password: formData.proxyPassword
+      } : null;
+
       const response = await axios.post('/api/sessions', {
         phone: formData.phone || '',
         name: formData.name,
         auto_reply_text: formData.autoReplyText || null,
+        proxy_config: proxyConfig,
       });
 
       if (response.data.success) {
-        setFormData({ phone: '', name: '', autoReplyText: '' });
+        setFormData({ 
+          phone: '', 
+          name: '', 
+          autoReplyText: '',
+          proxyEnabled: false,
+          proxyType: 'http',
+          proxyHost: '',
+          proxyPort: '',
+          proxyUsername: '',
+          proxyPassword: ''
+        });
         onSuccess('Session created successfully!');
         onClose();
       } else {
@@ -37,14 +64,25 @@ const CreateSessionModal = ({ isOpen, onClose, onSuccess }) => {
   };
 
   const handleChange = (e) => {
+    const { name, value, type, checked } = e.target;
     setFormData({
       ...formData,
-      [e.target.name]: e.target.value,
+      [name]: type === 'checkbox' ? checked : value,
     });
   };
 
   const handleClose = () => {
-    setFormData({ phone: '', name: '', autoReplyText: '' });
+    setFormData({ 
+      phone: '', 
+      name: '', 
+      autoReplyText: '',
+      proxyEnabled: false,
+      proxyType: 'http',
+      proxyHost: '',
+      proxyPort: '',
+      proxyUsername: '',
+      proxyPassword: ''
+    });
     setError('');
     onClose();
   };
@@ -128,6 +166,116 @@ const CreateSessionModal = ({ isOpen, onClose, onSuccess }) => {
               <p className="text-xs text-gray-500 mt-1">
                 Automatically reply to incoming messages with this text
               </p>
+            </div>
+
+            {/* Proxy Settings */}
+            <div className="border-t border-gray-200 pt-4">
+              <div className="flex items-center justify-between mb-4">
+                <label className="flex items-center text-sm font-medium text-gray-900">
+                  <i className="fas fa-shield-alt mr-2 text-primary-500"></i>
+                  Proxy Settings
+                </label>
+                <div className="flex items-center">
+                  <input
+                    type="checkbox"
+                    name="proxyEnabled"
+                    checked={formData.proxyEnabled}
+                    onChange={handleChange}
+                    className="w-4 h-4 text-primary-600 bg-gray-100 border-gray-300 rounded focus:ring-primary-500 focus:ring-2"
+                  />
+                  <label className="ml-2 text-sm font-medium text-gray-700">
+                    Enable Proxy
+                  </label>
+                </div>
+              </div>
+
+              {formData.proxyEnabled && (
+                <div className="space-y-4 bg-gray-50 p-4 rounded-lg">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Proxy Type
+                      </label>
+                      <select
+                        name="proxyType"
+                        value={formData.proxyType}
+                        onChange={handleChange}
+                        className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-colors"
+                      >
+                        <option value="http">HTTP</option>
+                        <option value="https">HTTPS</option>
+                        <option value="socks5">SOCKS5</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Port
+                      </label>
+                      <input
+                        type="number"
+                        name="proxyPort"
+                        value={formData.proxyPort}
+                        onChange={handleChange}
+                        placeholder="e.g., 8080"
+                        className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-colors"
+                      />
+                    </div>
+                  </div>
+                  
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Proxy Host
+                    </label>
+                    <input
+                      type="text"
+                      name="proxyHost"
+                      value={formData.proxyHost}
+                      onChange={handleChange}
+                      placeholder="e.g., proxy.example.com or 127.0.0.1"
+                      className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-colors"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Username (Optional)
+                      </label>
+                      <input
+                        type="text"
+                        name="proxyUsername"
+                        value={formData.proxyUsername}
+                        onChange={handleChange}
+                        placeholder="Proxy username"
+                        className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-colors"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Password (Optional)
+                      </label>
+                      <input
+                        type="password"
+                        name="proxyPassword"
+                        value={formData.proxyPassword}
+                        onChange={handleChange}
+                        placeholder="Proxy password"
+                        className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-colors"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                    <div className="flex items-start">
+                      <i className="fas fa-info-circle text-blue-500 mt-0.5 mr-2"></i>
+                      <div className="text-sm text-blue-800">
+                        <p className="font-medium mb-1">Proxy Configuration</p>
+                        <p>Configure proxy settings for this session to route WhatsApp traffic through your proxy server. This helps with IP masking and geographic distribution.</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
 

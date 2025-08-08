@@ -18,12 +18,40 @@ func NewSessionRepository(db *sql.DB) *SessionRepository {
 	return &SessionRepository{db: db}
 }
 
+// proxyConfigToDBFields converts ProxyConfig to individual database fields
+func proxyConfigToDBFields(config *models.ProxyConfig) (bool, string, string, int, string, string) {
+	if config == nil {
+		return false, "", "", 0, "", ""
+	}
+	return config.Enabled, config.Type, config.Host, config.Port, config.Username, config.Password
+}
+
+// dbFieldsToProxyConfig converts database fields to ProxyConfig
+func dbFieldsToProxyConfig(enabled bool, proxyType, host string, port int, username, password string) *models.ProxyConfig {
+	if !enabled && proxyType == "" && host == "" && port == 0 {
+		return nil // No proxy configured
+	}
+	return &models.ProxyConfig{
+		Enabled:  enabled,
+		Type:     proxyType,
+		Host:     host,
+		Port:     port,
+		Username: username,
+		Password: password,
+	}
+}
+
 // Create creates a new session
 func (r *SessionRepository) Create(session *models.SessionMetadata) error {
 	query := `
-		INSERT INTO session_metadata (id, phone, actual_phone, name, position, webhook_url, auto_reply_text, user_id, created_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+		INSERT INTO session_metadata (id, phone, actual_phone, name, position, webhook_url, auto_reply_text, 
+		                             proxy_enabled, proxy_type, proxy_host, proxy_port, proxy_username, proxy_password,
+		                             user_id, created_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`
+	
+	// Convert proxy config to database fields
+	proxyEnabled, proxyType, proxyHost, proxyPort, proxyUsername, proxyPassword := proxyConfigToDBFields(session.ProxyConfig)
 	
 	_, err := r.db.Exec(query,
 		session.ID,
@@ -33,6 +61,12 @@ func (r *SessionRepository) Create(session *models.SessionMetadata) error {
 		session.Position,
 		session.WebhookURL,
 		session.AutoReplyText,
+		proxyEnabled,
+		proxyType,
+		proxyHost,
+		proxyPort,
+		proxyUsername,
+		proxyPassword,
 		session.UserID,
 		session.CreatedAt.Unix(),
 	)
@@ -48,13 +82,19 @@ func (r *SessionRepository) Create(session *models.SessionMetadata) error {
 func (r *SessionRepository) GetByID(id string) (*models.SessionMetadata, error) {
 	session := &models.SessionMetadata{}
 	query := `
-		SELECT id, phone, actual_phone, name, position, webhook_url, auto_reply_text, user_id, created_at
+		SELECT id, phone, actual_phone, name, position, webhook_url, auto_reply_text,
+		       proxy_enabled, proxy_type, proxy_host, proxy_port, proxy_username, proxy_password,
+		       user_id, created_at
 		FROM session_metadata
 		WHERE id = ?
 	`
 	
 	var createdAtUnix int64
 	var autoReplyText sql.NullString
+	var proxyEnabled bool
+	var proxyType, proxyHost, proxyUsername, proxyPassword string
+	var proxyPort int
+	
 	err := r.db.QueryRow(query, id).Scan(
 		&session.ID,
 		&session.Phone,
@@ -63,6 +103,12 @@ func (r *SessionRepository) GetByID(id string) (*models.SessionMetadata, error) 
 		&session.Position,
 		&session.WebhookURL,
 		&autoReplyText,
+		&proxyEnabled,
+		&proxyType,
+		&proxyHost,
+		&proxyPort,
+		&proxyUsername,
+		&proxyPassword,
 		&session.UserID,
 		&createdAtUnix,
 	)
@@ -81,6 +127,9 @@ func (r *SessionRepository) GetByID(id string) (*models.SessionMetadata, error) 
 	if autoReplyText.Valid {
 		session.AutoReplyText = &autoReplyText.String
 	}
+	
+	// Convert proxy fields to ProxyConfig
+	session.ProxyConfig = dbFieldsToProxyConfig(proxyEnabled, proxyType, proxyHost, proxyPort, proxyUsername, proxyPassword)
 	
 	return session, nil
 }

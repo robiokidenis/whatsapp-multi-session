@@ -6,6 +6,12 @@ const EditSessionModal = ({ isOpen, onClose, session, onUpdate }) => {
   const [name, setName] = useState('');
   const [webhookUrl, setWebhookUrl] = useState('');
   const [autoReplyText, setAutoReplyText] = useState('');
+  const [proxyEnabled, setProxyEnabled] = useState(false);
+  const [proxyType, setProxyType] = useState('http');
+  const [proxyHost, setProxyHost] = useState('');
+  const [proxyPort, setProxyPort] = useState('');
+  const [proxyUsername, setProxyUsername] = useState('');
+  const [proxyPassword, setProxyPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
@@ -15,6 +21,24 @@ const EditSessionModal = ({ isOpen, onClose, session, onUpdate }) => {
       setName(session.name || '');
       setWebhookUrl(session.webhook_url || '');
       setAutoReplyText(session.auto_reply_text || '');
+      
+      // Set proxy configuration
+      if (session.proxy_config) {
+        setProxyEnabled(session.proxy_config.enabled || false);
+        setProxyType(session.proxy_config.type || 'http');
+        setProxyHost(session.proxy_config.host || '');
+        setProxyPort(session.proxy_config.port ? session.proxy_config.port.toString() : '');
+        setProxyUsername(session.proxy_config.username || '');
+        setProxyPassword(session.proxy_config.password || '');
+      } else {
+        setProxyEnabled(false);
+        setProxyType('http');
+        setProxyHost('');
+        setProxyPort('');
+        setProxyUsername('');
+        setProxyPassword('');
+      }
+      
       setError('');
       setSuccess('');
     }
@@ -86,6 +110,31 @@ const EditSessionModal = ({ isOpen, onClose, session, onUpdate }) => {
         throw new Error(`Failed to update auto reply text: ${autoReplyResponse.status} ${errorText}`);
       }
 
+      // Update proxy configuration
+      console.log('Updating proxy config for:', session.id);
+      const proxyConfig = proxyEnabled ? {
+        enabled: true,
+        type: proxyType,
+        host: proxyHost.trim(),
+        port: parseInt(proxyPort) || 0,
+        username: proxyUsername.trim(),
+        password: proxyPassword.trim()
+      } : { enabled: false };
+      
+      const proxyResponse = await fetch(`/api/sessions/${session.id}/proxy`, {
+        method: 'PUT',
+        headers,
+        body: JSON.stringify({ proxy_config: proxyConfig })
+      });
+
+      console.log('Proxy update response status:', proxyResponse.status);
+      
+      if (!proxyResponse.ok) {
+        const errorText = await proxyResponse.text();
+        console.error('Proxy update failed:', errorText);
+        throw new Error(`Failed to update proxy configuration: ${proxyResponse.status} ${errorText}`);
+      }
+
       setSuccess('Session updated successfully!');
       
       // Update the session in parent component
@@ -93,7 +142,8 @@ const EditSessionModal = ({ isOpen, onClose, session, onUpdate }) => {
         ...session,
         name: name.trim(),
         webhook_url: webhookUrl.trim(),
-        auto_reply_text: autoReplyText.trim() || null
+        auto_reply_text: autoReplyText.trim() || null,
+        proxy_config: proxyConfig
       });
 
       // Close modal after a short delay
@@ -120,8 +170,8 @@ const EditSessionModal = ({ isOpen, onClose, session, onUpdate }) => {
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-lg shadow-xl max-w-md w-full mx-4">
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-lg shadow-xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
         {/* Header */}
         <div className="flex items-center justify-between p-6 border-b">
           <h3 className="text-lg font-semibold text-gray-900">Edit Session</h3>
@@ -138,69 +188,199 @@ const EditSessionModal = ({ isOpen, onClose, session, onUpdate }) => {
 
         {/* Content */}
         <form onSubmit={handleSubmit} className="p-6">
-          {/* Session ID Display */}
-          <div className="mb-4">
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Session ID
-            </label>
-            <div className="p-2 bg-gray-100 border rounded text-sm text-gray-600">
-              {session?.id}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+            {/* Left Column - Basic Settings */}
+            <div className="space-y-6">
+              <h4 className="text-lg font-semibold text-gray-900 flex items-center">
+                <i className="fas fa-cog mr-2 text-green-500"></i>
+                Basic Settings
+              </h4>
+              
+              {/* Session ID Display */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Session ID
+                </label>
+                <div className="p-3 bg-gray-100 border rounded-lg text-sm text-gray-600 font-mono">
+                  {session?.id}
+                </div>
+              </div>
+
+              {/* Name Input */}
+              <div>
+                <label htmlFor="sessionName" className="block text-sm font-medium text-gray-700 mb-2">
+                  <i className="fas fa-tag mr-2 text-green-500"></i>
+                  Session Name
+                </label>
+                <input
+                  type="text"
+                  id="sessionName"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  placeholder="Enter session name (optional)"
+                  disabled={loading}
+                  className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 disabled:bg-gray-100 disabled:cursor-not-allowed transition-colors"
+                />
+              </div>
+
+              {/* Webhook URL Input */}
+              <div>
+                <label htmlFor="webhookUrl" className="block text-sm font-medium text-gray-700 mb-2">
+                  <i className="fas fa-link mr-2 text-green-500"></i>
+                  Webhook URL
+                </label>
+                <input
+                  type="url"
+                  id="webhookUrl"
+                  value={webhookUrl}
+                  onChange={(e) => setWebhookUrl(e.target.value)}
+                  placeholder="https://your-webhook-url.com (optional)"
+                  disabled={loading}
+                  className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 disabled:bg-gray-100 disabled:cursor-not-allowed transition-colors"
+                />
+                <p className="text-xs text-gray-500 mt-2">
+                  Webhook URL will receive incoming WhatsApp messages for this session
+                </p>
+              </div>
+
+              {/* Auto Reply Text Input */}
+              <div>
+                <label htmlFor="autoReplyText" className="block text-sm font-medium text-gray-700 mb-2">
+                  <i className="fas fa-reply mr-2 text-green-500"></i>
+                  Auto Reply Message
+                </label>
+                <textarea
+                  id="autoReplyText"
+                  value={autoReplyText}
+                  onChange={(e) => setAutoReplyText(e.target.value)}
+                  placeholder="Enter auto reply message (optional)"
+                  rows={4}
+                  disabled={loading}
+                  className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 disabled:bg-gray-100 disabled:cursor-not-allowed resize-none transition-colors"
+                />
+                <p className="text-xs text-gray-500 mt-2">
+                  Automatically reply to incoming messages with this text
+                </p>
+              </div>
+            </div>
+
+            {/* Right Column - Proxy Settings */}
+            <div className="space-y-6">
+              <div className="flex items-center justify-between">
+                <h4 className="text-lg font-semibold text-gray-700 flex items-center">
+                  <i className="fas fa-shield-alt mr-2 text-green-500"></i>
+                  Proxy Settings
+                </h4>
+                <div className="flex items-center">
+                  <input
+                    type="checkbox"
+                    checked={proxyEnabled}
+                    onChange={(e) => setProxyEnabled(e.target.checked)}
+                    disabled={loading}
+                    className="w-4 h-4 text-green-600 bg-gray-100 border-gray-300 rounded focus:ring-green-500 focus:ring-2 disabled:cursor-not-allowed"
+                  />
+                  <label className="ml-2 text-sm font-medium text-gray-700">
+                    Enable Proxy
+                  </label>
+                </div>
+              </div>
+
+              {proxyEnabled ? (
+                <div className="space-y-4 bg-gray-50 p-4 rounded-lg border border-gray-200">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Proxy Type
+                      </label>
+                      <select
+                        value={proxyType}
+                        onChange={(e) => setProxyType(e.target.value)}
+                        disabled={loading}
+                        className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 disabled:bg-gray-100 disabled:cursor-not-allowed transition-colors"
+                      >
+                        <option value="http">HTTP</option>
+                        <option value="https">HTTPS</option>
+                        <option value="socks5">SOCKS5</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Port
+                      </label>
+                      <input
+                        type="number"
+                        value={proxyPort}
+                        onChange={(e) => setProxyPort(e.target.value)}
+                        placeholder="e.g., 8080"
+                        disabled={loading}
+                        className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 disabled:bg-gray-100 disabled:cursor-not-allowed transition-colors"
+                      />
+                    </div>
+                  </div>
+                  
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Proxy Host
+                    </label>
+                    <input
+                      type="text"
+                      value={proxyHost}
+                      onChange={(e) => setProxyHost(e.target.value)}
+                      placeholder="e.g., proxy.example.com or 127.0.0.1"
+                      disabled={loading}
+                      className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 disabled:bg-gray-100 disabled:cursor-not-allowed transition-colors"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Username (Optional)
+                      </label>
+                      <input
+                        type="text"
+                        value={proxyUsername}
+                        onChange={(e) => setProxyUsername(e.target.value)}
+                        placeholder="Proxy username"
+                        disabled={loading}
+                        className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 disabled:bg-gray-100 disabled:cursor-not-allowed transition-colors"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Password (Optional)
+                      </label>
+                      <input
+                        type="password"
+                        value={proxyPassword}
+                        onChange={(e) => setProxyPassword(e.target.value)}
+                        placeholder="Proxy password"
+                        disabled={loading}
+                        className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 disabled:bg-gray-100 disabled:cursor-not-allowed transition-colors"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                    <div className="flex items-start">
+                      <i className="fas fa-info-circle text-blue-500 mt-0.5 mr-2"></i>
+                      <div className="text-sm text-blue-800">
+                        <p className="font-medium mb-1">Proxy Configuration</p>
+                        <p>Update proxy settings for this session to route WhatsApp traffic through your proxy server. Changes take effect after session restart.</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="text-center py-12 text-gray-500">
+                  <i className="fas fa-shield-alt text-4xl mb-4"></i>
+                  <p className="text-lg font-medium mb-2">Proxy Disabled</p>
+                  <p className="text-sm">Enable proxy to configure connection settings for this session</p>
+                </div>
+              )}
             </div>
           </div>
 
-          {/* Name Input */}
-          <div className="mb-4">
-            <label htmlFor="sessionName" className="block text-sm font-medium text-gray-700 mb-1">
-              Session Name
-            </label>
-            <input
-              type="text"
-              id="sessionName"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="Enter session name (optional)"
-              disabled={loading}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-green-500 focus:border-green-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
-            />
-          </div>
-
-          {/* Webhook URL Input */}
-          <div className="mb-4">
-            <label htmlFor="webhookUrl" className="block text-sm font-medium text-gray-700 mb-1">
-              Webhook URL
-            </label>
-            <input
-              type="url"
-              id="webhookUrl"
-              value={webhookUrl}
-              onChange={(e) => setWebhookUrl(e.target.value)}
-              placeholder="https://your-webhook-url.com (optional)"
-              disabled={loading}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-green-500 focus:border-green-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
-            />
-            <p className="text-xs text-gray-500 mt-1">
-              Webhook URL will receive incoming WhatsApp messages for this session
-            </p>
-          </div>
-
-          {/* Auto Reply Text Input */}
-          <div className="mb-6">
-            <label htmlFor="autoReplyText" className="block text-sm font-medium text-gray-700 mb-1">
-              Auto Reply Message
-            </label>
-            <textarea
-              id="autoReplyText"
-              value={autoReplyText}
-              onChange={(e) => setAutoReplyText(e.target.value)}
-              placeholder="Enter auto reply message (optional)"
-              rows={3}
-              disabled={loading}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-green-500 focus:border-green-500 disabled:bg-gray-100 disabled:cursor-not-allowed resize-none"
-            />
-            <p className="text-xs text-gray-500 mt-1">
-              Automatically reply to incoming messages with this text
-            </p>
-          </div>
 
           {/* Error Message */}
           {error && (
@@ -242,12 +422,12 @@ const EditSessionModal = ({ isOpen, onClose, session, onUpdate }) => {
               {loading ? (
                 <>
                   <i className="fas fa-spinner fa-spin mr-2"></i>
-                  Updating...
+                  Updating Session & Proxy...
                 </>
               ) : (
                 <>
                   <i className="fas fa-save mr-2"></i>
-                  Update
+                  Update Session & Proxy
                 </>
               )}
             </button>
