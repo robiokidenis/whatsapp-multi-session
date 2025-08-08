@@ -30,8 +30,6 @@ func main() {
 
 	// Initialize database
 	dbConfig := repository.DatabaseConfig{
-		Type:     cfg.DatabaseType,
-		Path:     cfg.DatabasePath,
 		Host:     cfg.MySQLHost,
 		Port:     cfg.MySQLPort,
 		User:     cfg.MySQLUser,

@@ -30,6 +30,9 @@ import (
 	"whatsapp-multi-session/internal/models"
 	"whatsapp-multi-session/internal/repository"
 	"whatsapp-multi-session/pkg/logger"
+
+	// Import SQLite driver for whatsmeow store (library requirement)
+	_ "github.com/mattn/go-sqlite3"
 )
 
 // WhatsAppService manages WhatsApp clients and sessions
@@ -175,7 +178,7 @@ func NewWhatsAppService(
 		log.Info("WhatsApp database exists, using existing: %s", dbPath)
 	}
 
-	// Create WhatsApp store - whatsmeow requires foreign keys for database upgrades
+	// Create WhatsApp store - whatsmeow requires SQLite with foreign keys for database upgrades
 	waLogger := waLog.Stdout("Store", "INFO", true)
 	
 	// Try with foreign keys enabled (required by whatsmeow)
@@ -646,6 +649,28 @@ func (s *WhatsAppService) UpdateSessionAutoReply(sessionID string, autoReplyText
 
 	// Update only the auto-reply text in database using the dedicated method
 	return s.sessionRepo.UpdateAutoReplyText(sessionID, autoReplyText)
+}
+
+// UpdateSessionWebhook updates only the webhook URL for a session
+func (s *WhatsAppService) UpdateSessionWebhook(sessionID string, webhookURL string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	session, exists := s.sessions[sessionID]
+	if !exists {
+		return models.NewNotFoundError("session %s not found", sessionID)
+	}
+
+	// Update in-memory session
+	session.WebhookURL = webhookURL
+
+	// Update in database
+	if err := s.sessionRepo.UpdateSessionWebhook(sessionID, webhookURL); err != nil {
+		return fmt.Errorf("failed to update webhook URL in database: %v", err)
+	}
+
+	s.logger.Info("Updated webhook URL for session %s: %s", sessionID, webhookURL)
+	return nil
 }
 
 // UpdateSessionEnabled updates only the enabled status for a session

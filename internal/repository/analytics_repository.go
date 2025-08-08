@@ -2,7 +2,6 @@ package repository
 
 import (
 	"database/sql"
-	"fmt"
 	"time"
 )
 
@@ -51,16 +50,8 @@ func (r *AnalyticsRepository) GetMessageStats(userId int64, timeRange string) (*
 	
 	// Check if messages table exists
 	var tableExists int
-	// Detect database type
-	driver := r.db.Driver()
-	driverName := fmt.Sprintf("%T", driver)
-	
-	var checkTableQuery string
-	if contains(driverName, "mysql") {
-		checkTableQuery = `SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'messages'`
-	} else {
-		checkTableQuery = `SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='messages'`
-	}
+	// Check if messages table exists in MySQL
+	checkTableQuery := `SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'messages'`
 	err := r.db.QueryRow(checkTableQuery).Scan(&tableExists)
 	if err != nil {
 		return stats, nil // Return empty stats if can't check table
@@ -191,16 +182,8 @@ func (r *AnalyticsRepository) GetMessageTimeSeries(userId int64, timeRange strin
 	
 	// Check if messages table exists
 	var tableExists int
-	// Detect database type
-	driver := r.db.Driver()
-	driverName := fmt.Sprintf("%T", driver)
-	
-	var checkTableQuery string
-	if contains(driverName, "mysql") {
-		checkTableQuery = `SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'messages'`
-	} else {
-		checkTableQuery = `SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='messages'`
-	}
+	// Check if messages table exists in MySQL
+	checkTableQuery := `SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'messages'`
 	err := r.db.QueryRow(checkTableQuery).Scan(&tableExists)
 	if err != nil || tableExists == 0 {
 		// Return empty data if table doesn't exist
@@ -293,16 +276,8 @@ func (r *AnalyticsRepository) GetTopContacts(userId int64, limit int) ([]map[str
 	
 	// Check if messages table exists
 	var tableExists int
-	// Detect database type
-	driver := r.db.Driver()
-	driverName := fmt.Sprintf("%T", driver)
-	
-	var checkTableQuery string
-	if contains(driverName, "mysql") {
-		checkTableQuery = `SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'messages'`
-	} else {
-		checkTableQuery = `SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='messages'`
-	}
+	// Check if messages table exists in MySQL
+	checkTableQuery := `SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'messages'`
 	err := r.db.QueryRow(checkTableQuery).Scan(&tableExists)
 	if err != nil || tableExists == 0 {
 		// Return empty data if table doesn't exist
@@ -365,16 +340,8 @@ func (r *AnalyticsRepository) GetSessionActivity(userId int64, limit int) ([]map
 	
 	// First check if messages table exists to determine query strategy
 	var tableExists int
-	// Detect database type
-	driver := r.db.Driver()
-	driverName := fmt.Sprintf("%T", driver)
-	
-	var checkTableQuery string
-	if contains(driverName, "mysql") {
-		checkTableQuery = `SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'messages'`
-	} else {
-		checkTableQuery = `SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='messages'`
-	}
+	// Check if messages table exists in MySQL
+	checkTableQuery := `SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'messages'`
 	err := r.db.QueryRow(checkTableQuery).Scan(&tableExists)
 	
 	var query string

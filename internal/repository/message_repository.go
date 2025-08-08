@@ -2,7 +2,6 @@ package repository
 
 import (
 	"database/sql"
-	"fmt"
 	"time"
 )
 
@@ -114,110 +113,49 @@ func (r *MessageRepository) GetMessagesBySession(sessionID string, limit int) ([
 
 // ensureMessagesTable creates the messages table if it doesn't exist
 func (r *MessageRepository) ensureMessagesTable() error {
-	// Get database driver name to detect MySQL vs SQLite
-	driver := r.db.Driver()
-	driverName := fmt.Sprintf("%T", driver)
-	
-	if contains(driverName, "mysql") {
-		// For MySQL, check if table exists using INFORMATION_SCHEMA
-		var count int
-		checkQuery := `
-			SELECT COUNT(*) 
-			FROM INFORMATION_SCHEMA.TABLES 
-			WHERE TABLE_SCHEMA = DATABASE() 
-			AND TABLE_NAME = 'messages'
-		`
-		err := r.db.QueryRow(checkQuery).Scan(&count)
-		if err != nil {
-			return err
-		}
-		
-		if count > 0 {
-			return nil // Table already exists
-		}
-		
-		// Create the messages table for MySQL
-		createQuery := `
-			CREATE TABLE IF NOT EXISTS messages (
-				id INT AUTO_INCREMENT PRIMARY KEY,
-				session_id VARCHAR(255) NOT NULL,
-				message_id VARCHAR(255) UNIQUE,
-				sender_jid VARCHAR(100),
-				recipient_jid VARCHAR(100),
-				message_type VARCHAR(50) NOT NULL DEFAULT 'text',
-				content TEXT,
-				media_url TEXT,
-				direction VARCHAR(20) NOT NULL,
-				status VARCHAR(50),
-				error_message TEXT,
-				created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-				updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-				INDEX idx_session_id (session_id),
-				INDEX idx_sender_jid (sender_jid),
-				INDEX idx_recipient_jid (recipient_jid),
-				INDEX idx_direction (direction),
-				INDEX idx_status (status),
-				INDEX idx_created_at (created_at),
-				FOREIGN KEY (session_id) REFERENCES session_metadata(id) ON DELETE CASCADE
-			) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
-		`
-		
-		_, err = r.db.Exec(createQuery)
+	// Check if table exists using MySQL INFORMATION_SCHEMA
+	var count int
+	checkQuery := `
+		SELECT COUNT(*) 
+		FROM INFORMATION_SCHEMA.TABLES 
+		WHERE TABLE_SCHEMA = DATABASE() 
+		AND TABLE_NAME = 'messages'
+	`
+	err := r.db.QueryRow(checkQuery).Scan(&count)
+	if err != nil {
 		return err
-		
-	} else {
-		// For SQLite, check if table exists using sqlite_master
-		var count int
-		checkQuery := `SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='messages'`
-		err := r.db.QueryRow(checkQuery).Scan(&count)
-		if err != nil {
-			return err
-		}
-		
-		if count > 0 {
-			return nil // Table already exists
-		}
-		
-		// Create the messages table for SQLite
-		createQuery := `
-			CREATE TABLE messages (
-				id INTEGER PRIMARY KEY AUTOINCREMENT,
-				session_id TEXT NOT NULL,
-				message_id TEXT UNIQUE,
-				sender_jid TEXT,
-				recipient_jid TEXT,
-				message_type TEXT NOT NULL DEFAULT 'text',
-				content TEXT,
-				media_url TEXT,
-				direction TEXT NOT NULL,
-				status TEXT,
-				error_message TEXT,
-				created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-				updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-				FOREIGN KEY (session_id) REFERENCES session_metadata(id) ON DELETE CASCADE
-			)
-		`
-		
-		_, err = r.db.Exec(createQuery)
-		if err != nil {
-			return err
-		}
-		
-		// Create indexes for SQLite
-		indexes := []string{
-			"CREATE INDEX IF NOT EXISTS idx_messages_session_id ON messages(session_id)",
-			"CREATE INDEX IF NOT EXISTS idx_messages_direction ON messages(direction)",
-			"CREATE INDEX IF NOT EXISTS idx_messages_status ON messages(status)",
-			"CREATE INDEX IF NOT EXISTS idx_messages_created_at ON messages(created_at)",
-			"CREATE INDEX IF NOT EXISTS idx_messages_message_id ON messages(message_id)",
-		}
-		
-		for _, indexQuery := range indexes {
-			if _, err := r.db.Exec(indexQuery); err != nil {
-				return err
-			}
-		}
-		
-		return nil
 	}
+	
+	if count > 0 {
+		return nil // Table already exists
+	}
+	
+	// Create the messages table for MySQL
+	createQuery := `
+		CREATE TABLE IF NOT EXISTS messages (
+			id INT AUTO_INCREMENT PRIMARY KEY,
+			session_id VARCHAR(255) NOT NULL,
+			message_id VARCHAR(255) UNIQUE,
+			sender_jid VARCHAR(100),
+			recipient_jid VARCHAR(100),
+			message_type VARCHAR(50) NOT NULL DEFAULT 'text',
+			content TEXT,
+			media_url TEXT,
+			direction VARCHAR(20) NOT NULL,
+			status VARCHAR(50),
+			error_message TEXT,
+			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+			updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+			INDEX idx_session_id (session_id),
+			INDEX idx_sender_jid (sender_jid),
+			INDEX idx_recipient_jid (recipient_jid),
+			INDEX idx_direction (direction),
+			INDEX idx_status (status),
+			INDEX idx_created_at (created_at),
+			FOREIGN KEY (session_id) REFERENCES session_metadata(id) ON DELETE CASCADE
+		) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+	`
+	
+	_, err = r.db.Exec(createQuery)
+	return err
 }

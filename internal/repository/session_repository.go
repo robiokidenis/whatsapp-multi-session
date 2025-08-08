@@ -275,6 +275,18 @@ func (r *SessionRepository) UpdateAutoReplyText(id string, autoReplyText *string
 	return nil
 }
 
+// UpdateSessionWebhook updates only the webhook URL for a session
+func (r *SessionRepository) UpdateSessionWebhook(id string, webhookURL string) error {
+	query := `UPDATE session_metadata SET webhook_url = ? WHERE id = ?`
+	
+	_, err := r.db.Exec(query, webhookURL, id)
+	if err != nil {
+		return fmt.Errorf("failed to update webhook URL: %v", err)
+	}
+	
+	return nil
+}
+
 // UpdateSessionEnabled updates the enabled status of a session
 func (r *SessionRepository) UpdateSessionEnabled(id string, enabled bool) error {
 	query := `UPDATE session_metadata SET enabled = ? WHERE id = ?`

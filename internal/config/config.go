@@ -14,9 +14,7 @@ type Config struct {
 	Port string
 
 	// Database configuration
-	DatabasePath   string
 	WhatsAppDBPath string
-	DatabaseType   string // "sqlite" or "mysql"
 	MySQLHost      string
 	MySQLPort      string
 	MySQLUser      string
@@ -63,9 +61,7 @@ func Load() *Config {
 		Port: getEnv("PORT", "8080"),
 
 		// Database
-		DatabasePath:   getEnv("DATABASE_PATH", "./database/session_metadata.db"),
 		WhatsAppDBPath: getEnv("WHATSAPP_DB_PATH", "./database/sessions.db"),
-		DatabaseType:   getEnv("DATABASE_TYPE", "sqlite"),
 		MySQLHost:      getEnv("MYSQL_HOST", "localhost"),
 		MySQLPort:      getEnv("MYSQL_PORT", "3306"),
 		MySQLUser:      getEnv("MYSQL_USER", "root"),
