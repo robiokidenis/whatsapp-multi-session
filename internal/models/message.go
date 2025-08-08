@@ -51,6 +51,7 @@ type MessageResponse struct {
 type WebhookMessage struct {
 	SessionID   string    `json:"session_id"`
 	From        string    `json:"from"`
+	FromName    string    `json:"from_name"`
 	To          string    `json:"to"`
 	Message     string    `json:"message"`
 	MessageType string    `json:"message_type"`

@@ -569,6 +569,15 @@ func (s *WhatsAppService) UpdateSession(sessionID string, req *models.UpdateSess
 		return models.NewNotFoundError("session %s not found", sessionID)
 	}
 
+	// Get existing metadata from database to get user_id
+	existingMetadata, err := s.sessionRepo.GetByID(sessionID)
+	if err != nil {
+		return fmt.Errorf("failed to get existing session metadata: %v", err)
+	}
+	if existingMetadata == nil {
+		return models.NewNotFoundError("session metadata not found in database for session %s", sessionID)
+	}
+
 	// Update in-memory session
 	if req.Name != "" {
 		session.Name = req.Name
@@ -580,7 +589,7 @@ func (s *WhatsAppService) UpdateSession(sessionID string, req *models.UpdateSess
 		session.AutoReplyText = req.AutoReplyText
 	}
 
-	// Update in database
+	// Update in database with correct user_id
 	metadata := &models.SessionMetadata{
 		ID:            sessionID,
 		Phone:         session.Phone,
@@ -589,6 +598,7 @@ func (s *WhatsAppService) UpdateSession(sessionID string, req *models.UpdateSess
 		Position:      req.Position,
 		WebhookURL:    session.WebhookURL,
 		AutoReplyText: session.AutoReplyText,
+		UserID:        existingMetadata.UserID, // Use the existing user_id from database
 	}
 
 	return s.sessionRepo.Update(metadata)
@@ -716,6 +726,14 @@ func (s *WhatsAppService) loadExistingSessions() error {
 
 	for _, metadata := range metadatas {
 		s.logger.Info("Restoring session %s (%s)", metadata.ID, metadata.Name)
+		
+		// Debug log to verify webhook and auto-reply are loaded
+		if metadata.WebhookURL != "" {
+			s.logger.Info("Session %s has webhook URL: %s", metadata.ID, metadata.WebhookURL)
+		}
+		if metadata.AutoReplyText != nil && *metadata.AutoReplyText != "" {
+			s.logger.Info("Session %s has auto-reply text: %s", metadata.ID, *metadata.AutoReplyText)
+		}
 
 		// Find existing device in store (like original)
 		var deviceStore *store.Device
@@ -1523,10 +1541,32 @@ func (s *WhatsAppService) GetGroups(sessionID string) ([]map[string]interface{},
 
 // sendWebhook sends incoming message data to configured webhook URL
 func (s *WhatsAppService) sendWebhook(session *models.Session, evt *events.Message) {
+	// Get sender's contact info for name
+	senderName := "Unknown"
+	
+	// Try to get contact info from WhatsApp store
+	if contactInfo, err := session.Client.Store.Contacts.GetContact(context.Background(), evt.Info.Sender); err == nil && contactInfo != nil {
+		senderName = s.getContactName(contactInfo)
+		s.logger.Debug("Got contact name from store for %s: %s", evt.Info.Sender.User, senderName)
+	} else {
+		s.logger.Debug("Failed to get contact from store for %s: %v", evt.Info.Sender.User, err)
+		
+		// Fallback 1: Use push name from the message event
+		if evt.Info.PushName != "" {
+			senderName = evt.Info.PushName
+			s.logger.Debug("Using push name for %s: %s", evt.Info.Sender.User, senderName)
+		} else if evt.Info.Sender.User != "" {
+			// Fallback 2: Use the phone number part as name
+			senderName = evt.Info.Sender.User
+			s.logger.Debug("Using phone number as name for %s: %s", evt.Info.Sender.User, senderName)
+		}
+	}
+	
 	// Create webhook message
 	webhookMsg := &models.WebhookMessage{
 		SessionID:   session.ID,
 		From:        evt.Info.Sender.String(),
+		FromName:    senderName,
 		To:          session.Client.Store.ID.String(),
 		Timestamp:   evt.Info.Timestamp,
 		ID:          evt.Info.ID,

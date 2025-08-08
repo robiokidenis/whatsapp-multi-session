@@ -54,6 +54,7 @@ func (r *SessionRepository) GetByID(id string) (*models.SessionMetadata, error) 
 	`
 	
 	var createdAtUnix int64
+	var autoReplyText sql.NullString
 	err := r.db.QueryRow(query, id).Scan(
 		&session.ID,
 		&session.Phone,
@@ -61,7 +62,7 @@ func (r *SessionRepository) GetByID(id string) (*models.SessionMetadata, error) 
 		&session.Name,
 		&session.Position,
 		&session.WebhookURL,
-		&session.AutoReplyText,
+		&autoReplyText,
 		&session.UserID,
 		&createdAtUnix,
 	)
@@ -75,6 +76,12 @@ func (r *SessionRepository) GetByID(id string) (*models.SessionMetadata, error) 
 	}
 	
 	session.CreatedAt = time.Unix(createdAtUnix, 0)
+	
+	// Handle nullable auto_reply_text
+	if autoReplyText.Valid {
+		session.AutoReplyText = &autoReplyText.String
+	}
+	
 	return session, nil
 }
 
@@ -97,6 +104,7 @@ func (r *SessionRepository) GetAll() ([]*models.SessionMetadata, error) {
 		session := &models.SessionMetadata{}
 		
 		var createdAtUnix int64
+		var autoReplyText sql.NullString
 		err := rows.Scan(
 			&session.ID,
 			&session.Phone,
@@ -104,7 +112,7 @@ func (r *SessionRepository) GetAll() ([]*models.SessionMetadata, error) {
 			&session.Name,
 			&session.Position,
 			&session.WebhookURL,
-			&session.AutoReplyText,
+			&autoReplyText,
 			&session.UserID,
 			&createdAtUnix,
 		)
@@ -115,8 +123,9 @@ func (r *SessionRepository) GetAll() ([]*models.SessionMetadata, error) {
 		
 		session.CreatedAt = time.Unix(createdAtUnix, 0)
 		
-		if err != nil {
-			return nil, fmt.Errorf("failed to scan session: %v", err)
+		// Handle nullable auto_reply_text
+		if autoReplyText.Valid {
+			session.AutoReplyText = &autoReplyText.String
 		}
 		
 		sessions = append(sessions, session)
@@ -249,6 +258,7 @@ func (r *SessionRepository) GetByUserID(userID int) ([]*models.SessionMetadata, 
 		session := &models.SessionMetadata{}
 		
 		var createdAtUnix int64
+		var autoReplyText sql.NullString
 		err := rows.Scan(
 			&session.ID,
 			&session.Phone,
@@ -256,7 +266,7 @@ func (r *SessionRepository) GetByUserID(userID int) ([]*models.SessionMetadata, 
 			&session.Name,
 			&session.Position,
 			&session.WebhookURL,
-			&session.AutoReplyText,
+			&autoReplyText,
 			&session.UserID,
 			&createdAtUnix,
 		)
@@ -266,6 +276,12 @@ func (r *SessionRepository) GetByUserID(userID int) ([]*models.SessionMetadata, 
 		}
 		
 		session.CreatedAt = time.Unix(createdAtUnix, 0)
+		
+		// Handle nullable auto_reply_text
+		if autoReplyText.Valid {
+			session.AutoReplyText = &autoReplyText.String
+		}
+		
 		sessions = append(sessions, session)
 	}
 	
@@ -282,6 +298,7 @@ func (r *SessionRepository) GetByIDAndUserID(id string, userID int) (*models.Ses
 	`
 	
 	var createdAtUnix int64
+	var autoReplyText sql.NullString
 	err := r.db.QueryRow(query, id, userID).Scan(
 		&session.ID,
 		&session.Phone,
@@ -289,7 +306,7 @@ func (r *SessionRepository) GetByIDAndUserID(id string, userID int) (*models.Ses
 		&session.Name,
 		&session.Position,
 		&session.WebhookURL,
-		&session.AutoReplyText,
+		&autoReplyText,
 		&session.UserID,
 		&createdAtUnix,
 	)
@@ -303,6 +320,12 @@ func (r *SessionRepository) GetByIDAndUserID(id string, userID int) (*models.Ses
 	}
 	
 	session.CreatedAt = time.Unix(createdAtUnix, 0)
+	
+	// Handle nullable auto_reply_text
+	if autoReplyText.Valid {
+		session.AutoReplyText = &autoReplyText.String
+	}
+	
 	return session, nil
 }
 
