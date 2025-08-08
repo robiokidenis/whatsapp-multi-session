@@ -754,6 +754,26 @@ func (h *SessionHandler) StopTyping(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(map[string]string{"message": "Typing indicator stopped"})
 }
 
+// SetOnline handles setting session online status
+func (h *SessionHandler) SetOnline(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	sessionID := vars["sessionId"]
+
+	// Check user authentication and session ownership
+	if _, _, ok := h.getUserInfoAndCheckOwnership(w, r, sessionID); !ok {
+		return
+	}
+
+	if err := h.whatsappService.SetPresence(sessionID, "available"); err != nil {
+		h.logger.Error("Failed to set online presence for session %s: %v", sessionID, err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{"message": "Session set to online"})
+}
+
 // SetPresence handles setting session presence status
 func (h *SessionHandler) SetPresence(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)

@@ -180,7 +180,7 @@ func NewWhatsAppService(
 
 	// Create WhatsApp store - whatsmeow requires SQLite with foreign keys for database upgrades
 	waLogger := waLog.Stdout("Store", "INFO", true)
-	
+
 	// Try with foreign keys enabled (required by whatsmeow)
 	connectionString := fmt.Sprintf("file:%s?_foreign_keys=on", dbPath)
 	container, err := sqlstore.New(context.Background(), "sqlite3", connectionString, waLogger)
@@ -235,7 +235,7 @@ func (s *WhatsAppService) CreateSession(req *models.CreateSessionRequest, userID
 		if err != nil {
 			return nil, fmt.Errorf("failed to check session count: %v", err)
 		}
-		
+
 		// Default limit (this should come from user's record in the future)
 		sessionLimit := 5
 
@@ -271,7 +271,7 @@ func (s *WhatsAppService) CreateSession(req *models.CreateSessionRequest, userID
 	if req.Enabled {
 		enabled = req.Enabled
 	}
-	
+
 	session := &models.Session{
 		ID:            sessionID,
 		Phone:         phoneForDisplay,
@@ -345,17 +345,17 @@ func (s *WhatsAppService) GetSessionsByUserID(userID int) ([]*models.Session, er
 	if err != nil {
 		return nil, fmt.Errorf("failed to get sessions for user %d: %v", userID, err)
 	}
-	
+
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	
+
 	var userSessions []*models.Session
 	for _, metadata := range sessionMetadata {
 		if session, exists := s.sessions[metadata.ID]; exists {
 			userSessions = append(userSessions, session)
 		}
 	}
-	
+
 	return userSessions, nil
 }
 
@@ -365,7 +365,7 @@ func (s *WhatsAppService) IsSessionOwnedByUser(sessionID string, userID int) (bo
 	if err != nil {
 		return false, fmt.Errorf("failed to check session ownership: %v", err)
 	}
-	
+
 	return sessionMetadata != nil, nil
 }
 
@@ -697,13 +697,13 @@ func (s *WhatsAppService) UpdateSessionEnabled(sessionID string, enabled bool) e
 	// If session was disabled and is now enabled, try to auto-connect
 	if wasDisabled && enabled {
 		s.logger.Info("Session %s has been enabled, attempting to auto-connect", sessionID)
-		
+
 		// Check if session has stored credentials and is not already connected
 		if !session.Connected && session.Client != nil {
 			go func() {
 				// Wait a moment to ensure everything is settled
 				time.Sleep(1 * time.Second)
-				
+
 				s.logger.Info("Auto-connecting newly enabled session %s", sessionID)
 				if err := session.Client.Connect(); err != nil {
 					s.logger.Error("Failed to auto-connect enabled session %s: %v", sessionID, err)
@@ -750,7 +750,7 @@ func (s *WhatsAppService) setupEventHandlers(session *models.Session) {
 					if session.Client.Store.PushName != "" {
 						s.logger.Debug("Using existing push name '%s' for session %s", session.Client.Store.PushName, session.ID)
 					}
-					
+
 					if err := session.Client.SendPresence(types.PresenceAvailable); err != nil {
 						s.logger.Warn("Failed to set online presence for session %s: %v", session.ID, err)
 					} else {
@@ -853,7 +853,7 @@ func (s *WhatsAppService) loadExistingSessions() error {
 
 	for _, metadata := range metadatas {
 		s.logger.Info("Restoring session %s (%s)", metadata.ID, metadata.Name)
-		
+
 		// Debug log to verify webhook, auto-reply and proxy are loaded
 		if metadata.WebhookURL != "" {
 			s.logger.Info("Session %s has webhook URL: %s", metadata.ID, metadata.WebhookURL)
@@ -1560,59 +1560,75 @@ func (s *WhatsAppService) SendTyping(sessionID string, to string, typing bool) e
 		return models.NewUnauthorizedError("session is not authenticated")
 	}
 
-	// Ensure we have a valid logged-in session with JID
-	ownJID := session.Client.Store.ID
-	if ownJID == nil {
-		return fmt.Errorf("session not properly logged in - no JID available")
+
+	// Format recipient JID (same logic as SendMessage)
+	recipientJID := to
+	if !strings.Contains(to, "@") {
+		// Clean phone number
+		phoneNumber := strings.ReplaceAll(to, "+", "")
+		phoneNumber = strings.ReplaceAll(phoneNumber, " ", "")
+		phoneNumber = strings.ReplaceAll(phoneNumber, "-", "")
+
+		if len(phoneNumber) < 8 || len(phoneNumber) > 15 {
+			return fmt.Errorf("invalid phone number length. Should be 8-15 digits")
+		}
+
+		// Add @s.whatsapp.net if not present
+		recipientJID = phoneNumber + "@s.whatsapp.net"
 	}
 
+	s.logger.Debug("Formatted recipient JID for typing: %s", recipientJID)
+
 	// Parse recipient JID
-	jid, err := types.ParseJID(to)
+	jid, err := types.ParseJID(recipientJID)
 	if err != nil {
 		return fmt.Errorf("invalid recipient JID: %v", err)
 	}
 
-	// Ensure push name is set (critical requirement for presence to work)
+	// Convert to non-device JID for presence/typing indicators
+	jid = jid.ToNonAD()
+
+	// Ensure we have a push name (required for presence/typing to work properly)
 	if session.Client.Store.PushName == "" {
-		// Generate a realistic random name to appear like a real user
-		// Don't use session name as it's only for internal identification
 		pushName := s.generateRandomName()
 		session.Client.Store.PushName = pushName
-		s.logger.Debug("Generated push name '%s' for typing indicator", pushName)
-		
-		// Small delay to ensure push name is processed
-		time.Sleep(100 * time.Millisecond)
+		s.logger.Debug("Set push name '%s' for typing indicator", pushName)
 	}
 
-	// Ensure we're marked as online first (required for chat presence to work)
-	err = session.Client.SendPresence(types.PresenceAvailable)
-	if err != nil {
-		s.logger.Warn("Failed to set online presence: %v", err)
-		// Continue anyway, as this might still work
+	// CRITICAL: Set online presence first - this is mandatory for typing indicators
+	s.logger.Debug("Setting online presence for typing indicator...")
+	if err = session.Client.SendPresence(types.PresenceAvailable); err != nil {
+		s.logger.Error("Failed to set online presence: %v", err)
+		return fmt.Errorf("failed to set online presence: %v", err)
 	}
+	s.logger.Debug("✅ Online presence set successfully")
 
-	// Small delay to ensure presence is processed
-	time.Sleep(50 * time.Millisecond)
-
-	// Subscribe to presence for better reliability (optional)
-	err = session.Client.SubscribePresence(jid)
-	if err != nil {
+	// Subscribe to presence updates for the target contact (helps with reliability)
+	if err = session.Client.SubscribePresence(jid); err != nil {
 		s.logger.Debug("Failed to subscribe to presence for %s: %v", jid.String(), err)
-		// Continue anyway, this is optional
+		// Not critical, continue
 	}
+
+	// Longer delay to ensure presence is fully processed by WhatsApp
+	time.Sleep(300 * time.Millisecond)
 
 	// Send typing indicator using chat presence
+	var presenceType types.ChatPresence
 	if typing {
-		err = session.Client.SendChatPresence(jid, types.ChatPresenceComposing, types.ChatPresenceMediaText)
-		if err != nil {
-			return fmt.Errorf("failed to send typing indicator: %v", err)
-		}
-		s.logger.Info("Sent typing indicator to %s from session %s", jid.String(), sessionID)
+		presenceType = types.ChatPresenceComposing
 	} else {
-		err = session.Client.SendChatPresence(jid, types.ChatPresencePaused, types.ChatPresenceMediaText)
-		if err != nil {
-			return fmt.Errorf("failed to stop typing indicator: %v", err)
-		}
+		presenceType = types.ChatPresencePaused
+	}
+
+	err = session.Client.SendChatPresence(jid, presenceType, types.ChatPresenceMediaText)
+	if err != nil {
+		return fmt.Errorf("failed to send typing indicator: %v", err)
+	}
+
+	if typing {
+		s.logger.Info("Sent typing indicator to %s from session %s (push name: %s)", 
+			jid.String(), sessionID, session.Client.Store.PushName)
+	} else {
 		s.logger.Info("Stopped typing indicator to %s from session %s", jid.String(), sessionID)
 	}
 
@@ -1695,7 +1711,7 @@ func (s *WhatsAppService) sendWebhook(session *models.Session, evt *events.Messa
 		s.logger.Debug("Session %s is disabled, skipping webhook", session.ID)
 		return
 	}
-	
+
 	// Get sender name from push name (most reliable method)
 	senderName := "Unknown"
 	if evt.Info.PushName != "" {
@@ -1704,7 +1720,7 @@ func (s *WhatsAppService) sendWebhook(session *models.Session, evt *events.Messa
 		// Fallback to phone number if no push name
 		senderName = evt.Info.Sender.User
 	}
-	
+
 	// Create webhook message
 	webhookMsg := &models.WebhookMessage{
 		SessionID:   session.ID,
@@ -1788,7 +1804,7 @@ func (s *WhatsAppService) sendAutoReply(session *models.Session, evt *events.Mes
 		s.logger.Debug("Session %s is disabled, skipping auto-reply", session.ID)
 		return
 	}
-	
+
 	// Don't reply to group messages or if no auto reply text is set
 	if evt.Info.IsGroup || session.AutoReplyText == nil || *session.AutoReplyText == "" {
 		return
@@ -1806,7 +1822,7 @@ func (s *WhatsAppService) sendAutoReply(session *models.Session, evt *events.Mes
 
 	// Convert sender JID to user JID (remove device part)
 	userJID := evt.Info.Sender.ToNonAD()
-	
+
 	// Send the auto reply
 	_, err := session.Client.SendMessage(context.Background(), userJID, replyMsg)
 	if err != nil {
@@ -2003,9 +2019,9 @@ func (s *WhatsAppService) GetConversations(sessionID string) ([]*models.Conversa
 // getContactName returns the best available name for a contact
 func (s *WhatsAppService) getContactName(contact types.ContactInfo) string {
 	// Debug log the contact info we received
-	s.logger.Debug("Contact info - FullName: '%s', BusinessName: '%s', PushName: '%s'", 
+	s.logger.Debug("Contact info - FullName: '%s', BusinessName: '%s', PushName: '%s'",
 		contact.FullName, contact.BusinessName, contact.PushName)
-	
+
 	// Priority: FullName > BusinessName > PushName > "Unknown"
 	if contact.FullName != "" {
 		return contact.FullName
@@ -2028,13 +2044,13 @@ func (s *WhatsAppService) generateRandomName() string {
 		"Kendall", "Harley", "Phoenix", "Dakota", "Charlie", "Frankie", "Kai",
 		"Robin", "Eden", "Jules", "Ari", "Reign", "Remy", "Briar", "Sage",
 	}
-	
+
 	// Use crypto/rand for better randomization
 	n, err := rand.Int(rand.Reader, big.NewInt(int64(len(firstNames))))
 	if err != nil {
 		// Fallback to timestamp-based selection
 		return firstNames[time.Now().Unix()%int64(len(firstNames))]
 	}
-	
+
 	return firstNames[n.Int64()]
 }
