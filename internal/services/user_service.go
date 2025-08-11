@@ -302,7 +302,26 @@ func (s *UserService) EnsureDefaultAdmin(username, password string) error {
 	}
 
 	if adminCount > 0 {
+		s.logger.Debug("Admin user already exists, skipping creation")
 		return nil // Admin already exists
+	}
+
+	// Check if the username already exists
+	existingUser, err := s.userRepo.GetByUsername(username)
+	if err != nil {
+		return fmt.Errorf("failed to check existing user: %v", err)
+	}
+
+	if existingUser != nil {
+		// User exists but is not an admin - upgrade to admin
+		if existingUser.Role != models.RoleAdmin {
+			existingUser.Role = models.RoleAdmin
+			if err := s.userRepo.Update(existingUser); err != nil {
+				return fmt.Errorf("failed to upgrade user to admin: %v", err)
+			}
+			s.logger.Info("Upgraded existing user %s to admin role", username)
+		}
+		return nil
 	}
 
 	// Create default admin
