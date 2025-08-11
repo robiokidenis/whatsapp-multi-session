@@ -252,6 +252,12 @@ func (s *WhatsAppService) CreateSession(req *models.CreateSessionRequest, userID
 
 	// Set random device properties for this session
 	s.setRandomDeviceProps(deviceStore)
+	
+	// Pre-save the device to avoid foreign key constraints during pairing
+	if err := deviceStore.Save(context.Background()); err != nil {
+		s.logger.Warn("Failed to pre-save device for session %s: %v", sessionID, err)
+		// Continue anyway as this might not be critical
+	}
 
 	// Create WhatsApp client with error handling
 	clientLog := waLog.Stdout("Client", "INFO", true)
@@ -1026,6 +1032,135 @@ func (s *WhatsAppService) SendMessage(sessionID string, req *models.SendMessageR
 		return "", fmt.Errorf("failed to send message: %v", err)
 	}
 
+	return resp.ID, nil
+}
+
+// ForwardMessage forwards an existing message to another recipient
+func (s *WhatsAppService) ForwardMessage(sessionID string, req *models.ForwardMessageRequest) (string, error) {
+	session, exists := s.GetSession(sessionID)
+	if !exists {
+		return "", models.NewNotFoundError("session not found")
+	}
+
+	// Check if session is connected
+	if !session.Connected {
+		return "", models.NewServiceUnavailableError("session is not connected. Please connect the session first")
+	}
+
+	// Check if session is logged in
+	if !session.LoggedIn {
+		return "", models.NewUnauthorizedError("session is not authenticated. Please scan QR code to login")
+	}
+
+	// Format recipient JID
+	recipientJID := req.To
+	if !strings.Contains(req.To, "@") {
+		phoneNumber := strings.ReplaceAll(req.To, "+", "")
+		phoneNumber = strings.ReplaceAll(phoneNumber, " ", "")
+		phoneNumber = strings.ReplaceAll(phoneNumber, "-", "")
+		
+		if len(phoneNumber) < 8 || len(phoneNumber) > 15 {
+			return "", fmt.Errorf("invalid phone number length. Should be 8-15 digits")
+		}
+		
+		recipientJID = phoneNumber + "@s.whatsapp.net"
+	}
+
+	s.logger.Debug("Forwarding message %s to JID: %s", req.MessageID, recipientJID)
+
+	// Parse recipient JID
+	jid, err := types.ParseJID(recipientJID)
+	if err != nil {
+		return "", fmt.Errorf("invalid recipient JID: %v", err)
+	}
+
+	// Convert to non-device JID for message sending
+	jid = jid.ToNonAD()
+
+	// Create forward message with context info
+	msg := &waProto.Message{
+		ExtendedTextMessage: &waProto.ExtendedTextMessage{
+			Text: proto.String(""),
+			ContextInfo: &waProto.ContextInfo{
+				StanzaID:       proto.String(req.MessageID),
+				Participant:    proto.String(recipientJID),
+				IsForwarded:    proto.Bool(true),
+				ForwardingScore: proto.Uint32(1),
+			},
+		},
+	}
+
+	// Send the forward message
+	resp, err := session.Client.SendMessage(context.Background(), jid, msg)
+	if err != nil {
+		return "", fmt.Errorf("failed to forward message: %v", err)
+	}
+
+	s.logger.Info("Message forwarded to %s from session %s", recipientJID, sessionID)
+	return resp.ID, nil
+}
+
+// ReplyMessage sends a reply to a specific message
+func (s *WhatsAppService) ReplyMessage(sessionID string, req *models.ReplyMessageRequest) (string, error) {
+	session, exists := s.GetSession(sessionID)
+	if !exists {
+		return "", models.NewNotFoundError("session not found")
+	}
+
+	// Check if session is connected
+	if !session.Connected {
+		return "", models.NewServiceUnavailableError("session is not connected. Please connect the session first")
+	}
+
+	// Check if session is logged in
+	if !session.LoggedIn {
+		return "", models.NewUnauthorizedError("session is not authenticated. Please scan QR code to login")
+	}
+
+	// Format recipient JID
+	recipientJID := req.To
+	if !strings.Contains(req.To, "@") {
+		phoneNumber := strings.ReplaceAll(req.To, "+", "")
+		phoneNumber = strings.ReplaceAll(phoneNumber, " ", "")
+		phoneNumber = strings.ReplaceAll(phoneNumber, "-", "")
+		
+		if len(phoneNumber) < 8 || len(phoneNumber) > 15 {
+			return "", fmt.Errorf("invalid phone number length. Should be 8-15 digits")
+		}
+		
+		recipientJID = phoneNumber + "@s.whatsapp.net"
+	}
+
+	s.logger.Debug("Replying to message %s with JID: %s", req.QuotedMessageID, recipientJID)
+
+	// Parse recipient JID
+	jid, err := types.ParseJID(recipientJID)
+	if err != nil {
+		return "", fmt.Errorf("invalid recipient JID: %v", err)
+	}
+
+	// Convert to non-device JID for message sending
+	jid = jid.ToNonAD()
+
+	// Create reply message with context info
+	msg := &waProto.Message{
+		ExtendedTextMessage: &waProto.ExtendedTextMessage{
+			Text: proto.String(req.Message),
+			ContextInfo: &waProto.ContextInfo{
+				StanzaID:      proto.String(req.QuotedMessageID),
+				Participant:   proto.String(recipientJID),
+				QuotedMessage: &waProto.Message{},
+			},
+		},
+	}
+
+	// Send the reply message
+	resp, err := session.Client.SendMessage(context.Background(), jid, msg)
+	if err != nil {
+		return "", fmt.Errorf("failed to send reply message: %v", err)
+	}
+
+	s.logger.Info("Reply sent to %s from session %s", recipientJID, sessionID)
 	return resp.ID, nil
 }
 

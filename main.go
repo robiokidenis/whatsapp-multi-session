@@ -235,6 +235,8 @@ func setupRoutes(
 	sessions.HandleFunc("/{sessionId}/send-attachment", sessionHandler.SendAttachment).Methods("POST")
 	sessions.HandleFunc("/{sessionId}/send-image", sessionHandler.SendImage).Methods("POST")
 	sessions.HandleFunc("/{sessionId}/send-file-url", sessionHandler.SendFileFromURL).Methods("POST")
+	sessions.HandleFunc("/{sessionId}/forward", sessionHandler.ForwardMessage).Methods("POST")
+	sessions.HandleFunc("/{sessionId}/reply", sessionHandler.ReplyMessage).Methods("POST")
 	sessions.HandleFunc("/{sessionId}/check-number", sessionHandler.CheckNumber).Methods("POST")
 	sessions.HandleFunc("/{sessionId}/typing", sessionHandler.SendTyping).Methods("POST")
 	sessions.HandleFunc("/{sessionId}/stop-typing", sessionHandler.StopTyping).Methods("POST")

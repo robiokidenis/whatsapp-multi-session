@@ -71,6 +71,19 @@ type ContactInfo struct {
 	Verified    bool   `json:"verified"`
 }
 
+// ForwardMessageRequest represents a forward message request
+type ForwardMessageRequest struct {
+	To        string `json:"to"`         // Recipient JID
+	MessageID string `json:"message_id"` // Message ID to forward
+}
+
+// ReplyMessageRequest represents a reply message request
+type ReplyMessageRequest struct {
+	To              string `json:"to"`               // Recipient JID
+	Message         string `json:"message"`          // Reply message content
+	QuotedMessageID string `json:"quoted_message_id"` // ID of message being replied to
+}
+
 // Conversation represents a chat/conversation in WhatsApp
 type Conversation struct {
 	JID           string     `json:"jid"`

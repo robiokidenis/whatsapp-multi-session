@@ -645,6 +645,99 @@ func (h *SessionHandler) SendImage(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// ForwardMessage handles forwarding messages
+func (h *SessionHandler) ForwardMessage(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	sessionID := vars["sessionId"]
+
+	// Check user authentication and session ownership
+	if _, _, ok := h.getUserInfoAndCheckOwnership(w, r, sessionID); !ok {
+		return
+	}
+
+	// Check if session is enabled
+	if err := h.checkSessionEnabled(sessionID); err != nil {
+		http.Error(w, err.Error(), http.StatusForbidden)
+		return
+	}
+
+	var req models.ForwardMessageRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	// Validate input
+	if req.To == "" || req.MessageID == "" {
+		http.Error(w, "To and message_id fields are required", http.StatusBadRequest)
+		return
+	}
+
+	// Forward message
+	messageID, err := h.whatsappService.ForwardMessage(sessionID, &req)
+	if err != nil {
+		h.logger.Error("Failed to forward message from session %s: %v", sessionID, err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"success": true,
+		"id":      messageID,
+		"message": "Message forwarded successfully",
+	})
+}
+
+// ReplyMessage handles replying to messages
+func (h *SessionHandler) ReplyMessage(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	sessionID := vars["sessionId"]
+
+	// Check user authentication and session ownership
+	if _, _, ok := h.getUserInfoAndCheckOwnership(w, r, sessionID); !ok {
+		return
+	}
+
+	// Check if session is enabled
+	if err := h.checkSessionEnabled(sessionID); err != nil {
+		http.Error(w, err.Error(), http.StatusForbidden)
+		return
+	}
+
+	var req models.ReplyMessageRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	// Validate input
+	if req.To == "" || req.Message == "" || req.QuotedMessageID == "" {
+		http.Error(w, "To, message, and quoted_message_id fields are required", http.StatusBadRequest)
+		return
+	}
+
+	// Reply to message
+	messageID, err := h.whatsappService.ReplyMessage(sessionID, &req)
+	if err != nil {
+		h.logger.Error("Failed to reply to message from session %s: %v", sessionID, err)
+		// Log failed reply
+		h.logMessage(sessionID, messageID, "", req.To, "text", req.Message, "", "sent", "failed", err.Error())
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	// Log successful reply
+	h.logMessage(sessionID, messageID, "", req.To, "text", req.Message, "", "sent", "sent", "")
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"success": true,
+		"id":      messageID,
+		"message": "Reply sent successfully",
+	})
+}
+
 // CheckNumber handles checking if a number is on WhatsApp
 func (h *SessionHandler) CheckNumber(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
