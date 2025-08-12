@@ -16,9 +16,7 @@ services:
       - JWT_SECRET=${JWT_SECRET}
       - GIN_MODE=${GIN_MODE:-release}
       
-      # Database Configuration
-      - DATABASE_TYPE=${DATABASE_TYPE:-sqlite}
-      - DATABASE_PATH=${DATABASE_PATH}
+      # MySQL Database Configuration (only database supported)
       - MYSQL_HOST=${MYSQL_HOST:-mysql}
       - MYSQL_PORT=${MYSQL_PORT:-3306}
       - MYSQL_USER=${MYSQL_USER:-root}
