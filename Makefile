@@ -15,8 +15,13 @@ setup: init ## Alias for init
 
 fix-permissions: ## Fix directory permissions for Docker container
 	@echo "🔧 Fixing directory permissions..."
-	@sudo chown -R 1001:1001 ./whatsapp ./config || echo "⚠️  Failed to set permissions. Run manually: sudo chown -R 1001:1001 ./whatsapp ./config"
-	@echo "✅ Permissions fixed"
+	@if [ -f ./fix-docker-permissions.sh ]; then \
+		sudo ./fix-docker-permissions.sh; \
+	else \
+		sudo chown -R 1001:1001 ./whatsapp ./config || echo "⚠️  Failed to set permissions. Run manually: sudo chown -R 1001:1001 ./whatsapp ./config"; \
+		sudo chmod -R u+w ./whatsapp; \
+		echo "✅ Permissions fixed"; \
+	fi
 
 build: ## Build Docker images
 	@echo "🏗️  Building Docker images..."
