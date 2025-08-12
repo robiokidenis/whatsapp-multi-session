@@ -24,6 +24,7 @@ services:
       - MYSQL_USER=${MYSQL_USER:-root}
       - MYSQL_PASSWORD=${MYSQL_PASSWORD}
       - MYSQL_DATABASE=${MYSQL_DATABASE:-waGo}
+      - WHATSAPP_DB_PATH=/app/database/sessions.db
       
       # Default Admin User
       - ADMIN_USERNAME=${ADMIN_USERNAME:-admin}
@@ -35,7 +36,6 @@ services:
       - LOG_LEVEL=${LOG_LEVEL:-info}
       
       # WhatsApp Configuration
-      - WHATSAPP_DB_PATH=${WHATSAPP_DB_PATH}
       - AUTO_CONNECT=${AUTO_CONNECT:-true}
       
       # Security Settings
@@ -46,8 +46,8 @@ services:
       # Database storage - maps to local whatsapp directory
       - ${DATA_DIR:-./whatsapp}:/app/data
       
-      # WhatsApp session storage
-      - ${WHATSAPP_DIR:-./whatsapp/sessions}:/app/sessions
+      # WhatsApp sessions database - CRITICAL for session persistence
+      - ${WHATSAPP_DB_DIR:-./whatsapp}/sessions.db:/app/database/sessions.db
       
       # Application logs
       - ${LOGS_DIR:-./whatsapp/logs}:/app/logs

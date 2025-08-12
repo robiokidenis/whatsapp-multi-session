@@ -1,7 +1,7 @@
 # Multi-stage build for WhatsApp Multi-Session Manager
 
 # Stage 1: Build frontend
-FROM node:20-alpine AS frontend-builder
+FROM node:current-alpine3.22 AS frontend-builder
 
 # Set working directory
 WORKDIR /app/frontend

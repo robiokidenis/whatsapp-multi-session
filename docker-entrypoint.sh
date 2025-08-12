@@ -4,11 +4,11 @@ set -e
 echo "Starting WhatsApp Multi-Session Manager..."
 
 # Create necessary directories if they don't exist
-mkdir -p /app/data /app/sessions /app/logs /app/whatsapp/sessions /app/whatsapp/logs
+mkdir -p /app/data /app/database /app/logs
 
 # Fix permissions for mounted volumes (this will succeed if we have write access)
 # This is needed because bind mounts may have different ownership
-chmod -R u+w /app/data /app/sessions /app/logs 2>/dev/null || {
+chmod -R u+w /app/data /app/database /app/logs 2>/dev/null || {
     echo "Warning: Could not set write permissions on mounted directories."
     echo "This may cause permission issues. Consider running:"
     echo "  sudo chown -R 1001:1001 ./whatsapp ./config"
@@ -28,7 +28,7 @@ fi
 
 # Set default values if not provided
 export DATABASE_PATH="${DATABASE_PATH:-/app/data/session_metadata.db}"
-export WHATSAPP_DB_PATH="${WHATSAPP_DB_PATH:-/app/data/sessions.db}"
+export WHATSAPP_DB_PATH="${WHATSAPP_DB_PATH:-/app/database/sessions.db}"
 export JWT_SECRET="${JWT_SECRET:-default-jwt-secret-change-in-production}"
 export ADMIN_USERNAME="${ADMIN_USERNAME:-admin}"
 export ADMIN_PASSWORD="${ADMIN_PASSWORD:-admin123}"
