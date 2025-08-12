@@ -54,7 +54,7 @@ fix_host_permissions() {
         touch ./whatsapp/sessions.db
     fi
     
-    # Change ownership to www user (UID 1001) since container runs as www user
+    # Change ownership to www user (UID 1001) since container runs as www user root is 0:0
     echo "🔐 Setting ownership to www user (UID 1001 - container user)..."
     sudo chown -R 1001:1001 ./whatsapp
     sudo chown -R 1001:1001 ./config
