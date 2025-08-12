@@ -1,0 +1,28 @@
+version: '3.8'
+
+# Production override for WhatsApp Multi-Session Manager
+# Usage: docker-compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+# NOTE: Main docker-compose.yml now runs as root by default
+
+services:
+  whatsapp-multi-session:
+    # Additional production settings
+    security_opt:
+      - no-new-privileges:true
+    
+    # Production logging (larger files, more retention)
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "10"
+    
+    # Resource limits for production
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+          cpus: '2.0'
+        reservations:
+          memory: 512M
+          cpus: '1.0'

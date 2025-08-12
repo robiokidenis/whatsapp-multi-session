@@ -18,7 +18,7 @@ fix-permissions: ## Fix directory permissions for Docker container
 	@if [ -f ./fix-docker-permissions.sh ]; then \
 		sudo ./fix-docker-permissions.sh; \
 	else \
-		sudo chown -R 1001:1001 ./whatsapp ./config || echo "⚠️  Failed to set permissions. Run manually: sudo chown -R 1001:1001 ./whatsapp ./config"; \
+		sudo chown -R 0:0 ./whatsapp ./config || echo "⚠️  Failed to set permissions. Run manually: sudo chown -R 0:0 ./whatsapp ./config"; \
 		sudo chmod -R u+w ./whatsapp; \
 		echo "✅ Permissions fixed"; \
 	fi
@@ -32,6 +32,11 @@ deploy: fix-permissions build ## Deploy the application (fix permissions, build,
 	@docker-compose up -d
 	@echo "✅ Deployment complete!"
 	@$(MAKE) status
+
+deploy-prod: ## Deploy for production (handles Ubuntu/Linux permission issues)
+	@echo "🏭 Deploying for production environment..."
+	@chmod +x deploy-production.sh
+	@./deploy-production.sh
 
 start: fix-permissions ## Start the application
 	@echo "▶️  Starting WhatsApp Multi-Session Manager..."

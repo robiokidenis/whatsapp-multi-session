@@ -12,9 +12,9 @@ if [ "$EUID" -ne 0 ]; then
     exit 1
 fi
 
-# Docker container runs as UID 1001 (appuser)
-DOCKER_UID=1001
-DOCKER_GID=1001
+# Docker container runs as UID 0 (root)
+DOCKER_UID=0
+DOCKER_GID=0
 
 # Create directories if they don't exist
 echo "📁 Creating necessary directories..."
@@ -23,7 +23,7 @@ mkdir -p ./whatsapp/logs
 mkdir -p ./config
 
 # Fix ownership for all mounted volumes
-echo "🔐 Setting ownership to UID:GID ${DOCKER_UID}:${DOCKER_GID}..."
+echo "🔐 Setting ownership to UID:GID ${DOCKER_UID}:${DOCKER_GID} (root)..."
 chown -R ${DOCKER_UID}:${DOCKER_GID} ./whatsapp
 chown -R ${DOCKER_UID}:${DOCKER_GID} ./config 2>/dev/null || true
 
@@ -42,3 +42,5 @@ ls -la ./whatsapp/sessions.db 2>/dev/null || echo "   (will be created on first 
 echo ""
 echo "🚀 You can now restart your Docker container:"
 echo "   docker-compose restart"
+echo ""
+echo "ℹ️  Note: Container runs as root (UID 0) for maximum compatibility"

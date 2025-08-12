@@ -6,14 +6,10 @@ echo "Starting WhatsApp Multi-Session Manager..."
 # Create necessary directories if they don't exist
 mkdir -p /app/data /app/database /app/logs
 
-# Fix permissions for mounted volumes (this will succeed if we have write access)
-# This is needed because bind mounts may have different ownership
-chmod -R u+w /app/data /app/database /app/logs 2>/dev/null || {
-    echo "Warning: Could not set write permissions on mounted directories."
-    echo "This may cause permission issues. Consider running:"
-    echo "  sudo chown -R 1001:1001 ./whatsapp ./config"
-    echo "on the host system."
-}
+# Fix permissions for mounted volumes (running as root so this will work)
+echo "Setting permissions for mounted directories (running as root)..."
+chmod -R 755 /app/data /app/database /app/logs 2>/dev/null || true
+chown -R root:root /app/data /app/database /app/logs 2>/dev/null || true
 
 # Initialize database if it doesn't exist
 if [ ! -f "/app/data/session_metadata.db" ]; then
@@ -33,8 +29,7 @@ export JWT_SECRET="${JWT_SECRET:-default-jwt-secret-change-in-production}"
 export ADMIN_USERNAME="${ADMIN_USERNAME:-admin}"
 export ADMIN_PASSWORD="${ADMIN_PASSWORD:-admin123}"
 
-# Note: Cannot change ownership as we're running as non-root user
-# The directories should already have correct permissions from Dockerfile
+# Running as root, so we can manage permissions properly
 
 echo "Environment configured. Starting application..."
 
