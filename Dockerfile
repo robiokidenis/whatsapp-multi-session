@@ -45,16 +45,16 @@ FROM alpine:latest
 # Install runtime dependencies
 RUN apk --no-cache add ca-certificates sqlite tzdata
 
-# Create app user for security
-RUN addgroup -g 1001 appgroup && \
-    adduser -u 1001 -G appgroup -s /bin/sh -D appuser
+# Create www user (UID 1001 to match host system)
+RUN addgroup -g 1001 www && \
+    adduser -u 1001 -G www -s /bin/sh -D www
 
 # Set working directory
 WORKDIR /app
 
 # Create directories with proper permissions
-RUN mkdir -p /app/data /app/logs /app/whatsapp/sessions /app/whatsapp/logs /app/config && \
-    chown -R appuser:appgroup /app
+RUN mkdir -p /app/data /app/logs /app/database /app/config && \
+    chown -R www:www /app
 
 # Copy entrypoint script
 COPY docker-entrypoint.sh /app/
@@ -66,11 +66,11 @@ COPY --from=builder /app/whatsapp-multi-session .
 COPY --from=frontend-builder /app/frontend/dist ./frontend/dist
 
 # Set proper permissions
-RUN chown appuser:appgroup whatsapp-multi-session && \
+RUN chown www:www whatsapp-multi-session && \
     chmod +x whatsapp-multi-session
 
-# Switch to non-root user
-USER appuser
+# Switch to www user
+USER www
 
 # Expose port
 EXPOSE 8080

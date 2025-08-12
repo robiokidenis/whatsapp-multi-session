@@ -18,7 +18,7 @@ fix-permissions: ## Fix directory permissions for Docker container
 	@if [ -f ./fix-docker-permissions.sh ]; then \
 		sudo ./fix-docker-permissions.sh; \
 	else \
-		sudo chown -R 0:0 ./whatsapp ./config || echo "⚠️  Failed to set permissions. Run manually: sudo chown -R 0:0 ./whatsapp ./config"; \
+		sudo chown -R 1001:1001 ./whatsapp ./config || echo "⚠️  Failed to set permissions. Run manually: sudo chown -R 1001:1001 ./whatsapp ./config"; \
 		sudo chmod -R u+w ./whatsapp; \
 		echo "✅ Permissions fixed"; \
 	fi

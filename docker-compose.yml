@@ -6,7 +6,7 @@ services:
       dockerfile: Dockerfile
     container_name: whatsapp-multi-session
     restart: unless-stopped
-    user: "0:0"  # Run as root to avoid permission issues
+    user: "1001:1001"  # Run as www user (UID:GID 1001:1001)
     ports:
       - "${PORT:-8080}:8080"
     env_file:
