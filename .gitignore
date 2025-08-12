@@ -83,3 +83,6 @@ session_data/
 drop_recreate_tables.go.bak
 fix_db.go.bak
 update_admin.go.bak
+
+
+n8n-nodes-whatsapp-multi-session
