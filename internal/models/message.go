@@ -75,6 +75,7 @@ type ContactInfo struct {
 type ForwardMessageRequest struct {
 	To        string `json:"to"`         // Recipient JID
 	MessageID string `json:"message_id"` // Message ID to forward
+	Text      string `json:"text"`       // Message text content to forward
 }
 
 // ReplyMessageRequest represents a reply message request

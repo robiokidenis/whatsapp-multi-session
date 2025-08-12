@@ -1052,6 +1052,11 @@ func (s *WhatsAppService) ForwardMessage(sessionID string, req *models.ForwardMe
 		return "", models.NewUnauthorizedError("session is not authenticated. Please scan QR code to login")
 	}
 
+	// Validate message text
+	if req.Text == "" {
+		return "", fmt.Errorf("message text is required for forwarding")
+	}
+
 	// Format recipient JID
 	recipientJID := req.To
 	if !strings.Contains(req.To, "@") {
@@ -1080,7 +1085,7 @@ func (s *WhatsAppService) ForwardMessage(sessionID string, req *models.ForwardMe
 	// Create forward message with context info
 	msg := &waProto.Message{
 		ExtendedTextMessage: &waProto.ExtendedTextMessage{
-			Text: proto.String(""),
+			Text: proto.String(req.Text),
 			ContextInfo: &waProto.ContextInfo{
 				StanzaID:       proto.String(req.MessageID),
 				Participant:    proto.String(recipientJID),

@@ -668,8 +668,8 @@ func (h *SessionHandler) ForwardMessage(w http.ResponseWriter, r *http.Request) 
 	}
 
 	// Validate input
-	if req.To == "" || req.MessageID == "" {
-		http.Error(w, "To and message_id fields are required", http.StatusBadRequest)
+	if req.To == "" || req.MessageID == "" || req.Text == "" {
+		http.Error(w, "To, message_id, and text fields are required", http.StatusBadRequest)
 		return
 	}
 
