@@ -25,10 +25,18 @@ func (r *UserRepository) Create(user *models.User) error {
 		VALUES (?, ?, ?, ?, ?, ?, ?)
 	`
 	
+	// Handle NULL API key - pass nil if API key is empty
+	var apiKeyValue interface{}
+	if user.APIKey == "" {
+		apiKeyValue = nil
+	} else {
+		apiKeyValue = user.APIKey
+	}
+	
 	result, err := r.db.Exec(query, 
 		user.Username, 
 		user.Password,
-		user.APIKey,
+		apiKeyValue,
 		user.Role, 
 		user.SessionLimit, 
 		user.IsActive,
