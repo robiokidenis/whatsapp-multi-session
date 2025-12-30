@@ -2,7 +2,7 @@
 
 # Docker Configuration
 DOCKER_REGISTRY ?= docker.io
-DOCKER_IMAGE ?= robiokidenis/whatsapp-multi-session
+DOCKER_IMAGE ?= rod16/whatsapp-multi-session
 DOCKER_TAG ?= latest
 
 # Default target
