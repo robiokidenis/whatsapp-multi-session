@@ -1597,8 +1597,20 @@ func (h *SessionHandler) streamQRUpdatesFromChannel(ctx context.Context, conn *w
 				msgType = "qr_timeout"
 				data = map[string]string{"message": "QR code timeout"}
 			default:
-				h.logger.Debug("Unknown QR event: %s", evt.Event)
-				continue
+				// Handle error events (events starting with "err-")
+				if len(evt.Event) > 4 && evt.Event[:4] == "err-" {
+					msgType = "error"
+					errorMessage := fmt.Sprintf("QR generation failed: %s", evt.Event)
+					// Provide user-friendly messages for common errors
+					if evt.Event == "err-client-outdated" {
+						errorMessage = "WhatsApp client version is outdated. Please update the whatmeow library or restart the container to fetch the latest version."
+					}
+					data = map[string]string{"error": errorMessage}
+					h.logger.Error("QR error event for session %s: %s", sessionID, evt.Event)
+				} else {
+					h.logger.Debug("Unknown QR event: %s", evt.Event)
+					continue
+				}
 			}
 
 			wsMsg := models.WebSocketMessage{

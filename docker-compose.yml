@@ -44,10 +44,10 @@ services:
     volumes:
       # Database storage - maps to local whatsapp directory
       - ${DATA_DIR:-./whatsapp}:/app/data
-      
-      # WhatsApp sessions database - CRITICAL for session persistence
-      - ${WHATSAPP_DB_DIR:-./whatsapp}/sessions.db:/app/database/sessions.db
-      
+
+      # WhatsApp sessions database directory - CRITICAL for session persistence
+      - ${WHATSAPP_DB_DIR:-./whatsapp}:/app/database
+
       # Application logs
       - ${LOGS_DIR:-./whatsapp/logs}:/app/logs
       

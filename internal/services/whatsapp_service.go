@@ -757,7 +757,7 @@ func (s *WhatsAppService) setupEventHandlers(session *models.Session) {
 						s.logger.Debug("Using existing push name '%s' for session %s", session.Client.Store.PushName, session.ID)
 					}
 
-					if err := session.Client.SendPresence(types.PresenceAvailable); err != nil {
+					if err := session.Client.SendPresence(context.Background(), types.PresenceAvailable); err != nil {
 						s.logger.Warn("Failed to set online presence for session %s: %v", session.ID, err)
 					} else {
 						s.logger.Debug("Set online presence for session %s", session.ID)
@@ -1673,7 +1673,7 @@ func (s *WhatsAppService) CheckNumber(sessionID string, number string) (bool, st
 	}
 
 	// Check if number exists
-	resp, err := session.Client.IsOnWhatsApp([]string{jid.User})
+	resp, err := session.Client.IsOnWhatsApp(context.Background(), []string{jid.User})
 	if err != nil {
 		return false, "", fmt.Errorf("failed to check number: %v", err)
 	}
@@ -1737,14 +1737,14 @@ func (s *WhatsAppService) SendTyping(sessionID string, to string, typing bool) e
 
 	// CRITICAL: Set online presence first - this is mandatory for typing indicators
 	s.logger.Debug("Setting online presence for typing indicator...")
-	if err = session.Client.SendPresence(types.PresenceAvailable); err != nil {
+	if err = session.Client.SendPresence(context.Background(), types.PresenceAvailable); err != nil {
 		s.logger.Error("Failed to set online presence: %v", err)
 		return fmt.Errorf("failed to set online presence: %v", err)
 	}
 	s.logger.Debug("✅ Online presence set successfully")
 
 	// Subscribe to presence updates for the target contact (helps with reliability)
-	if err = session.Client.SubscribePresence(jid); err != nil {
+	if err = session.Client.SubscribePresence(context.Background(), jid); err != nil {
 		s.logger.Debug("Failed to subscribe to presence for %s: %v", jid.String(), err)
 		// Not critical, continue
 	}
@@ -1760,7 +1760,7 @@ func (s *WhatsAppService) SendTyping(sessionID string, to string, typing bool) e
 		presenceType = types.ChatPresencePaused
 	}
 
-	err = session.Client.SendChatPresence(jid, presenceType, types.ChatPresenceMediaText)
+	err = session.Client.SendChatPresence(context.Background(), jid, presenceType, types.ChatPresenceMediaText)
 	if err != nil {
 		return fmt.Errorf("failed to send typing indicator: %v", err)
 	}
@@ -1800,7 +1800,7 @@ func (s *WhatsAppService) SetPresence(sessionID string, status string) error {
 		return fmt.Errorf("invalid presence status: %s (valid: available, unavailable)", status)
 	}
 
-	err := session.Client.SendPresence(presence)
+	err := session.Client.SendPresence(context.Background(), presence)
 	if err != nil {
 		return fmt.Errorf("failed to set presence: %v", err)
 	}
@@ -1825,7 +1825,7 @@ func (s *WhatsAppService) GetGroups(sessionID string) ([]map[string]interface{},
 	}
 
 	// Get groups
-	groups, err := session.Client.GetJoinedGroups()
+	groups, err := session.Client.GetJoinedGroups(context.Background())
 	if err != nil {
 		return nil, fmt.Errorf("failed to get groups: %v", err)
 	}
@@ -2109,7 +2109,7 @@ func (s *WhatsAppService) GetConversations(sessionID string) ([]*models.Conversa
 	}
 
 	// Get joined groups
-	groups, err := session.Client.GetJoinedGroups()
+	groups, err := session.Client.GetJoinedGroups(context.Background())
 	if err != nil {
 		s.logger.Warn("Failed to get groups: %v", err)
 		// Continue without groups
