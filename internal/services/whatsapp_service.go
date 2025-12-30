@@ -161,6 +161,31 @@ func (s *WhatsAppService) setRandomDeviceProps(deviceStore *store.Device) {
 }
 
 // NewWhatsAppService creates a new WhatsApp service
+//
+// DATABASE ISSUES TROUBLESHOOTING:
+//
+// Symptom: "failed to create WhatsApp store: failed to upgrade database"
+// Cause: SQLite database is corrupted or has permission issues
+// Solutions:
+// 1. Run: ./scripts/reset-whatsapp-db.sh (deletes and recreates database)
+// 2. Manual fix: rm -f whatsapp/sessions.db && docker-compose restart
+// 3. Permission fix: chmod 666 whatsapp/sessions.db (then restart)
+// 4. Check file ownership: ls -la whatsapp/ (should be readable by container user)
+//
+// Symptom: "attempt to write a readonly database"
+// Cause: Database file permissions don't allow container user (UID 1001) to write
+// Solutions:
+// 1. Fix permissions: chmod 666 whatsapp/sessions.db
+// 2. Fix ownership: chown 1001:1001 whatsapp/sessions.db
+// 3. Delete and let container recreate: rm whatsapp/sessions.db && docker-compose restart
+//
+// Symptom: "failed to check if foreign keys are enabled"
+// Cause: Database file doesn't exist or is corrupted
+// Solutions:
+// 1. Delete database: rm whatsapp/sessions.db
+// 2. Restart container: docker-compose restart
+// 3. Container will create fresh database automatically
+//
 func NewWhatsAppService(
 	dbPath string,
 	sessionRepo *repository.SessionRepository,
@@ -188,8 +213,11 @@ func NewWhatsAppService(
 		// If foreign key error occurs, it might be due to corrupted database
 		if strings.Contains(err.Error(), "foreign key") || strings.Contains(err.Error(), "constraint") {
 			log.Error("WhatsApp database has foreign key issues: %v", err)
-			log.Info("💡 To fix this issue, run: ./reset-whatsapp-db.sh")
-			log.Info("⚠️  This will require re-authentication of all WhatsApp sessions")
+			log.Error("TROUBLESHOOTING:")
+			log.Error("  → Run: ./scripts/reset-whatsapp-db.sh")
+			log.Error("  → Or manually: rm whatsapp/sessions.db && docker-compose restart")
+			log.Error("  → Or fix permissions: chmod 666 whatsapp/sessions.db")
+			log.Error("⚠️  This will require re-authentication of all WhatsApp sessions")
 		}
 		return nil, fmt.Errorf("failed to create WhatsApp store: %v", err)
 	}
@@ -771,6 +799,43 @@ func (s *WhatsAppService) UpdateSessionEnabled(sessionID string, enabled bool) e
 }
 
 // setupEventHandlers sets up event handlers for a session
+//
+// TROUBLESHOOTING CONNECTION ISSUES:
+//
+// 1. Symptom: "received Connected event but client is not actually connected"
+//    Cause: whatsmeow library fired Connected event but websocket failed to establish
+//    Solutions:
+//    a) Check network connectivity to WhatsApp servers
+//    b) Verify no firewall/proxy is blocking websocket connections
+//    c) Try updating whatsmeow: go get go.mau.fi/whatsmeow@latest
+//    d) Delete session and recreate (device may be corrupted)
+//
+// 2. Symptom: "Stream error, disconnecting"
+//    Cause: WhatsApp server closed the connection due to protocol error or session issue
+//    Solutions:
+//    a) Session may be logged out elsewhere - reconnect
+//    b) Update whatsmeow library for latest protocol fixes
+//    c) Clear device store: delete whatsapp/sessions.db and recreate session
+//
+// 3. Symptom: Connection succeeds but messages fail with "websocket not connected"
+//    Cause: Race condition between connection event and actual socket ready state
+//    Solutions:
+//    a) Add delay before sending messages after connect
+//    b) Check session.Client.IsConnected() before sending
+//    c) This should be fixed in current code - verify you have latest version
+//
+// 4. Symptom: "Failed to set online presence: can't send presence without PushName set"
+//    Cause: Device store missing PushName required by WhatsApp
+//    Solutions:
+//    a) This is auto-fixed in current code by generating random PushName
+//    b) If issue persists, manually set: session.Client.Store.PushName = "SomeName"
+//
+// 5. General connection issues:
+//    - Check whatsmeow version: go list -m go.mau.fi/whatsmeow
+//    - Update if outdated: go get go.mau.fi/whatsmeow@latest
+//    - Check for GitHub issues: https://github.com/mautic/whatsmeow/issues
+//    - Verify container has internet access
+//
 func (s *WhatsAppService) setupEventHandlers(session *models.Session) {
 	session.Client.AddEventHandler(func(evt interface{}) {
 		switch v := evt.(type) {
@@ -823,7 +888,18 @@ func (s *WhatsAppService) setupEventHandlers(session *models.Session) {
 				// Client reported Connected event but isn't actually connected
 				session.Connected = false
 				s.mu.Unlock()
-				s.logger.Warn("Session %s received Connected event but client is not actually connected", session.ID)
+
+				// TROUBLESHOOTING: This means whatsmeow fired Connected event but socket isn't connected
+				// Possible causes:
+				// 1. whatsmeow library bug - check for updates: go get go.mau.fi/whatsmeow@latest
+				// 2. Network/firewall blocking websocket connection
+				// 3. WhatsApp server rejected connection
+				// 4. Device store corrupted - try deleting and recreating session
+				s.logger.Error("Session %s CONNECTION ISSUE: Received Connected event but websocket is not connected!", session.ID)
+				s.logger.Error("  → Check whatsmeow version: go list -m go.mau.fi/whatsmeow")
+				s.logger.Error("  → Update if needed: go get go.mau.fi/whatsmeow@latest && go mod tidy")
+				s.logger.Error("  → Check network connectivity and firewall settings")
+				s.logger.Error("  → Try recreating the session (delete and create new)")
 			}
 
 		case *events.Disconnected:
@@ -840,7 +916,16 @@ func (s *WhatsAppService) setupEventHandlers(session *models.Session) {
 			session.LoggedIn = false
 			s.mu.Unlock()
 
-			s.logger.Error("Session %s stream error, disconnecting", session.ID)
+			// TROUBLESHOOTING: WhatsApp closed connection due to protocol error
+			// Possible causes:
+			// 1. Protocol version mismatch - update whatsmeow
+			// 2. Session logged out from another device
+			// 3. WhatsApp server rejected the connection
+			// 4. Device store corrupted
+			s.logger.Error("Session %s STREAM ERROR: WhatsApp closed the connection", session.ID)
+			s.logger.Error("  → Check whatsmeow for protocol updates: go get go.mau.fi/whatsmeow@latest")
+			s.logger.Error("  → Session may need re-authentication - scan QR code again")
+			s.logger.Error("  → If issue persists, delete and recreate the session")
 
 		case *events.LoggedOut:
 			s.mu.Lock()
