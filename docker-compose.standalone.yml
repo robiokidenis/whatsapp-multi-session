@@ -1,7 +1,9 @@
-# Docker Compose for WhatsApp Multi-Session Manager
+# Docker Compose for WhatsApp Multi-Session Manager (Standalone)
 # This version uses the pre-built Docker image from Docker Hub
+# It does NOT include MySQL - use this if you already have MySQL running
 # Image: rod16/whatsapp-multi-session:latest
-# NOTE: MySQL is NOT included - uses your existing MySQL instance
+
+version: '3.8'
 
 services:
   whatsapp-multi-session:
@@ -27,7 +29,7 @@ services:
       - GIN_MODE=${GIN_MODE:-release}
 
       # MySQL Database Configuration
-      # Connects to your existing MySQL instance
+      # IMPORTANT: Update these to match your existing MySQL
       - MYSQL_HOST=${MYSQL_HOST:-host.docker.internal}
       - MYSQL_PORT=${MYSQL_PORT:-3306}
       - MYSQL_USER=${MYSQL_USER:-root}
@@ -62,3 +64,7 @@ services:
       retries: 3
       start_period: 5s
 
+# Note: No MySQL service included - using your existing MySQL
+# Update MYSQL_HOST in .env to point to your MySQL instance
+# For local MySQL: use host.docker.internal
+# For remote MySQL: use the actual hostname/IP
