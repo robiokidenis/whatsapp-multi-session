@@ -1,5 +1,7 @@
 # WhatsApp Multi-Session Manager
 <img width="1512" height="804" alt="image" src="https://github.com/user-attachments/assets/7b08b51b-c666-41a8-a569-ee85aa5ef828" />
+n8n node support
+<img width="1249" height="768" alt="image" src="https://github.com/user-attachments/assets/9ee66ffd-b890-4fc8-a84e-16e9bf666412" />
 
 A modern WhatsApp multi-session manager built with Go and Vue.js using the whatsmeow library.
 
