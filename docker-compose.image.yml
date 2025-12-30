@@ -1,0 +1,101 @@
+# Docker Compose for WhatsApp Multi-Session Manager
+# This version uses the pre-built Docker image from Docker Hub
+# Image: rod16/whatsapp-multi-session:latest
+
+version: '3.8'
+
+services:
+  whatsapp-multi-session:
+    # Use pre-built image from Docker Hub
+    image: rod16/whatsapp-multi-session:latest
+
+    container_name: whatsapp-multi-session
+    restart: unless-stopped
+
+    # Run as www user (UID:GID 1001:1001) for security
+    user: "1001:1001"
+
+    ports:
+      - "${PORT:-8080}:8080"
+
+    env_file:
+      - .env
+
+    environment:
+      # Application Configuration
+      - PORT=${PORT:-8080}
+      - JWT_SECRET=${JWT_SECRET}
+      - GIN_MODE=${GIN_MODE:-release}
+
+      # MySQL Database Configuration
+      - MYSQL_HOST=${MYSQL_HOST:-mysql}
+      - MYSQL_PORT=${MYSQL_PORT:-3306}
+      - MYSQL_USER=${MYSQL_USER:-root}
+      - MYSQL_PASSWORD=${MYSQL_PASSWORD}
+      - MYSQL_DATABASE=${MYSQL_DATABASE:-waGo}
+      - WHATSAPP_DB_PATH=/app/database/sessions.db
+
+      # Default Admin User
+      - ADMIN_USERNAME=${ADMIN_USERNAME:-admin}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-admin123}
+
+      # Session Configuration
+      - MAX_SESSIONS=${MAX_SESSIONS:-10}
+      - SESSION_TIMEOUT=${SESSION_TIMEOUT:-24h}
+      - QR_TIMEOUT=${QR_TIMEOUT:-30s}
+
+      # Webhook Configuration
+      - WEBHOOK_TIMEOUT=${WEBHOOK_TIMEOUT:-30s}
+
+    volumes:
+      # Mount database directory for persistent WhatsApp sessions
+      - ./whatsapp:/app/database
+      # Mount config directory for environment files
+      - ./config:/app/config
+      # Mount logs directory
+      - ./logs:/app/logs
+
+    networks:
+      - whatsapp-network
+
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 5s
+
+  # MySQL Database Service
+  mysql:
+    image: mysql:8.0
+    container_name: whatsapp-mysql
+    restart: unless-stopped
+
+    environment:
+      - MYSQL_ROOT_PASSWORD=${MYSQL_ROOT_PASSWORD:-rootpassword}
+      - MYSQL_DATABASE=${MYSQL_DATABASE:-waGo}
+      - MYSQL_USER=${MYSQL_USER:-whatsapp}
+      - MYSQL_PASSWORD=${MYSQL_PASSWORD:-whatsapp123}
+
+    volumes:
+      - mysql-data:/var/lib/mysql
+
+    ports:
+      - "${MYSQL_PORT:-3306}:3306"
+
+    networks:
+      - whatsapp-network
+
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+networks:
+  whatsapp-network:
+    driver: bridge
+
+volumes:
+  mysql-data:
+    driver: local
