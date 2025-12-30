@@ -1,4 +1,9 @@
-.PHONY: help init setup deploy start stop restart logs status clean fix-permissions build kill
+.PHONY: help init setup deploy start stop restart logs status clean fix-permissions build kill docker-build docker-push docker-publish docker-login
+
+# Docker Configuration
+DOCKER_REGISTRY ?= docker.io
+DOCKER_IMAGE ?= robiokidenis/whatsapp-multi-session
+DOCKER_TAG ?= latest
 
 # Default target
 help: ## Show this help message
@@ -117,3 +122,35 @@ kill:
 	else \
 		echo "No process found on port 8080"; \
 	fi
+
+# Docker Hub commands
+docker-login: ## Login to Docker Hub
+	@echo "🔐 Logging in to Docker Hub..."
+	@docker login
+
+docker-build: ## Build Docker image for Docker Hub
+	@echo "🏗️  Building Docker image: $(DOCKER_IMAGE):$(DOCKER_TAG)"
+	@docker build -t $(DOCKER_IMAGE):$(DOCKER_TAG) .
+	@echo "✅ Image built successfully: $(DOCKER_IMAGE):$(DOCKER_TAG)"
+	@docker images | grep $(DOCKER_IMAGE)
+
+docker-push: ## Push Docker image to Docker Hub
+	@echo "📤 Pushing image to Docker Hub: $(DOCKER_IMAGE):$(DOCKER_TAG)"
+	@docker push $(DOCKER_IMAGE):$(DOCKER_TAG)
+	@echo "✅ Image pushed successfully!"
+	@echo "🌐 Image URL: https://hub.docker.com/r/$(DOCKER_IMAGE)"
+
+docker-publish: docker-build docker-push ## Build and push Docker image (full publish workflow)
+	@echo "🎉 Docker image published: $(DOCKER_IMAGE):$(DOCKER_TAG)"
+
+docker-tag-latest: docker-build ## Tag current build as latest
+	@echo "🏷️  Tagging as latest..."
+	@docker tag $(DOCKER_IMAGE):$(DOCKER_TAG) $(DOCKER_IMAGE):latest
+	@echo "✅ Tagged as $(DOCKER_IMAGE):latest"
+
+docker-push-all: docker-build ## Build and push all tags (latest and version tag)
+	@echo "📤 Pushing all tags..."
+	@docker tag $(DOCKER_IMAGE):$(DOCKER_TAG) $(DOCKER_IMAGE):latest
+	@docker push $(DOCKER_IMAGE):$(DOCKER_TAG)
+	@docker push $(DOCKER_IMAGE):latest
+	@echo "✅ All tags pushed successfully!"
