@@ -57,7 +57,7 @@ RUN mkdir -p /app/data /app/logs /app/database /app/config && \
     chown -R www:www /app
 
 # Copy entrypoint script
-COPY docker-entrypoint.sh /app/
+COPY scripts/docker-entrypoint.sh /app/
 RUN chmod +x /app/docker-entrypoint.sh
 
 # Copy built application from builder stage
