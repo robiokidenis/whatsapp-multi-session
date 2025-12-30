@@ -420,21 +420,55 @@ func (s *WhatsAppService) ConnectSession(sessionID string) error {
 
 	go func() {
 		defer func() {
-			s.mu.Lock()
-			session.Connecting = false
-			s.mu.Unlock()
+			// Only clear connecting flag if we didn't successfully connect
+			if !session.Connected {
+				s.mu.Lock()
+				session.Connecting = false
+				s.mu.Unlock()
+			}
 		}()
+
+		s.logger.Info("Attempting to connect session %s...", sessionID)
 
 		if err := session.Client.Connect(); err != nil {
 			s.logger.Error("Failed to connect session %s: %v", sessionID, err)
+			s.mu.Lock()
+			session.Connecting = false
+			s.mu.Unlock()
 			return
 		}
 
-		s.mu.Lock()
-		session.Connected = true
-		s.mu.Unlock()
+		s.logger.Info("Connect() called for session %s, waiting for connection event...", sessionID)
 
-		s.logger.Info("Session %s connected successfully", sessionID)
+		// Wait up to 30 seconds for the connection to be established
+		timeout := time.After(30 * time.Second)
+		ticker := time.NewTicker(1 * time.Second)
+		defer ticker.Stop()
+
+		for {
+			select {
+			case <-timeout:
+				s.logger.Warn("Session %s connection timed out after 30 seconds", sessionID)
+				s.mu.Lock()
+				session.Connecting = false
+				s.mu.Unlock()
+				return
+			case <-ticker.C:
+				s.mu.Lock()
+				isConnected := session.Client.IsConnected() && session.Connected
+				s.mu.Unlock()
+
+				if isConnected {
+					s.logger.Info("Session %s connection established successfully", sessionID)
+					s.mu.Lock()
+					session.Connecting = false
+					s.mu.Unlock()
+					return
+				}
+				s.logger.Debug("Session %s still connecting... (IsConnected: %v, Connected: %v)",
+					sessionID, session.Client.IsConnected(), session.Connected)
+			}
+		}
 	}()
 
 	return nil
@@ -742,54 +776,71 @@ func (s *WhatsAppService) setupEventHandlers(session *models.Session) {
 		switch v := evt.(type) {
 		case *events.Connected:
 			s.mu.Lock()
-			session.Connected = true
-			session.LoggedIn = session.Client.IsLoggedIn()
+			// Verify the client is actually connected before marking as connected
+			if session.Client.IsConnected() {
+				session.Connected = true
+				session.LoggedIn = session.Client.IsLoggedIn()
 
-			// Update actual phone number if logged in (like original)
-			if session.Client.IsLoggedIn() && session.Client.Store.ID != nil {
-				session.ActualPhone = session.Client.Store.ID.User + "@s.whatsapp.net"
-				s.logger.Info("Session %s actual phone: %s", session.ID, session.ActualPhone)
+				// Update actual phone number if logged in (like original)
+				if session.Client.IsLoggedIn() && session.Client.Store.ID != nil {
+					session.ActualPhone = session.Client.Store.ID.User + "@s.whatsapp.net"
+					s.logger.Info("Session %s actual phone: %s", session.ID, session.ActualPhone)
 
-				// Set online presence for better typing indicator support
-				go func() {
-					// Use existing push name from WhatsApp (don't override with session name)
-					if session.Client.Store.PushName != "" {
-						s.logger.Debug("Using existing push name '%s' for session %s", session.Client.Store.PushName, session.ID)
-					}
+					// Set online presence for better typing indicator support
+					go func() {
+						// Ensure PushName is set before sending presence
+						if session.Client.Store.PushName == "" {
+							session.Client.Store.PushName = s.generateRandomName()
+							s.logger.Debug("Set random push name for session %s", session.ID)
+						}
 
-					if err := session.Client.SendPresence(context.Background(), types.PresenceAvailable); err != nil {
-						s.logger.Warn("Failed to set online presence for session %s: %v", session.ID, err)
-					} else {
-						s.logger.Debug("Set online presence for session %s", session.ID)
-					}
-				}()
+						if err := session.Client.SendPresence(context.Background(), types.PresenceAvailable); err != nil {
+							s.logger.Warn("Failed to set online presence for session %s: %v", session.ID, err)
+						} else {
+							s.logger.Debug("Set online presence for session %s", session.ID)
+						}
+					}()
 
-				// Save updated metadata
-				go func() {
-					metadata := &models.SessionMetadata{
-						ID:            session.ID,
-						Phone:         session.Phone,
-						ActualPhone:   session.ActualPhone,
-						Name:          session.Name,
-						Position:      session.Position,
-						WebhookURL:    session.WebhookURL,
-						AutoReplyText: session.AutoReplyText,
-					}
-					if err := s.sessionRepo.Update(metadata); err != nil {
-						s.logger.Error("Failed to update session metadata: %v", err)
-					}
-				}()
+					// Save updated metadata
+					go func() {
+						metadata := &models.SessionMetadata{
+							ID:            session.ID,
+							Phone:         session.Phone,
+							ActualPhone:   session.ActualPhone,
+							Name:          session.Name,
+							Position:      session.Position,
+							WebhookURL:    session.WebhookURL,
+							AutoReplyText: session.AutoReplyText,
+						}
+						if err := s.sessionRepo.Update(metadata); err != nil {
+							s.logger.Error("Failed to update session metadata: %v", err)
+						}
+					}()
+				}
+				s.mu.Unlock()
+				s.logger.Info("Session %s connected", session.ID)
+			} else {
+				// Client reported Connected event but isn't actually connected
+				session.Connected = false
+				s.mu.Unlock()
+				s.logger.Warn("Session %s received Connected event but client is not actually connected", session.ID)
 			}
-			s.mu.Unlock()
-
-			s.logger.Info("Session %s connected", session.ID)
 
 		case *events.Disconnected:
 			s.mu.Lock()
 			session.Connected = false
+			session.LoggedIn = false
 			s.mu.Unlock()
 
 			s.logger.Info("Session %s disconnected", session.ID)
+
+		case *events.StreamError:
+			s.mu.Lock()
+			session.Connected = false
+			session.LoggedIn = false
+			s.mu.Unlock()
+
+			s.logger.Error("Session %s stream error, disconnecting", session.ID)
 
 		case *events.LoggedOut:
 			s.mu.Lock()

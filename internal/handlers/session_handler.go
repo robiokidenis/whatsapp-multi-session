@@ -1157,6 +1157,12 @@ func (h *SessionHandler) logMessage(sessionID, messageID, senderJID, recipientJI
 		return // Skip logging if no message repository
 	}
 
+	// Skip logging if messageID is empty (failed before message was generated)
+	// This prevents duplicate empty key constraint errors
+	if messageID == "" {
+		return
+	}
+
 	message := &repository.Message{
 		SessionID:    sessionID,
 		MessageID:    messageID,
