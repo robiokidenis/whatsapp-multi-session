@@ -3,8 +3,6 @@
 # It does NOT include MySQL - use this if you already have MySQL running
 # Image: rod16/whatsapp-multi-session:latest
 
-version: '3.8'
-
 services:
   whatsapp-multi-session:
     # Use pre-built image from Docker Hub
