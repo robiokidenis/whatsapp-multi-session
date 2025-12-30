@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>QR Code Test - Direct Connection</title>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; }
+        .status { margin: 10px 0; padding: 10px; border-radius: 5px; }
+        .error { background-color: #ffebee; color: #c62828; }
+        .success { background-color: #e8f5e8; color: #2e7d32; }
+        .info { background-color: #e3f2fd; color: #1565c0; }
+        #qrcode { margin: 20px 0; text-align: center; }
+        button { padding: 10px 20px; margin: 5px; cursor: pointer; }
+    </style>
+</head>
+<body>
+    <h1>WhatsApp QR Code Test</h1>
+    
+    <div>
+        <button onclick="loginAndConnect()">Login & Connect to WebSocket</button>
+        <button onclick="disconnect()">Disconnect</button>
+    </div>
+    
+    <div id="status" class="status info">Ready</div>
+    <div id="qrcode"></div>
+    
+    <script>
+        let ws = null;
+        let token = null;
+        
+        async function loginAndConnect() {
+            try {
+                updateStatus('Logging in...', 'info');
+                
+                // Step 1: Login to get token
+                const loginResponse = await fetch('http://localhost:8080/api/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username: 'admin', password: 'admin123' })
+                });
+                
+                if (!loginResponse.ok) {
+                    throw new Error(`Login failed: ${loginResponse.status}`);
+                }
+                
+                const loginData = await loginResponse.json();
+                if (!loginData.success) {
+                    throw new Error('Login unsuccessful');
+                }
+                
+                token = loginData.token;
+                updateStatus('Login successful! Connecting to WebSocket...', 'success');
+                
+                // Step 2: Connect to WebSocket directly
+                connectWebSocket();
+                
+            } catch (error) {
+                updateStatus(`Error: ${error.message}`, 'error');
+                console.error('Login error:', error);
+            }
+        }
+        
+        function connectWebSocket() {
+            if (ws) {
+                ws.close();
+            }
+            
+            const sessionId = '8029212430'; // Test Persistent Session
+            const wsUrl = `ws://localhost:8080/api/ws/${sessionId}?token=${encodeURIComponent(token)}`;
+            
+            updateStatus(`Connecting to: ${wsUrl}`, 'info');
+            console.log('Connecting to WebSocket:', wsUrl);
+            
+            ws = new WebSocket(wsUrl);
+            
+            ws.onopen = () => {
+                updateStatus('WebSocket connected! Waiting for QR code...', 'success');
+                console.log('WebSocket opened');
+            };
+            
+            ws.onmessage = (event) => {
+                console.log('Message received:', event.data);
+                try {
+                    const data = JSON.parse(event.data);
+                    
+                    if (data.type === 'qr') {
+                        updateStatus('QR Code received! Generating...', 'success');
+                        generateQRCode(data.data.qr);
+                        
+                        const timeoutSeconds = Math.floor(data.data.timeout / 1000000000);
+                        updateStatus(`QR Code generated! Expires in ${timeoutSeconds} seconds`, 'success');
+                        
+                    } else if (data.type === 'success') {
+                        updateStatus('Login successful!', 'success');
+                        
+                    } else if (data.type === 'error') {
+                        updateStatus(`Error: ${data.error}`, 'error');
+                    }
+                } catch (e) {
+                    console.error('Failed to parse message:', e);
+                    updateStatus(`Received: ${event.data}`, 'info');
+                }
+            };
+            
+            ws.onerror = (error) => {
+                console.error('WebSocket error:', error);
+                updateStatus('WebSocket error occurred', 'error');
+            };
+            
+            ws.onclose = (event) => {
+                console.log('WebSocket closed:', event.code, event.reason);
+                updateStatus(`WebSocket closed: ${event.code} - ${event.reason || 'No reason'}`, 'error');
+            };
+        }
+        
+        function disconnect() {
+            if (ws) {
+                ws.close();
+                ws = null;
+            }
+            updateStatus('Disconnected', 'info');
+            document.getElementById('qrcode').innerHTML = '';
+        }
+        
+        function updateStatus(message, type) {
+            const statusDiv = document.getElementById('status');
+            statusDiv.textContent = message;
+            statusDiv.className = `status ${type}`;
+        }
+        
+        async function generateQRCode(qrString) {
+            try {
+                // Use QR Server API for QR code generation
+                const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=256x256&data=${encodeURIComponent(qrString)}`;
+                
+                document.getElementById('qrcode').innerHTML = `
+                    <img src="${qrUrl}" alt="QR Code" style="border: 1px solid #ccc; padding: 10px;">
+                    <br>
+                    <small>Scan this QR code with WhatsApp</small>
+                `;
+            } catch (error) {
+                console.error('QR generation error:', error);
+                updateStatus('Failed to generate QR code', 'error');
+            }
+        }
+    </script>
+</body>
+</html>

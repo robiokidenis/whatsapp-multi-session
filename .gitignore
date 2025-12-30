@@ -1,88 +1,59 @@
 # Binaries
-main
-whatsapp-multi
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
 whatsapp-multi-session
+*.test
+*.out
 
-# Logs
-*.log
-server.log
-frontend.log
+# Go workspace file
+go.work
 
-# Database files and directory
-database/
-*.db
-*.sqlite
-*.sqlite3
-session_metadata.db
-sessions.db
+# Dependency directories
+vendor/
 
 # Environment files
 .env
 .env.local
-.env.production
-.env.staging
+.env.*.local
 
-# OS generated files
-.DS_Store
-.DS_Store?
-._*
-.Spotlight-V100
-.Trashes
-ehthumbs.db
-Thumbs.db
-
-# IDE files
+# IDE specific files
 .vscode/
 .idea/
 *.swp
 *.swo
 *~
 
-# Go specific
-vendor/
-*.exe
-*.exe~
-*.dll
-*.so
-*.dylib
-*.test
-*.out
+# OS specific files
+.DS_Store
+Thumbs.db
 
-# Node.js (for frontend)
-frontend/node_modules/
-frontend/dist/
-frontend/.next/
-frontend/out/
-frontend/build/
-frontend/*.log
-frontend/.env*
+# Logs
+*.log
 
-# Backup files
+# Database files
+*.db
+*.db-shm
+*.db-wal
+whatsapp/*.db
+whatsapp/*.db-shm
+whatsapp/*.db-wal
+
+# Temporary files
+*.tmp
 *.bak
 *.backup
-*.tmp
+*.tar.gz
 
-# Test files (keeping for reference but not tracking)
-test-*.html
-debug-*.html
-qr-test.html
-test_*.js
+# Build output
+dist/
+build/
 
-# Temporary development files
-*.orig
-*.rej
-.temp/
-temp/
+# Node modules (if any frontend dependencies)
+node_modules/
 
-# WhatsApp session data (sensitive)
-*.session
-sessions/
-session_data/
-
-# Development utilities
-drop_recreate_tables.go.bak
-fix_db.go.bak
-update_admin.go.bak
-
-
-n8n-nodes-whatsapp-multi-session
+# Backup files
+backups/
+*.backup

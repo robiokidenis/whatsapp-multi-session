@@ -16,29 +16,61 @@ A modern WhatsApp multi-session manager built with Go and Vue.js using the whats
 
 ## Quick Start
 
+### Option 1: Docker (Recommended)
+
+The easiest way to run the application:
+
+```bash
+# Start with Docker
+make start
+
+# Or using docker-compose directly
+docker-compose up -d
+
+# Access the web interface
+open http://localhost:8080
+```
+
+**Default credentials:**
+- Username: `admin`
+- Password: `admin123`
+
+### Option 2: Build from Source
+
+Requires Go 1.24 or higher:
+
+```bash
+# Install dependencies
+go mod tidy
+
+# Build the application
+go build -o whatsapp-multi-session main.go
+
+# Run the application
+./whatsapp-multi-session
+```
+
+### Common Commands
+
+```bash
+make help              # Show all available commands
+make start            # Start the application
+make stop             # Stop the application
+make logs             # Show application logs
+make status           # Check application status
+make restart          # Restart the application
+make volumes-recreate # Reset all volumes (fresh start)
+```
+
 ### Prerequisites
-- Go 1.21 or higher
+
+**For Docker deployment:**
+- Docker
+- Docker Compose
+
+**For building from source:**
+- Go 1.24 or higher
 - SQLite3
-
-### Running the Application
-
-1. **Clone and build:**
-   ```bash
-   git clone <repository>
-   cd whatsapp-multi-session
-   go mod tidy
-   go build -o whatsapp-multi .
-   ```
-
-2. **Start the server:**
-   ```bash
-   ./whatsapp-multi
-   ```
-
-3. **Open the web interface:**
-   ```
-   http://localhost:8080
-   ```
 
 ## Usage
 
@@ -92,12 +124,30 @@ A modern WhatsApp multi-session manager built with Go and Vue.js using the whats
 
 ```
 whatsapp-multi-session/
-├── main.go              # Main application with API and session manager
-├── frontend/
-│   └── index.html       # Vue.js web interface
-├── go.mod               # Go module dependencies
-├── sessions.db          # SQLite database (created automatically)
-└── README.md           # This file
+├── main.go                    # Main application entry point
+├── docker-compose.yml          # Docker compose configuration
+├── Dockerfile                  # Docker image definition
+├── Makefile                    # Build and deployment commands
+├── go.mod / go.sum             # Go dependencies
+├── internal/                   # Application source code
+│   ├── handlers/              # HTTP request handlers
+│   ├── services/              # Business logic services
+│   ├── models/                # Data models
+│   ├── repository/            # Database layer
+│   └── middleware/            # HTTP middleware
+├── frontend/                   # Vue.js web interface
+├── scripts/                    # Utility scripts
+│   ├── deploy-production.sh   # Production deployment
+│   ├── reset-whatsapp-db.sh  # Database reset
+│   └── README.md             # Scripts documentation
+├── deployment/                 # Docker compose overrides
+│   ├── docker-compose.mysql.yml
+│   ├── docker-compose.mysql.enhanced.yml
+│   └── docker-compose.prod.yml
+├── migrations/                 # Database migrations
+├── docs/                       # Documentation
+├── examples/                   # Example integrations
+└── tests/                      # Test files
 ```
 
 ## Technology Stack
