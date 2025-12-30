@@ -628,25 +628,47 @@ func (s *WhatsAppService) GetQRCode(sessionID string) (string, error) {
 		return "", models.NewBadRequestError("session %s is already logged in", sessionID)
 	}
 
-	// Start QR code generation
-	qrChan, err := session.Client.GetQRChannel(context.Background())
-	if err != nil {
-		return "", fmt.Errorf("failed to get QR channel: %v", err)
+	var qrChan <-chan whatsmeow.QRChannelItem
+	var err error
+
+	// Use existing QR channel if available (from LoginSession), otherwise create new one
+	if session.QRChan != nil {
+		s.logger.Info("Using existing QR channel for session %s", sessionID)
+		qrChan = session.QRChan
+	} else {
+		s.logger.Info("Creating new QR channel for session %s", sessionID)
+		// Start QR code generation
+		qrChan, err = session.Client.GetQRChannel(context.Background())
+		if err != nil {
+			return "", fmt.Errorf("failed to get QR channel: %v", err)
+		}
+		session.QRChan = qrChan
 	}
 
-	session.QRChan = qrChan
+	// Wait for QR code with shorter timeout for existing channel, longer for new one
+	timeout := 10 * time.Second
+	if session.QRChan == nil {
+		timeout = 30 * time.Second
+	}
 
-	// Wait for QR code
 	select {
-	case qr := <-qrChan:
+	case qr, ok := <-qrChan:
+		if !ok {
+			// Channel closed, return error
+			return "", fmt.Errorf("QR channel closed")
+		}
 		if qr.Event == "code" {
+			s.logger.Info("QR code received for session %s", sessionID)
 			return qr.Code, nil
 		}
-	case <-time.After(30 * time.Second):
+		// QR expired or other event
+		if qr.Event == "timeout" {
+			return "", fmt.Errorf("QR code expired")
+		}
+		return "", fmt.Errorf("unexpected QR event: %s", qr.Event)
+	case <-time.After(timeout):
 		return "", fmt.Errorf("timeout waiting for QR code")
 	}
-
-	return "", fmt.Errorf("failed to get QR code")
 }
 
 // UpdateSession updates session metadata
