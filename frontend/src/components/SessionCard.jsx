@@ -1,4 +1,4 @@
-import { Webhook, WebhookOff } from "lucide-react";
+import { Webhook, WebhookOff, Copy, Check } from "lucide-react";
 import { useState } from "react";
 
 const SessionCard = ({
@@ -14,9 +14,20 @@ const SessionCard = ({
   showFilters = false,
 }) => {
   const [showActions, setShowActions] = useState(false);
+  const [copiedId, setCopiedId] = useState(false);
   const isConnected =
     (session.status === "Connected" || session.connected) && session.logged_in;
   const isLoggedIn = session.logged_in;
+
+  const handleCopySessionId = async () => {
+    try {
+      await navigator.clipboard.writeText(session.id);
+      setCopiedId(true);
+      setTimeout(() => setCopiedId(false), 2000);
+    } catch (err) {
+      console.error('Failed to copy session ID:', err);
+    }
+  };
 
   return (
     <div
@@ -78,7 +89,18 @@ const SessionCard = ({
 
           {/* Dropdown Menu */}
           {showActions && (
-            <div className="absolute right-0 top-full mt-2 w-48 bg-white rounded-xl shadow-xl border border-gray-200 py-2 z-30">
+            <div className="absolute right-0 top-full mt-2 w-52 bg-white rounded-xl shadow-xl border border-gray-200 py-2 z-30">
+              <button
+                onClick={() => {
+                  handleCopySessionId();
+                  setShowActions(false);
+                }}
+                className="w-full px-4 py-2.5 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center transition-colors"
+              >
+                <Copy className="w-4 h-4 mr-3 text-gray-500" />
+                Copy Session ID
+              </button>
+
               <button
                 onClick={() => {
                   onEdit(session);
@@ -91,7 +113,7 @@ const SessionCard = ({
                 </svg>
                 Edit Session
               </button>
-              
+
               {isLoggedIn && (
                 <button
                   onClick={() => {
@@ -195,11 +217,28 @@ const SessionCard = ({
                 <span>Not connected</span>
               </div>
             )}
-            <div className="flex items-center text-xs text-gray-500">
-              <svg className="w-3 h-3 mr-1.5 text-primary-500" fill="currentColor" viewBox="0 0 20 20">
-                <path fillRule="evenodd" d="M6.625 2.655A9 9 0 0119 11a1 1 0 11-2 0 7 7 0 00-9.625-6.492 1 1 0 11-.75-1.853zM4.662 4.959A1 1 0 014.75 6.37 6 6 0 0016 11a1 1 0 11-2 0 4 4 0 00-7.438-2.11 1 1 0 01-1.9-.93zM6.5 9a1 1 0 011-1h.01a1 1 0 110 2H7.5a1 1 0 01-1-1z" clipRule="evenodd" />
-              </svg>
-              <span className="font-mono text-xs">#{session.id}</span>
+            <div className="flex items-center justify-between text-xs text-gray-500 group/id">
+              <div className="flex items-center flex-1 min-w-0">
+                <svg className="w-3 h-3 mr-1.5 text-primary-500 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M6.625 2.655A9 9 0 0119 11a1 1 0 11-2 0 7 7 0 00-9.625-6.492 1 1 0 11-.75-1.853zM4.662 4.959A1 1 0 014.75 6.37 6 6 0 0016 11a1 1 0 11-2 0 4 4 0 00-7.438-2.11 1 1 0 01-1.9-.93zM6.5 9a1 1 0 011-1h.01a1 1 0 110 2H7.5a1 1 0 01-1-1z" clipRule="evenodd" />
+                </svg>
+                <span className="font-mono text-xs truncate" title={session.id}>#{session.id}</span>
+              </div>
+              <button
+                onClick={handleCopySessionId}
+                className={`ml-2 p-1.5 rounded-lg transition-all duration-200 flex-shrink-0 ${
+                  copiedId
+                    ? 'bg-green-100 text-green-600'
+                    : 'bg-gray-100 text-gray-500 hover:bg-primary-100 hover:text-primary-600 opacity-0 group-hover/id:opacity-100'
+                }`}
+                title={copiedId ? 'Copied!' : 'Copy Session ID'}
+              >
+                {copiedId ? (
+                  <Check className="w-3.5 h-3.5" />
+                ) : (
+                  <Copy className="w-3.5 h-3.5" />
+                )}
+              </button>
             </div>
           </div>
         </div>
