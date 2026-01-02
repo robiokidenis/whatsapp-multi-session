@@ -1,4 +1,4 @@
-.PHONY: help init setup deploy start stop restart logs status clean fix-permissions build kill docker-build docker-push docker-publish docker-login deploy-image deploy-image-start
+.PHONY: help init setup deploy start stop restart logs status clean fix-permissions build kill docker-build docker-buildx-init docker-buildx docker-push docker-publish docker-publish-multi docker-login deploy-image deploy-image-start
 
 # Docker Configuration
 DOCKER_REGISTRY ?= docker.io
@@ -128,11 +128,28 @@ docker-login: ## Login to Docker Hub
 	@echo "🔐 Logging in to Docker Hub..."
 	@docker login
 
-docker-build: ## Build Docker image for Docker Hub
+docker-build: ## Build Docker image for Docker Hub (single arch)
 	@echo "🏗️  Building Docker image: $(DOCKER_IMAGE):$(DOCKER_TAG)"
 	@docker build -t $(DOCKER_IMAGE):$(DOCKER_TAG) .
 	@echo "✅ Image built successfully: $(DOCKER_IMAGE):$(DOCKER_TAG)"
 	@docker images | grep $(DOCKER_IMAGE)
+
+docker-buildx-init: ## Initialize Docker buildx for multi-arch builds
+	@echo "🔧 Initializing Docker buildx..."
+	@docker buildx create --name multiarch --use 2>/dev/null || true
+	@docker buildx inspect --bootstrap
+
+docker-buildx: ## Build multi-architecture Docker image (amd64, arm64)
+	@echo "🏗️  Building multi-arch Docker image: $(DOCKER_IMAGE):$(DOCKER_TAG)"
+	@echo "📦 Platforms: linux/amd64, linux/arm64"
+	@docker buildx build \
+		--platform linux/amd64,linux/arm64 \
+		-t $(DOCKER_IMAGE):$(DOCKER_TAG) \
+		-t $(DOCKER_IMAGE):latest \
+		--push \
+		.
+	@echo "✅ Multi-arch image built and pushed: $(DOCKER_IMAGE):$(DOCKER_TAG)"
+	@echo "🌐 Image URL: https://hub.docker.com/r/$(DOCKER_IMAGE)"
 
 docker-push: ## Push Docker image to Docker Hub
 	@echo "📤 Pushing image to Docker Hub: $(DOCKER_IMAGE):$(DOCKER_TAG)"
@@ -142,6 +159,9 @@ docker-push: ## Push Docker image to Docker Hub
 
 docker-publish: docker-build docker-push ## Build and push Docker image (full publish workflow)
 	@echo "🎉 Docker image published: $(DOCKER_IMAGE):$(DOCKER_TAG)"
+
+docker-publish-multi: docker-buildx ## Publish multi-architecture image to Docker Hub
+	@echo "🎉 Multi-arch Docker image published: $(DOCKER_IMAGE):$(DOCKER_TAG)"
 
 docker-tag-latest: docker-build ## Tag current build as latest
 	@echo "🏷️  Tagging as latest..."
