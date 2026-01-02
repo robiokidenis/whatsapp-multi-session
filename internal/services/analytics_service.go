@@ -1,21 +1,25 @@
 package services
 
 import (
+	"fmt"
+
 	"whatsapp-multi-session/internal/repository"
 	"whatsapp-multi-session/pkg/logger"
 )
 
 type AnalyticsService struct {
-	analyticsRepo *repository.AnalyticsRepository
-	userRepo      *repository.UserRepository
-	log           *logger.Logger
+	analyticsRepo   *repository.AnalyticsRepository
+	userRepo        *repository.UserRepository
+	whatsappService *WhatsAppService
+	log             *logger.Logger
 }
 
-func NewAnalyticsService(analyticsRepo *repository.AnalyticsRepository, userRepo *repository.UserRepository, log *logger.Logger) *AnalyticsService {
+func NewAnalyticsService(analyticsRepo *repository.AnalyticsRepository, userRepo *repository.UserRepository, whatsappService *WhatsAppService, log *logger.Logger) *AnalyticsService {
 	return &AnalyticsService{
-		analyticsRepo: analyticsRepo,
-		userRepo:      userRepo,
-		log:           log,
+		analyticsRepo:   analyticsRepo,
+		userRepo:        userRepo,
+		whatsappService: whatsappService,
+		log:             log,
 	}
 }
 
@@ -96,7 +100,10 @@ func (s *AnalyticsService) GetAnalytics(userId int64, isAdmin bool, timeRange st
 		s.log.Error("Failed to get session activity: %v", err)
 		sessionActivity = []map[string]interface{}{} // Return empty array instead of failing
 	}
-	
+
+	// Update connection status from actual WhatsApp service sessions
+	sessionActivity = s.updateSessionConnectionStatus(sessionActivity)
+
 	return &AnalyticsData{
 		MessageStats:    messageStats,
 		SessionStats:    sessionStats,
@@ -123,6 +130,44 @@ func (s *AnalyticsService) GetSessionStats(userId int64, isAdmin bool) (*reposit
 	if isAdmin {
 		filterUserId = 0
 	}
-	
+
 	return s.analyticsRepo.GetSessionStats(filterUserId)
+}
+
+// updateSessionConnectionStatus updates the connection status of sessions based on actual WhatsApp service data
+func (s *AnalyticsService) updateSessionConnectionStatus(sessionActivity []map[string]interface{}) []map[string]interface{} {
+	if s.whatsappService == nil {
+		return sessionActivity
+	}
+
+	// Get all sessions from WhatsApp service
+	sessions := s.whatsappService.GetAllSessions()
+
+	// Create a map for quick lookup
+	sessionMap := make(map[string]bool)
+	for _, session := range sessions {
+		sessionMap[session.ID] = session.Connected
+	}
+
+	// Update the connection status in session activity
+	for _, activity := range sessionActivity {
+		sessionID, ok := activity["id"].(string)
+		if !ok {
+			// Try to get from int64
+			if idInt, ok := activity["id"].(int64); ok {
+				sessionID = fmt.Sprintf("%d", idInt)
+			}
+		}
+
+		if sessionID != "" {
+			if connected, exists := sessionMap[sessionID]; exists {
+				activity["is_connected"] = connected
+			} else {
+				// Session not found in service (not loaded), mark as disconnected
+				activity["is_connected"] = false
+			}
+		}
+	}
+
+	return sessionActivity
 }

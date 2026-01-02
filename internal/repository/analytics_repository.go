@@ -84,16 +84,16 @@ func (r *AnalyticsRepository) GetMessageStats(userId int64, timeRange string) (*
 		args = append(args, userId)
 	}
 	
-	// Add time range filter (SQLite syntax)
+	// Add time range filter (MySQL syntax)
 	switch timeRange {
 	case "today":
-		baseQuery += " AND m.created_at >= date('now')"
+		baseQuery += " AND m.created_at >= CURDATE()"
 	case "week":
-		baseQuery += " AND m.created_at >= date('now', '-7 days')"
+		baseQuery += " AND m.created_at >= DATE_SUB(NOW(), INTERVAL 7 DAY)"
 	case "month":
-		baseQuery += " AND m.created_at >= date('now', '-30 days')"
+		baseQuery += " AND m.created_at >= DATE_SUB(NOW(), INTERVAL 30 DAY)"
 	case "year":
-		baseQuery += " AND m.created_at >= date('now', '-1 year')"
+		baseQuery += " AND m.created_at >= DATE_SUB(NOW(), INTERVAL 1 YEAR)"
 	}
 	
 	row := r.db.QueryRow(baseQuery, args...)
@@ -190,19 +190,19 @@ func (r *AnalyticsRepository) GetMessageTimeSeries(userId int64, timeRange strin
 		return data, nil
 	}
 	
-	// Determine groupBy based on interval (SQLite syntax)
+	// Determine groupBy based on interval (MySQL syntax)
 	var groupBy string
 	switch interval {
 	case "hour":
-		groupBy = "strftime('%Y-%m-%d %H:00:00', m.created_at)"
+		groupBy = "DATE_FORMAT(m.created_at, '%Y-%m-%d %H:00:00')"
 	case "day":
-		groupBy = "date(m.created_at)"
+		groupBy = "DATE(m.created_at)"
 	case "week":
-		groupBy = "strftime('%Y-%W', m.created_at)"
+		groupBy = "DATE_FORMAT(m.created_at, '%Y-%u')"
 	case "month":
-		groupBy = "strftime('%Y-%m', m.created_at)"
+		groupBy = "DATE_FORMAT(m.created_at, '%Y-%m')"
 	default:
-		groupBy = "date(m.created_at)"
+		groupBy = "DATE(m.created_at)"
 	}
 	
 	query := `
@@ -221,16 +221,16 @@ func (r *AnalyticsRepository) GetMessageTimeSeries(userId int64, timeRange strin
 		args = append(args, userId)
 	}
 	
-	// Add time range filter (SQLite syntax)
+	// Add time range filter (MySQL syntax)
 	switch timeRange {
 	case "today":
-		query += " AND m.created_at >= date('now')"
+		query += " AND m.created_at >= CURDATE()"
 	case "week":
-		query += " AND m.created_at >= date('now', '-7 days')"
+		query += " AND m.created_at >= DATE_SUB(NOW(), INTERVAL 7 DAY)"
 	case "month":
-		query += " AND m.created_at >= date('now', '-30 days')"
+		query += " AND m.created_at >= DATE_SUB(NOW(), INTERVAL 30 DAY)"
 	case "year":
-		query += " AND m.created_at >= date('now', '-1 year')"
+		query += " AND m.created_at >= DATE_SUB(NOW(), INTERVAL 1 YEAR)"
 	}
 	
 	query += " GROUP BY time_period ORDER BY time_period"

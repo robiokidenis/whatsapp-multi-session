@@ -80,7 +80,7 @@ func main() {
 	// Initialize CRM services
 	contactDetectionService := services.NewContactDetectionService(*log)
 	bulkMessagingService := services.NewBulkMessagingService(whatsappService, *log)
-	analyticsService := services.NewAnalyticsService(analyticsRepo, userRepo, log)
+	analyticsService := services.NewAnalyticsService(analyticsRepo, userRepo, whatsappService, log)
 
 	// Ensure default admin user exists
 	if err := userService.EnsureDefaultAdmin(cfg.AdminUsername, cfg.AdminPassword); err != nil {
