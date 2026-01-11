@@ -315,6 +315,7 @@ func (s *WhatsAppService) CreateSession(req *models.CreateSessionRequest, userID
 		AutoReplyText: req.AutoReplyText,
 		ProxyConfig:   req.ProxyConfig,
 		Enabled:       enabled,
+		UserID:        userID,
 		Client:        client,
 		Connected:     false,
 		LoggedIn:      false,
@@ -898,6 +899,9 @@ func (s *WhatsAppService) setupEventHandlers(session *models.Session) {
 							Position:      session.Position,
 							WebhookURL:    session.WebhookURL,
 							AutoReplyText: session.AutoReplyText,
+							ProxyConfig:   session.ProxyConfig,
+							Enabled:       session.Enabled,
+							UserID:        session.UserID,
 						}
 						if err := s.sessionRepo.Update(metadata); err != nil {
 							s.logger.Error("Failed to update session metadata: %v", err)
@@ -967,6 +971,9 @@ func (s *WhatsAppService) setupEventHandlers(session *models.Session) {
 					Position:      session.Position,
 					WebhookURL:    session.WebhookURL,
 					AutoReplyText: session.AutoReplyText,
+					ProxyConfig:   session.ProxyConfig,
+					Enabled:       session.Enabled,
+					UserID:        session.UserID,
 				}
 				if err := s.sessionRepo.Update(metadata); err != nil {
 					s.logger.Error("Failed to update session metadata after logout: %v", err)
@@ -1035,18 +1042,50 @@ func (s *WhatsAppService) loadExistingSessions() error {
 		if err != nil {
 			s.logger.Error("Error getting devices: %v", err)
 		} else {
+			// Normalize session ID by removing @s.whatsapp.net suffix if present
+			sessionID := strings.Replace(metadata.ID, "@s.whatsapp.net", "", 1)
+
+			// Normalize actual phone (remove @s.whatsapp.net suffix)
+			var actualPhone string
+			if metadata.ActualPhone != "" {
+				actualPhone = strings.Replace(metadata.ActualPhone, "@s.whatsapp.net", "", 1)
+			}
+
+			s.logger.Debug("Looking for device - sessionID=%s, actualPhone=%s", sessionID, actualPhone)
+
 			// Look for existing device by comparing JID
 			for _, d := range devices {
 				if d != nil && d.ID != nil {
-					// Compare by actual phone if available, otherwise try by session ID
 					deviceUser := d.ID.User
-					if metadata.ActualPhone != "" && deviceUser == strings.Replace(metadata.ActualPhone, "@s.whatsapp.net", "", 1) {
+					s.logger.Debug("Checking device %s", d.ID.String())
+
+					// Extract base user (remove :device suffix if present)
+					baseDeviceUser := deviceUser
+					if idx := strings.Index(deviceUser, ":"); idx != -1 {
+						baseDeviceUser = deviceUser[:idx]
+					}
+
+					// Compare by actual phone if available (deviceUser may include :device suffix like "6285591500390:63")
+					// So we check if deviceUser starts with actualPhone or if deviceUser (without suffix) equals actualPhone
+					if actualPhone != "" {
+						s.logger.Debug("Device comparison - deviceUser=%s, baseDeviceUser=%s, actualPhone=%s", deviceUser, baseDeviceUser, actualPhone)
+
+						if baseDeviceUser == actualPhone {
+							deviceStore = d
+							s.logger.Info("Found existing device for session %s by actual phone (deviceUser=%s)", metadata.ID, deviceUser)
+							break
+						}
+					}
+
+					// Also try by session ID (with device suffix handling)
+					baseSessionID := sessionID
+					if idx := strings.Index(sessionID, ":"); idx != -1 {
+						baseSessionID = sessionID[:idx]
+					}
+
+					if deviceUser == sessionID || baseDeviceUser == baseSessionID {
 						deviceStore = d
-						s.logger.Debug("Found existing device for session %s by actual phone", metadata.ID)
-						break
-					} else if deviceUser == metadata.ID {
-						deviceStore = d
-						s.logger.Debug("Found existing device for session %s by ID", metadata.ID)
+						s.logger.Info("Found existing device for session %s by ID (deviceUser=%s, sessionID=%s)", metadata.ID, deviceUser, sessionID)
 						break
 					}
 				}
@@ -1078,6 +1117,7 @@ func (s *WhatsAppService) loadExistingSessions() error {
 			AutoReplyText: metadata.AutoReplyText,
 			ProxyConfig:   metadata.ProxyConfig,
 			Enabled:       metadata.Enabled,
+			UserID:        metadata.UserID,
 			Client:        client,
 			Connected:     false,
 			LoggedIn:      false,

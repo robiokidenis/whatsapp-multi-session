@@ -27,6 +27,7 @@ type Session struct {
 	AutoReplyText *string                        `json:"auto_reply_text,omitempty"` // Auto reply text, nullable
 	ProxyConfig   *ProxyConfig                   `json:"proxy_config,omitempty"`    // Proxy configuration, nullable
 	Enabled       bool                           `json:"enabled"`                   // Session enabled/disabled status
+	UserID        int                            `json:"user_id"`                   // User ID who owns this session
 	Client        *whatsmeow.Client              `json:"-"`
 	QRChan        <-chan whatsmeow.QRChannelItem `json:"-"`
 	Connected     bool                           `json:"connected"`
