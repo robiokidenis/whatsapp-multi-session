@@ -1,11 +1,16 @@
 # Docker Compose for WhatsApp Multi-Session Manager (Standalone)
-# This version uses the pre-built Docker image from Docker Hub
+# This version uses the pre-built Docker image from Docker Hub with multi-arch support
 # It does NOT include MySQL - use this if you already have MySQL running
-# Image: rod16/whatsapp-multi-session:latest
+# Image: rod16/whatsapp-multi-session:latest (supports AMD64 and ARM64)
+#
+# IMPORTANT: Before starting, ensure:
+# 1. MySQL is running and accessible
+# 2. Update MYSQL_HOST in .env to point to your MySQL instance
+# 3. Create the ./whatsapp directory for persistent session storage
 
 services:
   whatsapp-multi-session:
-    # Use pre-built image from Docker Hub
+    # Use pre-built multi-architecture image from Docker Hub
     image: rod16/whatsapp-multi-session:latest
 
     container_name: whatsapp-multi-session
@@ -23,17 +28,28 @@ services:
     environment:
       # Application Configuration
       - PORT=${PORT:-8080}
-      - JWT_SECRET=${JWT_SECRET}
+      - JWT_SECRET=${JWT_SECRET:-your-super-secret-jwt-key-change-this-in-production-12345}
       - GIN_MODE=${GIN_MODE:-release}
+      - ENABLE_DATABASE_LOG=${ENABLE_DATABASE_LOG:-true}
+      - LOG_LEVEL=${LOG_LEVEL:-info}
 
       # MySQL Database Configuration
-      # IMPORTANT: Update these to match your existing MySQL
+      # CRITICAL: Update MYSQL_HOST to match your MySQL setup
+      # - For MySQL in Docker: use service name (e.g., mysql_db)
+      # - For local MySQL on host: use host.docker.internal (Mac/Windows) or 172.17.0.1 (Linux)
+      # - For remote MySQL: use actual hostname or IP
       - MYSQL_HOST=${MYSQL_HOST:-host.docker.internal}
       - MYSQL_PORT=${MYSQL_PORT:-3306}
       - MYSQL_USER=${MYSQL_USER:-root}
-      - MYSQL_PASSWORD=${MYSQL_PASSWORD}
+      - MYSQL_PASSWORD=${MYSQL_PASSWORD:-12345678}
       - MYSQL_DATABASE=${MYSQL_DATABASE:-waGo}
+
+      # WhatsApp Store Database (SQLite)
       - WHATSAPP_DB_PATH=/app/database/sessions.db
+
+      # Session Restore Configuration
+      # IMPORTANT: AUTO_CONNECT=true ensures sessions reconnect after container restart
+      - AUTO_CONNECT=${AUTO_CONNECT:-true}
 
       # Default Admin User
       - ADMIN_USERNAME=${ADMIN_USERNAME:-admin}
@@ -46,14 +62,25 @@ services:
 
       # Webhook Configuration
       - WEBHOOK_TIMEOUT=${WEBHOOK_TIMEOUT:-30s}
+      - WEBHOOK_MAX_RETRIES=${WEBHOOK_MAX_RETRIES:-3}
+
+      # CORS Configuration
+      - CORS_ALLOWED_ORIGINS=${CORS_ALLOWED_ORIGINS:-*}
+
+      # Frontend Configuration
+      - ENABLE_FRONTEND=${ENABLE_FRONTEND:-true}
 
     volumes:
-      # Mount database directory for persistent WhatsApp sessions
-      - ./whatsapp:/app/database
-      # Mount config directory for environment files
-      - ./config:/app/config
-      # Mount logs directory
-      - ./logs:/app/logs
+      # IMPORTANT: Volume for WhatsApp session store (SQLite database)
+      # This stores device credentials and session data for auto-reconnect
+      # WITHOUT THIS VOLUME: Sessions will NOT persist after container restart
+      - whatsapp-sessions:/app/database
+
+      # Volume for config directory for custom configuration files
+      - whatsapp-config:/app/config
+
+      # Volume for logs directory for persistent logs
+      - whatsapp-logs:/app/logs
 
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/api/health"]
@@ -62,7 +89,90 @@ services:
       retries: 3
       start_period: 5s
 
-# Note: No MySQL service included - using your existing MySQL
-# Update MYSQL_HOST in .env to point to your MySQL instance
-# For local MySQL: use host.docker.internal
-# For remote MySQL: use the actual hostname/IP
+    # Optional: Add network constraint if MySQL is in specific network
+    # networks:
+    #   - mysql-network
+
+# Define named volumes for persistent data
+volumes:
+  whatsapp-sessions:
+    name: whatsapp-sessions
+    driver: local
+  whatsapp-config:
+    name: whatsapp-config
+    driver: local
+  whatsapp-logs:
+    name: whatsapp-logs
+    driver: local
+
+# Optional: Define network if MySQL is in Docker
+# networks:
+#   mysql-network:
+#     external: true
+
+# ============================================================
+# SETUP INSTRUCTIONS
+# ============================================================
+#
+# 1. Update .env file with your MySQL configuration:
+#    MYSQL_HOST=host.docker.internal  # For MySQL on host (Mac/Windows)
+#    MYSQL_HOST=172.17.0.1           # For MySQL on host (Linux)
+#    MYSQL_HOST=mysql_db             # For MySQL in Docker
+#    MYSQL_PORT=3306
+#    MYSQL_USER=root
+#    MYSQL_PASSWORD=your_password
+#    MYSQL_DATABASE=waGo
+#
+# 2. Ensure AUTO_CONNECT=true in .env for session auto-reconnect
+#
+# 3. Start the service (Docker volumes are created automatically):
+#    docker-compose -f docker-compose.standalone.yml up -d
+#
+# 4. View logs:
+#    docker-compose -f docker-compose.standalone.yml logs -f
+#
+# Note: Docker named volumes are used for better data management:
+#   - whatsapp-sessions: Stores WhatsApp session database
+#   - whatsapp-config: Stores configuration files
+#   - whatsapp-logs: Stores application logs
+#
+# ============================================================
+# TROUBLESHOOTING
+# ============================================================
+#
+# Issue: Sessions not restoring after restart
+# Solution:
+#   - Ensure volumes are attached: whatsapp-sessions, whatsapp-config, whatsapp-logs
+#   - Check AUTO_CONNECT=true in .env
+#   - Verify MySQL is accessible from container
+#   - Check logs for "Restoring session" messages
+#
+# Issue: MySQL connection refused
+# Solution:
+#   - For local MySQL on Mac/Windows: use MYSQL_HOST=host.docker.internal
+#   - For local MySQL on Linux: use MYSQL_HOST=172.17.0.1
+#   - For MySQL in Docker: use MYSQL_HOST=container_service_name
+#
+# Issue: View volume contents
+# Solution:
+#   docker volume inspect whatsapp-sessions
+#   docker run --rm -v whatsapp-sessions:/data alpine ls -la /data
+#
+# Issue: Backup volumes
+# Solution:
+#   docker run --rm -v whatsapp-sessions:/data -v $(pwd):/backup alpine \
+#     tar czf /backup/whatsapp-sessions-backup.tar.gz /data
+#
+# Issue: Restore volumes
+# Solution:
+#   docker run --rm -v whatsapp-sessions:/data -v $(pwd):/backup alpine \
+#     tar xzf /backup/whatsapp-sessions-backup.tar.gz -C /
+#
+# ============================================================
+# NOTE: MySQL Service NOT Included
+# ============================================================
+# This compose file does NOT include a MySQL service.
+# It expects you to have MySQL running separately.
+#
+# If you need MySQL included, use docker-compose.yml instead.
+# ============================================================
