@@ -71,7 +71,7 @@ func main() {
 
 	// Initialize services
 	userService := services.NewUserService(userRepo, cfg.JWTSecret, log)
-	whatsappService, err := services.NewWhatsAppService(cfg.WhatsAppDBPath, sessionRepo, log)
+	whatsappService, err := services.NewWhatsAppService(cfg.WhatsAppDBPath, sessionRepo, messageRepo, log)
 	if err != nil {
 		log.Fatalf("Failed to initialize WhatsApp service: %v", err)
 	}

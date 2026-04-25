@@ -40,6 +40,7 @@ type WhatsAppService struct {
 	sessions      map[string]*models.Session
 	store         *sqlstore.Container
 	sessionRepo   *repository.SessionRepository
+	messageRepo   *repository.MessageRepository
 	logger        *logger.Logger
 	mu            sync.RWMutex
 	eventHandlers map[string]func(*events.Message)
@@ -189,6 +190,7 @@ func (s *WhatsAppService) setRandomDeviceProps(deviceStore *store.Device) {
 func NewWhatsAppService(
 	dbPath string,
 	sessionRepo *repository.SessionRepository,
+	messageRepo *repository.MessageRepository,
 	log *logger.Logger,
 ) (*WhatsAppService, error) {
 	// Ensure directory exists for WhatsApp database
@@ -226,6 +228,7 @@ func NewWhatsAppService(
 		sessions:      make(map[string]*models.Session),
 		store:         container,
 		sessionRepo:   sessionRepo,
+		messageRepo:   messageRepo,
 		logger:        log,
 		eventHandlers: make(map[string]func(*events.Message)),
 	}
@@ -1002,6 +1005,43 @@ func (s *WhatsAppService) setupEventHandlers(session *models.Session) {
 				if !v.Info.IsFromMe {
 					s.logger.Debug("Session %s is disabled, skipping auto-reply and webhook for message from %s", session.ID, v.Info.Sender.User)
 				}
+			}
+
+		case *events.Receipt:
+			// Handle read/delivery receipts (seen events)
+			if !session.Enabled {
+				s.logger.Debug("Session %s is disabled, skipping receipt processing", session.ID)
+				break
+			}
+
+			// Map receipt type to status
+			var status string
+			switch v.Type {
+			case types.ReceiptTypeRead:
+				status = "read"
+			case types.ReceiptTypeDelivered:
+				status = "delivered"
+			case types.ReceiptTypePlayed:
+				status = "played"
+			default:
+				s.logger.Debug("Session %s received receipt type %s for %d message(s), not updating status",
+					session.ID, v.Type, len(v.MessageIDs))
+			}
+
+			// Update message status in database if applicable
+			if status != "" && s.messageRepo != nil {
+				for _, msgID := range v.MessageIDs {
+					if err := s.messageRepo.UpdateMessageStatus(msgID, status, ""); err != nil {
+						s.logger.Debug("Failed to update message status for %s: %v", msgID, err)
+					} else {
+						s.logger.Debug("Updated message %s status to %s", msgID, status)
+					}
+				}
+			}
+
+			// Send receipt webhook if configured
+			if session.WebhookURL != "" {
+				go s.sendReceiptWebhook(session, v, status)
 			}
 		}
 	})
@@ -2171,8 +2211,40 @@ func (s *WhatsAppService) sendAutoReply(session *models.Session, evt *events.Mes
 	s.logger.Info("Auto reply sent to %s in session %s", userJID.User, session.ID)
 }
 
+// sendReceiptWebhook sends read/delivery receipt data to configured webhook URL
+func (s *WhatsAppService) sendReceiptWebhook(session *models.Session, evt *events.Receipt, status string) {
+	if !session.Enabled {
+		s.logger.Debug("Session %s is disabled, skipping receipt webhook", session.ID)
+		return
+	}
+
+	webhookReceipt := &models.WebhookReceipt{
+		SessionID:     session.ID,
+		MessageIDs:    evt.MessageIDs,
+		Sender:        evt.Sender.String(),
+		Chat:          evt.Chat.String(),
+		MessageSender: evt.MessageSender.String(),
+		Timestamp:     evt.Timestamp,
+		Type:          string(evt.Type),
+		Status:        status,
+	}
+
+	maxRetries := 3
+	for attempt := 1; attempt <= maxRetries; attempt++ {
+		if err := s.sendWebhookHTTP(session.WebhookURL, webhookReceipt); err != nil {
+			s.logger.Error("Receipt webhook attempt %d failed for session %s: %v", attempt, session.ID, err)
+			if attempt < maxRetries {
+				time.Sleep(time.Duration(attempt*attempt) * time.Second)
+			}
+		} else {
+			s.logger.Info("Receipt webhook sent successfully for session %s", session.ID)
+			break
+		}
+	}
+}
+
 // sendWebhookHTTP sends the webhook message via HTTP POST
-func (s *WhatsAppService) sendWebhookHTTP(webhookURL string, msg *models.WebhookMessage) error {
+func (s *WhatsAppService) sendWebhookHTTP(webhookURL string, msg any) error {
 	// Marshal message to JSON
 	jsonData, err := json.Marshal(msg)
 	if err != nil {

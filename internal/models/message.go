@@ -62,6 +62,18 @@ type WebhookMessage struct {
 	MediaURL    string    `json:"media_url,omitempty"`
 }
 
+// WebhookReceipt represents a read/delivery receipt for webhook delivery
+type WebhookReceipt struct {
+	SessionID     string    `json:"session_id"`
+	MessageIDs    []string  `json:"message_ids"`
+	Sender        string    `json:"sender"`
+	Chat          string    `json:"chat"`
+	MessageSender string    `json:"message_sender,omitempty"`
+	Timestamp     time.Time `json:"timestamp"`
+	Type          string    `json:"type"`
+	Status        string    `json:"status"`
+}
+
 // ContactInfo represents WhatsApp contact information
 type ContactInfo struct {
 	JID         string `json:"jid"`
